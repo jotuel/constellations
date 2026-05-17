@@ -9,6 +9,7 @@ mod view;
 
 use anyhow::Result;
 use cosmic::iced::widget::image;
+use cosmic::iced::widget::scrollable;
 use cosmic::iced::widget::tooltip;
 use cosmic::iced::{Alignment, Subscription};
 use cosmic::widget::icon::Named;
@@ -28,6 +29,11 @@ use url::Url;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 const CONSTELLATIONS_ICON: &[u8] = include_bytes!("../res/const.svg");
+
+static TIMELINE_ID: LazyLock<cosmic::iced::widget::Id> =
+    LazyLock::new(cosmic::iced::widget::Id::unique);
+static THREADED_TIMELINE_ID: LazyLock<cosmic::iced::widget::Id> =
+    LazyLock::new(cosmic::iced::widget::Id::unique);
 
 // ⚡ Bolt Optimization:
 // We cache the parsed Markdown structure in `PreviewEvent`s to avoid running
@@ -170,6 +176,8 @@ struct Constellations {
     is_initializing: bool,
     is_sync_indicator_active: bool,
     is_loading_more: bool,
+    last_timeline_offset: f32,
+    last_threaded_timeline_offset: f32,
     search_query: String,
     is_search_active: bool,
     active_reaction_picker: Option<matrix::TimelineEventItemId>,
@@ -202,9 +210,8 @@ pub enum Message {
     ToggleReaction(matrix::TimelineEventItemId, String),
     ReactionToggled(Result<(), String>),
     OpenReactionPicker(Option<matrix::TimelineEventItemId>),
-    LoadMore,
     LoadMoreFinished(Result<(), String>),
-    TimelineScrolled(cosmic::iced::widget::scrollable::Viewport),
+    TimelineScrolled(cosmic::iced::widget::scrollable::Viewport, bool),
     UserReady(Option<String>, Result<(), matrix::SyncError>),
     FetchMedia(MediaSource),
     MediaFetched(String, Result<Vec<u8>, String>),
@@ -1125,6 +1132,8 @@ impl Application for Constellations {
             is_initializing: true,
             is_sync_indicator_active: false,
             is_loading_more: false,
+            last_timeline_offset: 0.0,
+            last_threaded_timeline_offset: 0.0,
             search_query: String::new(),
             is_search_active: false,
             active_reaction_picker: None,
@@ -1192,7 +1201,14 @@ impl Application for Constellations {
             Message::OpenThread(root_id) => {
                 self.active_thread_root = Some(root_id);
                 self.threaded_timeline_items.clear();
-                Task::none()
+                self.last_threaded_timeline_offset = 0.0;
+                Task::batch(vec![
+                    self.handle_load_more(true),
+                    scrollable::snap_to(
+                        THREADED_TIMELINE_ID.clone(),
+                        scrollable::RelativeOffset::END.into(),
+                    ),
+                ])
             }
             Message::StartReply(item) => {
                 self.replying_to = Some(item);
@@ -1207,7 +1223,6 @@ impl Application for Constellations {
                 self.threaded_timeline_items.clear();
                 Task::none()
             }
-            Message::LoadMore => self.handle_load_more(),
             Message::LoadMoreFinished(res) => {
                 self.is_loading_more = false;
                 if let Err(e) = res {
@@ -1215,9 +1230,24 @@ impl Application for Constellations {
                 }
                 Task::none()
             }
-            Message::TimelineScrolled(viewport) => {
-                if viewport.absolute_offset().y < 100.0 {
-                    self.handle_load_more()
+            Message::TimelineScrolled(viewport, is_thread) => {
+                let current_offset = viewport.absolute_offset().y;
+                let last_offset = if is_thread {
+                    self.last_threaded_timeline_offset
+                } else {
+                    self.last_timeline_offset
+                };
+
+                let should_load = current_offset < 100.0 && current_offset < last_offset;
+
+                if is_thread {
+                    self.last_threaded_timeline_offset = current_offset;
+                } else {
+                    self.last_timeline_offset = current_offset;
+                }
+
+                if should_load {
+                    self.handle_load_more(is_thread)
                 } else {
                     Task::none()
                 }
@@ -1225,7 +1255,15 @@ impl Application for Constellations {
             Message::RoomSelected(room_id) => {
                 self.selected_room = Some(room_id.clone());
                 self.timeline_items.clear();
-                self.update_title()
+                self.last_timeline_offset = 0.0;
+                Task::batch(vec![
+                    self.update_title(),
+                    self.handle_load_more(false),
+                    scrollable::snap_to(
+                        TIMELINE_ID.clone(),
+                        scrollable::RelativeOffset::END.into(),
+                    ),
+                ])
             }
             Message::ComposerChanged(text) => {
                 self.composer_preview_events = parse_markdown(&text, false);

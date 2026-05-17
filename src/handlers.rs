@@ -367,7 +367,10 @@ impl Constellations {
         }
     }
 
-    pub fn handle_load_more(&mut self) -> Task<Action<<Constellations as Application>::Message>> {
+    pub fn handle_load_more(
+        &mut self,
+        is_thread: bool,
+    ) -> Task<Action<<Constellations as Application>::Message>> {
         if self.is_loading_more {
             return Task::none();
         }
@@ -376,7 +379,11 @@ impl Constellations {
             self.is_loading_more = true;
             let matrix = matrix.clone();
             let room_id = room_id.clone();
-            let root_id = self.active_thread_root.clone();
+            let root_id = if is_thread {
+                self.active_thread_root.clone()
+            } else {
+                None
+            };
 
             Task::perform(
                 async move {

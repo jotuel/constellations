@@ -71,21 +71,6 @@ impl Constellations {
         let filter_lower_fallback =
             (is_filtering && !filter_is_ascii).then(|| self.search_query.to_lowercase());
 
-        if self.selected_room.is_some() {
-            let load_btn = if self.is_loading_more {
-                button::text(crate::fl!("loading"))
-            } else {
-                button::text(crate::fl!("load-more")).on_press(Message::LoadMore)
-            };
-
-            timeline = timeline.push(
-                container(load_btn)
-                    .width(cosmic::iced::Length::Fill)
-                    .align_x(Alignment::Center)
-                    .padding(10),
-            );
-        }
-
         for item in &self.timeline_items {
             if let Some(event) = item.item.as_event() {
                 if is_filtering {
@@ -125,8 +110,9 @@ impl Constellations {
         }
 
         scrollable(timeline)
+            .id(crate::TIMELINE_ID.clone())
             .height(cosmic::iced::Length::Fill)
-            .on_scroll(Message::TimelineScrolled)
+            .on_scroll(|viewport| Message::TimelineScrolled(viewport, false))
             .into()
     }
 
@@ -381,7 +367,9 @@ impl Constellations {
         }
 
         scrollable(timeline)
+            .id(crate::THREADED_TIMELINE_ID.clone())
             .height(cosmic::iced::Length::Fill)
+            .on_scroll(|viewport| Message::TimelineScrolled(viewport, true))
             .into()
     }
 

@@ -46,7 +46,7 @@
 
 [x] Option to ignore user
 
-[ ] Always use sliding sync, remove Load more button
+[x] Always use sliding sync, remove Load more button
 
 [ ] Improve UI (emoji picker, better threading)
 
