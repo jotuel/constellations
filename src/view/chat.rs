@@ -14,52 +14,6 @@ use matrix_sdk::ruma::events::room::{MediaSource, message::MessageType};
 use crate::{Constellations, Message, PreviewEvent, matrix};
 
 impl Constellations {
-    pub fn view_thread(&self) -> Element<'_, Message> {
-        let mut timeline = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
-
-        let is_filtering = self.is_search_active
-            && !self.search_query.is_empty()
-            && self.current_settings_panel.is_none();
-
-        let filter_is_ascii = self.search_query.is_ascii();
-        let filter_lower_fallback =
-            (is_filtering && !filter_is_ascii).then(|| self.search_query.to_lowercase());
-
-        if self.selected_room.is_some() {
-            timeline = timeline.push(
-                Row::new()
-                    .align_y(Alignment::Center)
-                    .push(button::text(crate::fl!("close-thread")).on_press(Message::CloseThread))
-                    .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
-                    .padding(10),
-            );
-        }
-
-        for item in &self.threaded_timeline_items {
-            if let Some(event) = item.item.as_event() {
-                if is_filtering {
-                    let body = event
-                        .content()
-                        .as_message()
-                        .map(|m| m.body())
-                        .unwrap_or_default();
-                    if !crate::contains_ignore_ascii_case(
-                        body,
-                        &self.search_query,
-                        filter_lower_fallback.as_deref(),
-                    ) {
-                        continue;
-                    }
-                }
-                timeline = timeline.push(self.view_item(item));
-            }
-        }
-
-        scrollable(timeline)
-            .height(cosmic::iced::Length::Fill)
-            .into()
-    }
-
     pub fn view_timeline(&self) -> Element<'_, Message> {
         let mut timeline = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
 
@@ -324,7 +278,7 @@ impl Constellations {
     }
 
     pub fn view_threaded_timeline(&self) -> Element<'_, Message> {
-        let mut timeline = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
+        let mut timeline_col = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
 
         let is_filtering = self.is_search_active
             && !self.search_query.is_empty()
@@ -334,14 +288,26 @@ impl Constellations {
         let filter_lower_fallback =
             (is_filtering && !filter_is_ascii).then(|| self.search_query.to_lowercase());
 
+        let room_name = if let Some(room_id) = &self.selected_room {
+            self.room_list
+                .iter()
+                .find(|r| &r.id == room_id)
+                .and_then(|r| r.name.as_deref())
+                .unwrap_or("Room")
+        } else {
+            "Room"
+        };
+
         let header = Row::new()
             .spacing(10)
             .align_y(Alignment::Center)
-            .push(text::title3(crate::fl!("thread")))
+            .push(text::title3(format!(
+                "{}: {}",
+                crate::fl!("thread"),
+                room_name
+            )))
             .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
-            .push(button::text(crate::fl!("cancel")).on_press(Message::CloseThread));
-
-        timeline = timeline.push(container(header).padding(10));
+            .push(button::text(crate::fl!("close-thread")).on_press(Message::CloseThread));
 
         // In a real application, you might want to find and show the root message first.
         // For simplicity, we assume it's part of the threaded timeline from the SDK.
@@ -362,14 +328,20 @@ impl Constellations {
                         continue;
                     }
                 }
-                timeline = timeline.push(self.view_item(item));
+                timeline_col = timeline_col.push(self.view_item(item));
             }
         }
 
-        scrollable(timeline)
+        let scrollable_timeline = scrollable(timeline_col)
             .id(crate::THREADED_TIMELINE_ID.clone())
             .height(cosmic::iced::Length::Fill)
-            .on_scroll(|viewport| Message::TimelineScrolled(viewport, true))
+            .on_scroll(|viewport| Message::TimelineScrolled(viewport, true));
+
+        Column::new()
+            .spacing(10)
+            .push(header)
+            .push(scrollable_timeline)
+            .push(self.view_composer())
             .into()
     }
 
@@ -586,118 +558,16 @@ impl Constellations {
                         .tooltip(crate::fl!("room-settings"))
                         .on_press(Message::OpenSettings(crate::SettingsPanel::Room)),
                 );
-            content = content.push(room_header);
 
-            content = content.push(if self.active_thread_root.is_some() {
-                self.view_thread()
+            if self.active_thread_root.is_some() {
+                content = content.push(self.view_threaded_timeline());
             } else {
-                self.view_timeline()
-            });
+                content = content.push(room_header);
 
-            if let Some(replying_to) = &self.replying_to {
-                let mut snippet = replying_to
-                    .item
-                    .as_event()
-                    .and_then(|ev| ev.content().as_message())
-                    .map(|msg| msg.body().to_string())
-                    .unwrap_or_default();
-                if snippet.len() > 100 {
-                    snippet.truncate(97);
-                    snippet.push_str("...");
-                }
+                content = content.push(self.view_timeline());
 
-                let reply_bar = Row::new()
-                    .spacing(10)
-                    .align_y(Alignment::Center)
-                    .push(
-                        text::body(crate::fl!(
-                            "replying-to",
-                            user = replying_to.sender_name.as_str()
-                        ))
-                        .size(12),
-                    )
-                    .push(text::body(snippet).size(12))
-                    .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
-                    .push(button::text(crate::fl!("cancel")).on_press(Message::CancelReply));
-                content = content.push(container(reply_bar).padding(10));
+                content = content.push(self.view_composer());
             }
-
-            let composer = if self.composer_is_preview {
-                self.view_preview()
-            } else {
-                container(
-                    text_input(crate::fl!("type-message"), &self.composer_text)
-                        .on_input(Message::ComposerChanged)
-                        .on_submit(|_| Message::SendMessage),
-                )
-                .padding(10)
-                .into()
-            };
-
-            let mut attachments_view = Column::new().spacing(5);
-            if !self.composer_attachments.is_empty() {
-                attachments_view = attachments_view.push(text::body("Attachments:").size(12));
-                for (i, path) in self.composer_attachments.iter().enumerate() {
-                    let filename = path.file_name().unwrap_or_default().to_string_lossy();
-                    let attachment_row = Row::new()
-                        .spacing(10)
-                        .align_y(Alignment::Center)
-                        .push(text::body(filename).size(12))
-                        .push(button::destructive("Remove").on_press(Message::RemoveAttachment(i)));
-                    attachments_view = attachments_view.push(attachment_row);
-                }
-            }
-
-            let is_empty =
-                self.composer_text.trim().is_empty() && self.composer_attachments.is_empty();
-
-            let mut send_btn = button::text(if self.active_thread_root.is_some() {
-                crate::fl!("reply")
-            } else {
-                crate::fl!("send")
-            });
-            if !is_empty {
-                send_btn = send_btn
-                    .on_press(Message::SendMessage)
-                    .tooltip(crate::fl!("tooltip-send"));
-            }
-
-            let send_btn_widget: Element<'_, Message> = if is_empty {
-                tooltip(
-                    send_btn,
-                    text::body(crate::fl!("type-message-or-attach")),
-                    Position::Top,
-                )
-                .into()
-            } else {
-                send_btn.into()
-            };
-
-            let controls = Row::new()
-                .spacing(10)
-                .push(
-                    button::text(crate::fl!("attach"))
-                        .on_press(Message::AddAttachment)
-                        .tooltip(crate::fl!("tooltip-attach")),
-                )
-                .push(if self.composer_is_preview {
-                    button::text(crate::fl!("edit"))
-                        .on_press(Message::TogglePreview)
-                        .tooltip(crate::fl!("tooltip-edit"))
-                } else {
-                    button::text(crate::fl!("preview"))
-                        .on_press(Message::TogglePreview)
-                        .tooltip(crate::fl!("tooltip-preview"))
-                })
-                .push(send_btn_widget);
-
-            content = content.push(
-                Column::new()
-                    .spacing(10)
-                    .push(attachments_view)
-                    .push(composer)
-                    .push(controls),
-            );
         } else {
             let empty_state = container(
                 Column::new()
@@ -729,4 +599,119 @@ impl Constellations {
 
         content.into()
     }
+
+    pub fn view_composer(&self) -> Element<'_, Message> {
+        let mut content = Column::new().spacing(10);
+
+        if let Some(replying_to) = &self.replying_to {
+            let mut snippet = replying_to
+                .item
+                .as_event()
+                .and_then(|ev| ev.content().as_message())
+                .map(|msg| msg.body().to_string())
+                .unwrap_or_default();
+            if snippet.len() > 100 {
+                snippet.truncate(97);
+                snippet.push_str("...");
+            }
+
+            let reply_bar = view_reply_bar(snippet, replying_to);
+            content = content.push(container(reply_bar).padding(10));
+        }
+
+        let composer = if self.composer_is_preview {
+            self.view_preview()
+        } else {
+            container(
+                text_input(crate::fl!("type-message"), &self.composer_text)
+                    .on_input(Message::ComposerChanged)
+                    .on_submit(|_| Message::SendMessage),
+            )
+            .padding(10)
+            .into()
+        };
+
+        let mut attachments_view = Column::new().spacing(5);
+        if !self.composer_attachments.is_empty() {
+            attachments_view = attachments_view.push(text::body("Attachments:").size(12));
+            for (i, path) in self.composer_attachments.iter().enumerate() {
+                let filename = path.file_name().unwrap_or_default().to_string_lossy();
+                let attachment_row = Row::new()
+                    .spacing(10)
+                    .align_y(Alignment::Center)
+                    .push(text::body(filename).size(12))
+                    .push(button::destructive("Remove").on_press(Message::RemoveAttachment(i)));
+                attachments_view = attachments_view.push(attachment_row);
+            }
+        }
+
+        let is_empty = self.composer_text.trim().is_empty() && self.composer_attachments.is_empty();
+
+        let mut send_btn = button::text(if self.active_thread_root.is_some() {
+            crate::fl!("reply")
+        } else {
+            crate::fl!("send")
+        });
+        if !is_empty {
+            send_btn = send_btn
+                .on_press(Message::SendMessage)
+                .tooltip(crate::fl!("tooltip-send"));
+        }
+
+        let send_btn_widget: Element<'_, Message> = if is_empty {
+            tooltip(
+                send_btn,
+                text::body(crate::fl!("type-message-or-attach")),
+                Position::Top,
+            )
+            .into()
+        } else {
+            send_btn.into()
+        };
+
+        let controls = Row::new()
+            .spacing(10)
+            .push(
+                button::text(crate::fl!("attach"))
+                    .on_press(Message::AddAttachment)
+                    .tooltip(crate::fl!("tooltip-attach")),
+            )
+            .push(if self.composer_is_preview {
+                button::text(crate::fl!("edit"))
+                    .on_press(Message::TogglePreview)
+                    .tooltip(crate::fl!("tooltip-edit"))
+            } else {
+                button::text(crate::fl!("preview"))
+                    .on_press(Message::TogglePreview)
+                    .tooltip(crate::fl!("tooltip-preview"))
+            })
+            .push(send_btn_widget);
+
+        content
+            .push(attachments_view)
+            .push(composer)
+            .push(controls)
+            .into()
+    }
+}
+
+#[rust_analyzer::skip]
+fn view_reply_bar(
+    snippet: String,
+    replying_to: &crate::ConstellationsItem,
+) -> Row<'_, Message, Theme> {
+    let reply_bar = Row::new()
+        .spacing(10)
+        .align_y(Alignment::Center)
+        .push(
+            text::body(crate::fl!(
+                "replying-to",
+                user = replying_to.sender_name.as_str()
+            ))
+            .size(12),
+        )
+        .push(text::body(snippet).size(12))
+        .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
+        .push(button::text(crate::fl!("cancel")).on_press(Message::CancelReply));
+    reply_bar
 }

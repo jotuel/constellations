@@ -1709,18 +1709,10 @@ impl Application for Constellations {
         let sidebar = self.view_sidebar();
         let content = self.view_main_content(status_text);
 
-        let mut main_view = Row::new()
+        let main_view = Row::new()
             .push(self.view_space_switcher())
             .push(sidebar)
             .push(content);
-
-        if self.active_thread_root.is_some() {
-            main_view = main_view.push(
-                container(self.view_threaded_timeline())
-                    .width(400)
-                    .padding(5),
-            );
-        }
 
         if self.app_settings.show_sync_indicator && self.is_sync_indicator_active {
             let sync_widget: Element<'_, Message> = match self.sync_status {
