@@ -1905,6 +1905,8 @@ mod tests {
             is_loading_more: false,
             replying_to: None,
             call_participants: HashMap::new(),
+            last_timeline_offset: Default::default(),
+            last_threaded_timeline_offset: Default::default(),
         }
     }
 

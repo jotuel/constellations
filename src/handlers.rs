@@ -1017,6 +1017,8 @@ mod tests {
             active_thread_root: None,
             threaded_timeline_items: GenericVector::new(),
             is_loading_more: false,
+            last_timeline_offset: 0.0,
+            last_threaded_timeline_offset: 0.0,
             replying_to: None,
             call_participants: HashMap::new(),
         }
@@ -1164,7 +1166,7 @@ mod tests {
         app.selected_room = Some("!room:example.com".into());
         // matrix is None, but even if it was Some, it should return Task::none() because is_loading_more is true
 
-        let _task = app.handle_load_more();
+        let _task = app.handle_load_more(false);
         // Since Task is opaque, we can't easily check if it's "none",
         // but we can check that is_loading_more stayed true (it would still be true anyway)
         // and more importantly, that it didn't crash or change other state.
@@ -1172,7 +1174,7 @@ mod tests {
 
         // If it wasn't loading more, and had no matrix, it would also return Task::none()
         app.is_loading_more = false;
-        let _task = app.handle_load_more();
+        let _task = app.handle_load_more(false);
         assert!(!app.is_loading_more);
     }
 
