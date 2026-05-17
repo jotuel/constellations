@@ -8,6 +8,7 @@ pub struct State {
     pub send_typing_notifications: bool,
     pub render_markdown: bool,
     pub compact_mode: bool,
+    pub hide_threaded_messages: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -16,6 +17,7 @@ pub enum Message {
     ToggleTypingNotifications(bool),
     ToggleMarkdown(bool),
     ToggleCompactMode(bool),
+    ToggleHideThreadedMessages(bool),
     ClearCache,
 }
 
@@ -26,6 +28,7 @@ impl State {
             send_typing_notifications: config.send_typing_notifications,
             render_markdown: config.render_markdown,
             compact_mode: config.compact_mode,
+            hide_threaded_messages: config.hide_threaded_messages,
         }
     }
 
@@ -45,6 +48,10 @@ impl State {
             }
             Message::ToggleCompactMode(compact) => {
                 self.compact_mode = compact;
+                Task::done(Action::from(crate::Message::AppSettingChanged))
+            }
+            Message::ToggleHideThreadedMessages(hide) => {
+                self.hide_threaded_messages = hide;
                 Task::done(Action::from(crate::Message::AppSettingChanged))
             }
             Message::ClearCache => Task::done(Action::from(crate::Message::AppSettings(
@@ -76,6 +83,11 @@ impl State {
                     crate::fl!("compact-mode"),
                     cosmic::widget::toggler(self.compact_mode)
                         .on_toggle(Message::ToggleCompactMode),
+                ))
+                .add(settings::item(
+                    crate::fl!("hide-threaded-messages"),
+                    cosmic::widget::toggler(self.hide_threaded_messages)
+                        .on_toggle(Message::ToggleHideThreadedMessages),
                 ))
                 .into(),
             settings::section()

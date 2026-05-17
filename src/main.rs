@@ -1585,6 +1585,7 @@ impl Application for Constellations {
                     send_typing_notifications: self.app_settings.send_typing_notifications,
                     render_markdown: self.app_settings.render_markdown,
                     compact_mode: self.app_settings.compact_mode,
+                    hide_threaded_messages: self.app_settings.hide_threaded_messages,
                     media_previews_display_policy: self.user_settings.media_previews_display_policy,
                     invite_avatars_display_policy: self.user_settings.invite_avatars_display_policy,
                 };

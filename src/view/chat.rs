@@ -27,6 +27,13 @@ impl Constellations {
 
         for item in &self.timeline_items {
             if let Some(event) = item.item.as_event() {
+                // View-side thread filtering
+                if self.app_settings.hide_threaded_messages
+                    && event.content().thread_root().is_some()
+                {
+                    continue;
+                }
+
                 if is_filtering {
                     let body = event
                         .content()
@@ -424,47 +431,100 @@ impl Constellations {
                 }
             }
 
-            if let MessageType::Text(_) = message.msgtype() {
-                let mut action_row = Row::new().spacing(5).align_y(Alignment::Center);
+            let msglike = event.content().as_msglike();
+            let has_thread_root = event.content().thread_root().is_some();
 
-                // "Add reaction" button
-                let btn = button::text(crate::fl!("reaction")).on_press(
-                    Message::OpenReactionPicker(Some(event.identifier().clone())),
-                );
-                let btn_tooltip = tooltip(
-                    btn,
-                    text::body(crate::fl!("add-reaction")),
-                    Position::Bottom,
-                );
-                action_row = action_row.push(btn_tooltip);
+            let mut num_replies = event
+                .content()
+                .thread_summary()
+                .map(|s| s.num_replies)
+                .unwrap_or(0);
 
-                // Start a thread
-                let root_id = event.identifier();
-                let start_thread_btn =
-                    button::text(crate::fl!("open-thread")).on_press(match root_id {
+            // Manual count if summary is missing or incomplete (due to view-side filtering)
+            if let Some(event_id) = event.event_id() {
+                let manual_count = self
+                    .timeline_items
+                    .iter()
+                    .filter(|i| {
+                        i.item
+                            .as_event()
+                            .and_then(|e| e.content().thread_root())
+                            .map(|r| r == event_id)
+                            .unwrap_or(false)
+                    })
+                    .count() as u32;
+                if manual_count > num_replies {
+                    num_replies = manual_count;
+                }
+            }
+
+            if num_replies > 0 && !has_thread_root && self.active_thread_root.is_none() {
+                let summary_row = Row::new()
+                    .spacing(5)
+                    .align_y(Alignment::Center)
+                    .push(cosmic::widget::icon::from_name("chat-bubble-symbolic").size(14))
+                    .push(
+                        text::body(format!(
+                            "{} {}",
+                            num_replies,
+                            if num_replies == 1 {
+                                crate::fl!("reply")
+                            } else {
+                                crate::fl!("replies")
+                            }
+                        ))
+                        .size(12),
+                    );
+
+                let summary_btn = button::custom(container(summary_row).padding([5, 10])).on_press(
+                    match event.identifier() {
                         matrix::TimelineEventItemId::EventId(id) => {
                             Message::OpenThread(id.to_owned())
                         }
                         _ => Message::NoOp,
-                    });
-                let action_tooltip = tooltip(
-                    start_thread_btn,
-                    text::body(crate::fl!("tooltip-thread")),
-                    Position::Bottom,
+                    },
                 );
-                action_row = action_row.push(action_tooltip);
 
-                let reply_btn =
-                    button::text(crate::fl!("reply")).on_press(Message::StartReply(item.clone()));
-                let reply_tooltip = tooltip(
-                    reply_btn,
-                    text::body(crate::fl!("tooltip-reply")),
-                    Position::Bottom,
-                );
-                action_row = action_row.push(reply_tooltip);
-
-                bubble_col = bubble_col.push(action_row);
+                bubble_col = bubble_col.push(container(summary_btn).padding([5, 0]));
             }
+
+            let mut action_row = Row::new().spacing(5).align_y(Alignment::Center);
+
+            // "Add reaction" button
+            let btn = button::text(crate::fl!("reaction")).on_press(Message::OpenReactionPicker(
+                Some(event.identifier().clone()),
+            ));
+            let btn_tooltip = tooltip(
+                btn,
+                text::body(crate::fl!("add-reaction")),
+                Position::Bottom,
+            );
+            action_row = action_row.push(btn_tooltip);
+
+            // Start a thread
+            let root_id = event.identifier();
+            let start_thread_btn =
+                button::text(crate::fl!("open-thread")).on_press(match root_id {
+                    matrix::TimelineEventItemId::EventId(id) => Message::OpenThread(id.to_owned()),
+                    _ => Message::NoOp,
+                });
+            let action_tooltip = tooltip(
+                start_thread_btn,
+                text::body(crate::fl!("tooltip-thread")),
+                Position::Bottom,
+            );
+            action_row = action_row.push(action_tooltip);
+
+            let reply_btn =
+                button::text(crate::fl!("reply")).on_press(Message::StartReply(item.clone()));
+            let reply_tooltip = tooltip(
+                reply_btn,
+                text::body(crate::fl!("tooltip-reply")),
+                Position::Bottom,
+            );
+            action_row = action_row.push(reply_tooltip);
+
+            bubble_col = bubble_col.push(action_row);
 
             bubble_col = bubble_col.push(reaction_row);
 

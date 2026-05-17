@@ -1181,7 +1181,14 @@ impl MatrixEngine {
         let room = rls
             .room(&room_id)
             .map_err(|e| anyhow::anyhow!("Failed to get room: {}", e))?;
-        let timeline = Arc::new(room.timeline_builder().build().await?);
+        let timeline = Arc::new(
+            room.timeline_builder()
+                .with_focus(TimelineFocus::Live {
+                    hide_threaded_events: false,
+                })
+                .build()
+                .await?,
+        );
 
         let mut inner = self.inner.write().await;
         inner.timelines.insert(room_id.to_owned(), timeline.clone());

@@ -7,6 +7,7 @@ pub struct Config {
     pub send_typing_notifications: bool,
     pub render_markdown: bool,
     pub compact_mode: bool,
+    pub hide_threaded_messages: bool,
     pub media_previews_display_policy: bool,
     pub invite_avatars_display_policy: bool,
 }
@@ -18,6 +19,7 @@ impl Default for Config {
             send_typing_notifications: false,
             render_markdown: false,
             compact_mode: false,
+            hide_threaded_messages: true,
             media_previews_display_policy: true,
             invite_avatars_display_policy: true,
         }
@@ -80,6 +82,7 @@ mod tests {
             send_typing_notifications: true,
             render_markdown: true,
             compact_mode: true,
+            hide_threaded_messages: true,
             media_previews_display_policy: false,
             invite_avatars_display_policy: false,
         };

@@ -528,7 +528,9 @@ async fn test_paginate_backwards_invalid_room_id() {
         }
     };
 
-    let result = engine.paginate_backwards("invalid_room_id", 20).await;
+    let result = engine
+        .paginate_backwards("invalid_room_id", false, 20)
+        .await;
     assert!(result.is_err());
     let err_msg = result.unwrap_err().to_string();
     assert!(
@@ -553,7 +555,9 @@ async fn test_paginate_backwards_rls_not_initialized() {
     };
 
     // RLS is not initialized when just creating the engine without syncing
-    let result = engine.paginate_backwards("!room:example.com", 20).await;
+    let result = engine
+        .paginate_backwards("!room:example.com", false, 20)
+        .await;
     assert!(result.is_err());
     let err_msg = result.unwrap_err().to_string();
     assert_eq!(err_msg, "RoomListService not initialized");
@@ -674,7 +678,9 @@ async fn test_paginate_backwards_success() {
     tokio::time::sleep(std::time::Duration::from_millis(500)).await;
 
     // Verify pagination works and doesn't fail
-    let result = engine.paginate_backwards("!mockroom:example.com", 20).await;
+    let result = engine
+        .paginate_backwards("!mockroom:example.com", false, 20)
+        .await;
 
     // Assert that the result is Ok, verifying that the timeline could be fetched and paginated
     assert!(
