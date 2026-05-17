@@ -431,7 +431,6 @@ impl Constellations {
                 }
             }
 
-            let msglike = event.content().as_msglike();
             let has_thread_root = event.content().thread_root().is_some();
 
             let mut num_replies = event
