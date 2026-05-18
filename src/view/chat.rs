@@ -461,7 +461,6 @@ impl Constellations {
                 let summary_row = Row::new()
                     .spacing(5)
                     .align_y(Alignment::Center)
-                    .push(cosmic::widget::icon::from_name("chat-bubble-symbolic").size(14))
                     .push(
                         text::body(format!(
                             "{} {}",
@@ -473,9 +472,10 @@ impl Constellations {
                             }
                         ))
                         .size(12),
-                    );
+                    )
+                    .push(cosmic::widget::icon::from_name("chat-bubble-symbolic").size(14));
 
-                let summary_btn = button::custom(container(summary_row).padding([5, 10])).on_press(
+                let summary_btn = button::custom(container(summary_row).padding([0, 5])).on_press(
                     match event.identifier() {
                         matrix::TimelineEventItemId::EventId(id) => {
                             Message::OpenThread(id.to_owned())
