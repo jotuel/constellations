@@ -185,6 +185,7 @@ struct Constellations {
     threaded_timeline_items: Vector<ConstellationsItem>,
     joined_room_ids: std::collections::HashSet<std::sync::Arc<str>>,
     replying_to: Option<ConstellationsItem>,
+    editing_item: Option<ConstellationsItem>,
     selected_space: Option<OwnedRoomId>,
     current_settings_panel: Option<SettingsPanel>,
     user_settings: settings::user::State,
@@ -203,6 +204,8 @@ pub enum Message {
     TogglePreview,
     SendMessage,
     MessageSent(Result<(), String>),
+    MessageEdited(Result<(), String>),
+    MessageRedacted(Result<(), String>),
     AddAttachment,
     AttachmentsSelected(Vec<std::path::PathBuf>),
     RemoveAttachment(usize),
@@ -238,6 +241,9 @@ pub enum Message {
     CloseThread,
     StartReply(ConstellationsItem),
     CancelReply,
+    StartEdit(ConstellationsItem),
+    CancelEdit,
+    RedactMessage(matrix::TimelineEventItemId),
     MatrixThreadDiff(
         matrix_sdk::ruma::OwnedEventId,
         eyeball_im::VectorDiff<std::sync::Arc<matrix::TimelineItem>>,
@@ -1141,6 +1147,7 @@ impl Application for Constellations {
             threaded_timeline_items: Vector::new(),
             joined_room_ids: std::collections::HashSet::new(),
             replying_to: None,
+            editing_item: None,
             selected_space: None,
             current_settings_panel: None,
             user_settings: settings::user::State::from_config(&config),
@@ -1290,39 +1297,7 @@ impl Application for Constellations {
                 self.composer_is_preview = !self.composer_is_preview;
                 Task::none()
             }
-            Message::SendMessage => {
-                if let (Some(matrix), Some(room_id), Some(root_id)) =
-                    (&self.matrix, &self.selected_room, &self.active_thread_root)
-                {
-                    let matrix = matrix.clone();
-                    let room_id = room_id.to_string();
-                    let root_id = root_id.clone();
-                    let body = self.composer_text.clone();
-                    let html_body = if self.app_settings.render_markdown {
-                        Some(matrix::markdown_to_html(&body))
-                    } else {
-                        None
-                    };
-
-                    let user_id = self.user_id.clone();
-                    return Task::perform(
-                        async move {
-                            matrix
-                                .send_threaded_message(
-                                    &room_id,
-                                    &root_id,
-                                    user_id.as_ref(),
-                                    body,
-                                    html_body,
-                                )
-                                .await
-                                .map_err(|e| e.to_string())
-                        },
-                        |res| Message::MessageSent(res).into(),
-                    );
-                }
-                self.handle_send_message()
-            }
+            Message::SendMessage => self.handle_send_message(),
             Message::MessageSent(res) => {
                 match res {
                     Ok(_) => {
@@ -1330,6 +1305,7 @@ impl Application for Constellations {
                         self.composer_preview_events.clear();
                         self.composer_is_preview = false;
                         self.replying_to = None;
+                        self.editing_item = None;
                     }
                     Err(e) => {
                         self.error = Some(format!("Failed to send message: {}", e));
@@ -1337,6 +1313,44 @@ impl Application for Constellations {
                 }
                 Task::none()
             }
+            Message::MessageEdited(res) => {
+                match res {
+                    Ok(_) => {
+                        self.composer_text.clear();
+                        self.composer_preview_events.clear();
+                        self.composer_is_preview = false;
+                        self.editing_item = None;
+                    }
+                    Err(e) => {
+                        self.error = Some(format!("Failed to edit message: {}", e));
+                    }
+                }
+                Task::none()
+            }
+            Message::MessageRedacted(res) => {
+                if let Err(e) = res {
+                    self.error = Some(format!("Failed to redact message: {}", e));
+                }
+                Task::none()
+            }
+            Message::StartEdit(item) => {
+                if let Some(event) = item.item.as_event()
+                    && let Some(msg) = event.content().as_message()
+                {
+                    self.composer_text = msg.body().to_string();
+                    self.composer_preview_events = parse_markdown(&self.composer_text, false);
+                    self.editing_item = Some(item);
+                    self.replying_to = None;
+                }
+                Task::none()
+            }
+            Message::CancelEdit => {
+                self.editing_item = None;
+                self.composer_text.clear();
+                self.composer_preview_events.clear();
+                Task::none()
+            }
+            Message::RedactMessage(item_id) => self.handle_redact_message(item_id),
             Message::AddAttachment => self.handle_add_attachment(),
             Message::AttachmentsSelected(paths) => {
                 for path in paths {
@@ -1897,6 +1911,7 @@ mod tests {
             threaded_timeline_items: GenericVector::new(),
             is_loading_more: false,
             replying_to: None,
+            editing_item: None,
             call_participants: HashMap::new(),
             last_timeline_offset: Default::default(),
             last_threaded_timeline_offset: Default::default(),

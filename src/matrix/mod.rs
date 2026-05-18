@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use eyeball_im::VectorDiff;
 use matrix_sdk::authentication::matrix::MatrixSession;
 use matrix_sdk::media::MediaFormat;
+pub use matrix_sdk::room::edit::EditedContent;
 use matrix_sdk::ruma::events::ignored_user_list::IgnoredUserListEventContent;
 use matrix_sdk::ruma::events::room::MediaSource;
 use matrix_sdk::ruma::events::room::message::RoomMessageEventContent;
@@ -1862,6 +1863,36 @@ impl MatrixEngine {
 
         room.send_attachment(&filename, &mime_type, data, config)
             .await?;
+        Ok(())
+    }
+
+    pub async fn edit_message(
+        &self,
+        room_id: &str,
+        item_id: &TimelineEventItemId,
+        body: String,
+        html_body: Option<String>,
+    ) -> Result<()> {
+        let timeline = self.timeline(room_id).await?;
+        let content = if let Some(html) = html_body {
+            RoomMessageEventContent::text_html(body, html)
+        } else {
+            RoomMessageEventContent::text_plain(body)
+        };
+        timeline
+            .edit(item_id, EditedContent::RoomMessage(content.into()))
+            .await?;
+        Ok(())
+    }
+
+    pub async fn redact_message(
+        &self,
+        room_id: &str,
+        item_id: &TimelineEventItemId,
+        reason: Option<String>,
+    ) -> Result<()> {
+        let timeline = self.timeline(room_id).await?;
+        timeline.redact(item_id, reason.as_deref()).await?;
         Ok(())
     }
 

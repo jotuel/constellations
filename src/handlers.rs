@@ -431,6 +431,33 @@ impl Constellations {
     ) -> Task<Action<<Constellations as Application>::Message>> {
         if let (Some(matrix), Some(room_id)) = (&self.matrix, &self.selected_room) {
             let body = self.composer_text.clone();
+
+            if let Some(editing_item) = self.editing_item.clone() {
+                if body.is_empty() {
+                    return Task::none();
+                }
+
+                let html_body = if self.app_settings.render_markdown {
+                    Some(matrix::markdown_to_html(&body))
+                } else {
+                    None
+                };
+                let matrix_clone = matrix.clone();
+                let room_id_clone = room_id.clone();
+
+                return Task::perform(
+                    async move {
+                        let event = editing_item.item.as_event().ok_or("Not an event")?;
+                        let item_id = event.identifier();
+                        matrix_clone
+                            .edit_message(&room_id_clone, &item_id, body, html_body)
+                            .await
+                            .map_err(|e| e.to_string())
+                    },
+                    |res| Action::from(Message::MessageEdited(res)),
+                );
+            }
+
             let attachments = std::mem::take(&mut self.composer_attachments);
 
             if body.is_empty() && attachments.is_empty() {
@@ -462,6 +489,23 @@ impl Constellations {
                         },
                         |res| Action::from(Message::MessageSent(res)),
                     ));
+                } else if let Some(root_id) = self.active_thread_root.clone() {
+                    let user_id = self.user_id.clone();
+                    tasks.push(Task::perform(
+                        async move {
+                            matrix_clone
+                                .send_threaded_message(
+                                    &room_id_clone,
+                                    &root_id,
+                                    user_id.as_ref(),
+                                    body,
+                                    html_body,
+                                )
+                                .await
+                                .map_err(|e| e.to_string())
+                        },
+                        |res| Action::from(Message::MessageSent(res)),
+                    ));
                 } else {
                     tasks.push(Task::perform(
                         async move {
@@ -480,6 +524,7 @@ impl Constellations {
                 self.composer_preview_events.clear();
                 self.composer_is_preview = false;
                 self.replying_to = None;
+                self.editing_item = None;
             }
 
             for path in attachments {
@@ -499,6 +544,27 @@ impl Constellations {
             }
 
             Task::batch(tasks)
+        } else {
+            Task::none()
+        }
+    }
+
+    pub fn handle_redact_message(
+        &mut self,
+        item_id: matrix::TimelineEventItemId,
+    ) -> Task<Action<<Constellations as Application>::Message>> {
+        if let (Some(matrix), Some(room_id)) = (&self.matrix, &self.selected_room) {
+            let matrix = matrix.clone();
+            let room_id = room_id.clone();
+            Task::perform(
+                async move {
+                    matrix
+                        .redact_message(&room_id, &item_id, None)
+                        .await
+                        .map_err(|e| e.to_string())
+                },
+                |res| Action::from(Message::MessageRedacted(res)),
+            )
         } else {
             Task::none()
         }
@@ -1020,6 +1086,7 @@ mod tests {
             last_timeline_offset: 0.0,
             last_threaded_timeline_offset: 0.0,
             replying_to: None,
+            editing_item: None,
             call_participants: HashMap::new(),
         }
     }

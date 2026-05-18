@@ -523,6 +523,26 @@ impl Constellations {
             );
             action_row = action_row.push(reply_tooltip);
 
+            if is_me {
+                let edit_btn =
+                    button::text(crate::fl!("edit")).on_press(Message::StartEdit(item.clone()));
+                let edit_tooltip = tooltip(
+                    edit_btn,
+                    text::body(crate::fl!("tooltip-edit")),
+                    Position::Bottom,
+                );
+                action_row = action_row.push(edit_tooltip);
+
+                let delete_btn = button::text(crate::fl!("delete"))
+                    .on_press(Message::RedactMessage(event.identifier().clone()));
+                let delete_tooltip = tooltip(
+                    delete_btn,
+                    text::body(crate::fl!("tooltip-delete")),
+                    Position::Bottom,
+                );
+                action_row = action_row.push(delete_tooltip);
+            }
+
             bubble_col = bubble_col.push(action_row);
 
             bubble_col = bubble_col.push(reaction_row);
@@ -678,6 +698,29 @@ impl Constellations {
             content = content.push(container(reply_bar).padding(10));
         }
 
+        if let Some(editing_item) = &self.editing_item {
+            let mut snippet = editing_item
+                .item
+                .as_event()
+                .and_then(|ev| ev.content().as_message())
+                .map(|msg| msg.body().to_string())
+                .unwrap_or_default();
+            if snippet.len() > 100 {
+                snippet.truncate(97);
+                snippet.push_str("...");
+            }
+
+            let edit_bar = Row::new()
+                .spacing(10)
+                .align_y(Alignment::Center)
+                .push(text::body(crate::fl!("editing")).size(12))
+                .push(text::body(snippet).size(12))
+                .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
+                .push(button::text(crate::fl!("cancel")).on_press(Message::CancelEdit));
+
+            content = content.push(container(edit_bar).padding(10));
+        }
+
         let composer = if self.composer_is_preview {
             self.view_preview()
         } else {
@@ -706,7 +749,9 @@ impl Constellations {
 
         let is_empty = self.composer_text.trim().is_empty() && self.composer_attachments.is_empty();
 
-        let mut send_btn = button::text(if self.active_thread_root.is_some() {
+        let mut send_btn = button::text(if self.editing_item.is_some() {
+            crate::fl!("save")
+        } else if self.active_thread_root.is_some() {
             crate::fl!("reply")
         } else {
             crate::fl!("send")

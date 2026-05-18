@@ -757,18 +757,51 @@ async fn test_send_message_success() {
     assert!(result.is_ok(), "Expected success, got {:?}", result);
 
     // Test successful HTML text send
-    let html_result = engine
+    let result = engine
         .send_message(
             "!test_room:localhost",
-            "Hello".to_string(),
+            "Hello world".to_string(),
             Some("<b>Hello</b>".to_string()),
         )
         .await;
-    assert!(
-        html_result.is_ok(),
-        "Expected success for HTML, got {:?}",
-        html_result
-    );
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_edit_message_room_not_found() {
+    let tmp_dir = tempdir().unwrap();
+    let engine = match MatrixEngine::new(tmp_dir.path().to_path_buf()).await {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+
+    let item_id =
+        TimelineEventItemId::EventId(matrix_sdk::ruma::event_id!("$event:localhost").to_owned());
+    let result = engine
+        .edit_message(
+            "!nonexistent:localhost",
+            &item_id,
+            "Edited".to_string(),
+            None,
+        )
+        .await;
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_redact_message_room_not_found() {
+    let tmp_dir = tempdir().unwrap();
+    let engine = match MatrixEngine::new(tmp_dir.path().to_path_buf()).await {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+
+    let item_id =
+        TimelineEventItemId::EventId(matrix_sdk::ruma::event_id!("$event:localhost").to_owned());
+    let result = engine
+        .redact_message("!nonexistent:localhost", &item_id, None)
+        .await;
+    assert!(result.is_err());
 }
 
 #[tokio::test]
