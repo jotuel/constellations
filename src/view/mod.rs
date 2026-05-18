@@ -6,8 +6,10 @@ pub mod chat;
 pub mod login;
 pub mod switcher;
 
-const AVATAR_WIDTH: i32 = 24;
-const AVATAR_HEIGHT: i32 = 24;
+const SPACE_AVATAR_WIDTH: i32 = 32;
+const SPACE_AVATAR_HEIGHT: i32 = 32;
+const ROOM_AVATAR_WIDTH: i32 = 24;
+const ROOM_AVATAR_HEIGHT: i32 = 24;
 const AVATAR_RADIUS: i32 = 15;
 
 impl Constellations {

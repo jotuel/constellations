@@ -1,6 +1,9 @@
 use crate::{
     Constellations, MenuAct, Message,
-    view::{AVATAR_HEIGHT, AVATAR_RADIUS, AVATAR_WIDTH},
+    view::{
+        AVATAR_RADIUS, ROOM_AVATAR_HEIGHT, ROOM_AVATAR_WIDTH, SPACE_AVATAR_HEIGHT,
+        SPACE_AVATAR_WIDTH,
+    },
 };
 use cosmic::{
     Element,
@@ -76,6 +79,24 @@ impl<'switcher> Constellations {
     }
 
     fn view_avatar_space(&self, space: &crate::matrix::RoomData) -> Element<'switcher, Message> {
+        let default_avatar = container(
+            text::body(
+                space
+                    .name
+                    .as_deref()
+                    .unwrap_or("S")
+                    .chars()
+                    .next()
+                    .unwrap_or('S')
+                    .to_string(),
+            )
+            .size(ROOM_AVATAR_HEIGHT),
+        )
+        .width(SPACE_AVATAR_WIDTH)
+        .height(SPACE_AVATAR_HEIGHT)
+        .align_x(Alignment::Center)
+        .align_y(Alignment::Center);
+
         let avatar_element: Element<'switcher, Message> = if let Some(url) = &space.avatar_url {
             if let Some(handle) = self.media_cache.get(url) {
                 cosmic::widget::image(handle.clone())
@@ -83,44 +104,10 @@ impl<'switcher> Constellations {
                     .height(32)
                     .into()
             } else {
-                container(
-                    text::body(
-                        space
-                            .name
-                            .as_deref()
-                            .unwrap_or("S")
-                            .chars()
-                            .next()
-                            .unwrap_or('S')
-                            .to_string(),
-                    )
-                    .size(24),
-                )
-                .width(32)
-                .height(32)
-                .align_x(Alignment::Center)
-                .align_y(Alignment::Center)
-                .into()
+                default_avatar.into()
             }
         } else {
-            container(
-                text::body(
-                    space
-                        .name
-                        .as_deref()
-                        .unwrap_or("S")
-                        .chars()
-                        .next()
-                        .unwrap_or('S')
-                        .to_string(),
-                )
-                .size(24),
-            )
-            .width(32)
-            .height(32)
-            .align_x(Alignment::Center)
-            .align_y(Alignment::Center)
-            .into()
+            default_avatar.into()
         };
         avatar_element
     }
@@ -294,15 +281,15 @@ impl<'switcher> Constellations {
             if let Some(handle) = self.media_cache.get(avatar_url) {
                 header = header.push(
                     cosmic::widget::image(handle.clone())
-                        .width(AVATAR_WIDTH)
-                        .height(AVATAR_HEIGHT)
+                        .width(ROOM_AVATAR_WIDTH)
+                        .height(ROOM_AVATAR_HEIGHT)
                         .border_radius(AVATAR_RADIUS),
                 );
             } else {
                 header = header.push(
                     container(text::body(default_avatar))
-                        .width(AVATAR_WIDTH)
-                        .height(AVATAR_HEIGHT)
+                        .width(ROOM_AVATAR_WIDTH)
+                        .height(ROOM_AVATAR_HEIGHT)
                         .align_x(Alignment::Center)
                         .align_y(Alignment::Center),
                 );
@@ -310,8 +297,8 @@ impl<'switcher> Constellations {
         } else {
             header = header.push(
                 container(text::body(default_avatar))
-                    .width(AVATAR_WIDTH)
-                    .height(AVATAR_HEIGHT)
+                    .width(ROOM_AVATAR_WIDTH)
+                    .height(ROOM_AVATAR_HEIGHT)
                     .align_x(Alignment::Center)
                     .align_y(Alignment::Center),
             );
