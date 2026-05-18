@@ -75,3 +75,7 @@
 ## 2024-05-18 - Localize Tooltip Strings
 **Learning:** Found multiple instances where tooltips, particularly those for UI action buttons like 'User Menu' or 'Room Settings', used hardcoded strings instead of localizable ones. This violates our principle of accessibility and internationalization.
 **Action:** When creating or modifying tooltips in the UI, always use `crate::fl!("key")` and define the corresponding translated string in `res/i18n/en/cosmic_ext_constellations.ftl` rather than hardcoding English strings.
+
+## 2024-05-18 - [Add Empty State to Ignored Users]
+**Learning:** Empty lists without a "no items" message can confuse users into thinking the list is still loading or broken, especially right after a loading spinner disappears. Adding a localized empty state message provides clear feedback that the action completed successfully but yielded no results.
+**Action:** When implementing any list UI (like blocked users, ignored users, rooms), always include a localized empty state message using `crate::fl!("...")` when the underlying data structure is empty and not actively loading.

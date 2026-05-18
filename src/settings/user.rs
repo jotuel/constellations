@@ -2210,21 +2210,25 @@ impl State {
     }
 
     fn view_ignored_users<'a>(&'a self) -> Element<'a, Message> {
-        let mut section = settings::section().title("Ignored Users");
+        let mut section = settings::section().title(crate::fl!("ignored-users"));
 
         if self.is_loading_ignored_users {
-            section = section.add(text::body("Loading ignored users..."));
+            section = section.add(text::body(crate::fl!("loading-ignored-users")));
         } else {
-            for user_id in &self.ignored_users {
-                section = section.add(settings::item(
-                    user_id.as_str(),
-                    button::text(crate::fl!("unignore"))
-                        .on_press(Message::UnignoreUser(user_id.clone())),
-                ));
+            if self.ignored_users.is_empty() {
+                section = section.add(text::body(crate::fl!("no-ignored-users")));
+            } else {
+                for user_id in &self.ignored_users {
+                    section = section.add(settings::item(
+                        user_id.as_str(),
+                        button::text(crate::fl!("unignore"))
+                            .on_press(Message::UnignoreUser(user_id.clone())),
+                    ));
+                }
             }
 
             section = section.add(settings::item(
-                "Ignore User",
+                crate::fl!("ignore"),
                 Row::new()
                     .spacing(10)
                     .push(
@@ -2232,7 +2236,7 @@ impl State {
                             .on_input(Message::NewIgnoreUserIdChanged)
                             .on_submit(|_| Message::IgnoreUser),
                     )
-                    .push(button::destructive("Ignore").on_press(Message::IgnoreUser))
+                    .push(button::destructive(crate::fl!("ignore")).on_press(Message::IgnoreUser))
                     .wrap(),
             ));
         }
