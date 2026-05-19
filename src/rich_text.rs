@@ -128,11 +128,10 @@ impl State {
             }
         }
 
-        if let Some((s, _)) = spans.last() {
-            if s == "\n" {
+        if let Some((s, _)) = spans.last()
+            && s == "\n" {
                 spans.pop();
             }
-        }
 
         (links, spans)
     }
@@ -374,7 +373,7 @@ where
                             size: Pixels(14.0),
                             font: cosmic::iced::Font::default(),
                             align_x: alignment::Horizontal::Left.into(),
-                            align_y: alignment::Vertical::Top.into(),
+                            align_y: alignment::Vertical::Top,
                             line_height: text::LineHeight::Relative(1.0),
                             shaping: text::Shaping::Advanced,
                             wrapping: text::Wrapping::None,

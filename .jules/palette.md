@@ -79,3 +79,6 @@
 ## 2024-05-18 - [Add Empty State to Ignored Users]
 **Learning:** Empty lists without a "no items" message can confuse users into thinking the list is still loading or broken, especially right after a loading spinner disappears. Adding a localized empty state message provides clear feedback that the action completed successfully but yielded no results.
 **Action:** When implementing any list UI (like blocked users, ignored users, rooms), always include a localized empty state message using `crate::fl!("...")` when the underlying data structure is empty and not actively loading.
+## 2024-05-19 - Localized UI Fallbacks and Labels
+**Learning:** Found that some form labels, fallback UI strings (like 'Unknown Room'), and instructional tooltips (like 'Enter a room name to create') were hardcoded in the Sidebar. Hardcoding UI strings negatively impacts accessibility and user experience for international users relying on translated interfaces.
+**Action:** When adding form labels, instructional tooltips, and fallback UI names, always use `crate::fl!("key-name")` and ensure the keys exist in `res/i18n/en/cosmic_ext_constellations.ftl` to properly support localization.

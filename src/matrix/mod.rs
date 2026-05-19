@@ -2309,15 +2309,12 @@ impl MatrixEngine {
 
         tokio::spawn(async move {
             while let Some(event) = room_events.recv().await {
-                match event {
-                    RoomEvent::TrackSubscribed {
+                if let RoomEvent::TrackSubscribed {
                         track,
                         publication: _,
                         participant: _,
-                    } => {
-                        info!("Track subscribed: {:?}", track.sid());
-                    }
-                    _ => {}
+                    } = event {
+                    info!("Track subscribed: {:?}", track.sid());
                 }
             }
         });

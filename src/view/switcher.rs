@@ -117,9 +117,9 @@ impl<'switcher> Constellations {
 
         if self.creating_room || self.creating_space {
             let label = if self.creating_room {
-                "Room Name"
+                crate::fl!("room-name")
             } else {
-                "Space Name"
+                crate::fl!("space-name")
             };
 
             let mut name_input =
@@ -145,10 +145,11 @@ impl<'switcher> Constellations {
             let create_btn_widget: Element<'_, Message> = if is_empty {
                 tooltip(
                     create_btn,
-                    text::body(format!(
-                        "Enter a {} name to create",
-                        if self.creating_room { "room" } else { "space" }
-                    )),
+                    text::body(if self.creating_room {
+                        crate::fl!("enter-room-name")
+                    } else {
+                        crate::fl!("enter-space-name")
+                    }),
                     Position::Top,
                 )
                 .into()
@@ -173,12 +174,14 @@ impl<'switcher> Constellations {
         }
 
         if let Some(selected_space) = &self.selected_space {
+            let space_name_fallback = crate::fl!("unknown-space");
             let space_name = self
                 .room_list
                 .iter()
                 .find(|r| r.id.as_ref() == selected_space.as_str())
                 .and_then(|r| r.name.as_deref())
-                .unwrap_or("Space");
+                .unwrap_or(space_name_fallback.as_str())
+                .to_string();
             let space_header = Row::new()
                 .align_y(Alignment::Center)
                 .push(text::title3(space_name))
@@ -274,7 +277,8 @@ impl<'switcher> Constellations {
         &self,
         room: &'switcher crate::matrix::RoomData,
     ) -> Row<'switcher, Message, cosmic::prelude::Theme> {
-        let name = text::body(room.name.as_deref().unwrap_or("Unknown Room"));
+        let name_fallback = crate::fl!("unknown-room");
+        let name = text::body(room.name.as_deref().unwrap_or(name_fallback.as_str()).to_string());
         let mut header = Row::new().spacing(10).align_y(Alignment::Center);
         let default_avatar = crate::fl!("room-has-no-avatar");
         if let Some(avatar_url) = &room.avatar_url {
@@ -309,7 +313,7 @@ impl<'switcher> Constellations {
 
 fn view_menu_create() -> menu::MenuBar<Message> {
     let plus_btn = button::icon(Named::new("list-add-symbolic"));
-    let plus_tooltip = tooltip(plus_btn, text::body("Create"), Position::Right);
+    let plus_tooltip = tooltip(plus_btn, text::body(crate::fl!("create")), Position::Right);
     let key_binds = std::collections::HashMap::new();
 
     let menu_tree = menu::Tree::with_children(
@@ -335,9 +339,9 @@ fn view_menu_create() -> menu::MenuBar<Message> {
         ),
     );
 
-    let create_menu = menu::bar(vec![menu_tree])
+
+    menu::bar(vec![menu_tree])
         .item_height(menu::ItemHeight::Dynamic(40))
         .item_width(menu::ItemWidth::Uniform(160))
-        .spacing(4.0);
-    create_menu
+        .spacing(4.0)
 }

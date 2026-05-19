@@ -276,7 +276,7 @@ impl Constellations {
             bubble_col = bubble_col.push(
                 crate::rich_text::RichSelectableText::new(
                     vec![crate::PreviewEvent::Text(message.body().to_string())],
-                    |url| Message::OpenUrl(url),
+                    Message::OpenUrl,
                 )
                 .into_element(),
             );
@@ -357,7 +357,7 @@ impl Constellations {
             scrollable(
                 crate::rich_text::RichSelectableText::new(
                     self.composer_preview_events.clone(),
-                    |url| Message::OpenUrl(url),
+                    Message::OpenUrl,
                 )
                 .into_element(),
             )
@@ -804,7 +804,8 @@ fn view_reply_bar(
     snippet: String,
     replying_to: &crate::ConstellationsItem,
 ) -> Row<'_, Message, Theme> {
-    let reply_bar = Row::new()
+
+    Row::new()
         .spacing(10)
         .align_y(Alignment::Center)
         .push(
@@ -816,6 +817,5 @@ fn view_reply_bar(
         )
         .push(text::body(snippet).size(12))
         .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
-        .push(button::text(crate::fl!("cancel")).on_press(Message::CancelReply));
-    reply_bar
+        .push(button::text(crate::fl!("cancel")).on_press(Message::CancelReply))
 }
