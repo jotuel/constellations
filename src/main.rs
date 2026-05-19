@@ -1604,9 +1604,11 @@ impl Application for Constellations {
                     media_previews_display_policy: self.user_settings.media_previews_display_policy,
                     invite_avatars_display_policy: self.user_settings.invite_avatars_display_policy,
                 };
-                Task::perform(async move { config.save() }, |_| {
+                let save_task = Task::perform(async move { config.save() }, |_| {
                     Action::from(Message::NoOp)
-                })
+                });
+                let fetch_task = self.fetch_missing_media();
+                Task::batch(vec![save_task, fetch_task])
             }
             Message::ToggleSearch => {
                 self.is_search_active = !self.is_search_active;
