@@ -1776,7 +1776,7 @@ impl State {
             ));
 
         if self.is_loading_keywords {
-            section = section.add(text::body("Loading keywords..."));
+            section = section.add(text::body(crate::fl!("loading-keywords")));
         } else {
             for keyword in &self.keywords {
                 section = section.add(settings::item(
@@ -2038,7 +2038,7 @@ impl State {
 
             section = section.add(settings::item(
                 "Password to delete devices:",
-                text_input("Password", &self.device_delete_password)
+                text_input(crate::fl!("password"), &self.device_delete_password)
                     .password()
                     .on_input(Message::DeviceDeletePasswordChanged),
             ));
@@ -2075,7 +2075,7 @@ impl State {
         let mut section = settings::section().title("Cross-signing");
 
         if self.is_loading_cross_signing {
-            section = section.add(text::body("Loading cross-signing status..."));
+            section = section.add(text::body(crate::fl!("loading-cross-signing-status")));
         } else if let Some(info) = &self.cross_signing_info {
             let status = &info.status;
 
@@ -2141,18 +2141,18 @@ impl State {
         let mut section = settings::section().title("Emails & Phone Numbers");
 
         if self.is_loading_3pids {
-            section = section.add(text::body("Loading linked accounts..."));
+            section = section.add(text::body(crate::fl!("loading-linked-accounts")));
         } else {
             for t in &self.threepids {
                 section = section.add(settings::item(
                     t.address.as_str(),
-                    button::destructive("Remove")
+                    button::destructive(crate::fl!("remove"))
                         .on_press(Message::Delete3PID(t.address.clone(), t.medium.clone())),
                 ));
             }
 
             section = section.add(settings::item(
-                "Link Email",
+                crate::fl!("link-email"),
                 Row::new()
                     .spacing(10)
                     .push(
@@ -2168,25 +2168,25 @@ impl State {
 
             if let Some(sid) = &self.adding_3pid_sid {
                 section = section.add(settings::item(
-                    "Verification Session",
+                    crate::fl!("verification-session"),
                     text::body(sid.as_str()),
                 ));
 
                 section = section.add(settings::item(
-                    "Confirm with Password",
-                    text_input("Password", &self.add_3pid_password)
+                    crate::fl!("confirm-with-password"),
+                    text_input(crate::fl!("password"), &self.add_3pid_password)
                         .password()
                         .on_input(Message::Add3PIDPasswordChanged),
                 ));
 
                 section = section.add(settings::item(
-                    "Complete",
-                    button::suggested("Add Account").on_press(Message::Add3PID),
+                    crate::fl!("complete"),
+                    button::suggested(crate::fl!("add-account")).on_press(Message::Add3PID),
                 ));
             }
 
             section = section.add(settings::item(
-                "Link Phone",
+                crate::fl!("link-phone"),
                 Row::new()
                     .spacing(10)
                     .push(
@@ -2252,7 +2252,7 @@ impl State {
         let mut section = settings::section().title("Verification");
         match &self.verification_ui_state {
             VerificationUIState::WaitingForOtherDevice => {
-                section = section.add(text::body("Waiting for other device to accept..."));
+                section = section.add(text::body(crate::fl!("waiting-for-other-device")));
             }
             VerificationUIState::ShowingEmojis(emojis) => {
                 let mut emoji_row = Row::new().spacing(20);
@@ -2266,22 +2266,22 @@ impl State {
                     );
                 }
                 section = section.add(emoji_row.wrap());
-                section = section.add(text::body("Do these emojis match on both devices?"));
+                section = section.add(text::body(crate::fl!("do-emojis-match")));
                 section = section.add(
                     Row::new()
                         .spacing(10)
-                        .push(button::suggested("Match").on_press(Message::ConfirmEmojis))
-                        .push(button::destructive("Cancel").on_press(Message::CancelVerification))
+                        .push(button::suggested(crate::fl!("match")).on_press(Message::ConfirmEmojis))
+                        .push(button::destructive(crate::fl!("cancel")).on_press(Message::CancelVerification))
                         .wrap(),
                 );
             }
             VerificationUIState::Done => {
-                section = section.add(text::body("Verification successful!"));
+                section = section.add(text::body(crate::fl!("verification-successful")));
                 section = section
                     .add(button::text(crate::fl!("done")).on_press(Message::CancelVerification));
             }
             VerificationUIState::Cancelled => {
-                section = section.add(text::body("Verification cancelled or failed."));
+                section = section.add(text::body(crate::fl!("verification-cancelled")));
                 section = section
                     .add(button::text(crate::fl!("dismiss")).on_press(Message::CancelVerification));
             }

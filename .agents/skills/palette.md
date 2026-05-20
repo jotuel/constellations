@@ -82,3 +82,7 @@
 ## 2024-05-19 - Localized UI Fallbacks and Labels
 **Learning:** Found that some form labels, fallback UI strings (like 'Unknown Room'), and instructional tooltips (like 'Enter a room name to create') were hardcoded in the Sidebar. Hardcoding UI strings negatively impacts accessibility and user experience for international users relying on translated interfaces.
 **Action:** When adding form labels, instructional tooltips, and fallback UI names, always use `crate::fl!("key-name")` and ensure the keys exist in `res/i18n/en/cosmic_ext_constellations.ftl` to properly support localization.
+
+## 2026-06-25 - Extracted Hardcoded Strings to Translations
+**Learning:** Found several English strings hardcoded directly into the user settings and chat UI. Hardcoding UI strings negatively impacts accessibility and user experience for international users relying on translated interfaces or screen readers.
+**Action:** When adding form labels, status messages, and other UI strings, always use `crate::fl!("key-name")` and ensure the keys exist in `res/i18n/en/cosmic_ext_constellations.ftl` to properly support full localization.
