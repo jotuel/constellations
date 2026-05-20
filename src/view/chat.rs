@@ -808,14 +808,14 @@ impl<'chat> Constellations {
 
         let mut attachments_view = Column::new().spacing(5);
         if !self.composer_attachments.is_empty() {
-            attachments_view = attachments_view.push(text::body("Attachments:").size(12));
+            attachments_view = attachments_view.push(text::body(crate::fl!("attachments")).size(12));
             for (i, path) in self.composer_attachments.iter().enumerate() {
                 let filename = path.file_name().unwrap_or_default().to_string_lossy();
                 let attachment_row = Row::new()
                     .spacing(10)
                     .align_y(Alignment::Center)
                     .push(text::body(filename).size(12))
-                    .push(button::destructive("Remove").on_press(Message::RemoveAttachment(i)));
+                    .push(button::destructive(crate::fl!("remove-attachment")).on_press(Message::RemoveAttachment(i)));
                 attachments_view = attachments_view.push(attachment_row);
             }
         }
