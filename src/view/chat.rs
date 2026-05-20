@@ -115,31 +115,144 @@ impl<'chat> Constellations {
             }
         }
 
-        // Show picker if active
-        if self.active_reaction_picker.as_ref() == Some(&item_id) {
-            let emojis = ["👍", "❤️", "😂", "😮", "😢", "🙏", "👎", "🔥", "🎉", "👀"];
-            for emoji in emojis {
-                let btn = button::custom(container(text::body(emoji).size(12)).padding([2, 4]))
-                    .on_press(Message::ToggleReaction(item_id.clone(), emoji.to_string()));
-                reaction_row = reaction_row.push(btn);
-            }
-
-            // A cancel button to close picker
-            let cancel_btn = button::custom(
-                container(cosmic::widget::icon::from_name("window-close-symbolic").size(12))
-                    .padding([2, 4]),
-            )
-            .on_press(Message::OpenReactionPicker(None));
-            let cancel_tooltip = tooltip(
-                cancel_btn,
-                text::body(crate::fl!("close-picker")),
-                Position::Top,
-            );
-            reaction_row = reaction_row.push(cancel_tooltip);
-        }
-
         reaction_row
     }
+
+    fn view_emoji_picker<'a>(
+        &'a self,
+        item_id: Option<matrix::TimelineEventItemId>,
+    ) -> Element<'a, Message> {
+        let search_input = text_input(crate::fl!("search-emojis"), &self.emoji_search_query)
+            .on_input(Message::EmojiSearchQueryChanged)
+            .width(cosmic::iced::Length::Fill);
+
+        let close_btn = button::icon(cosmic::widget::icon::from_name("window-close-symbolic"))
+            .on_press(if item_id.is_some() {
+                Message::OpenReactionPicker(None)
+            } else {
+                Message::ToggleComposerEmojiPicker
+            });
+
+        let top_row = Row::new()
+            .spacing(5)
+            .align_y(Alignment::Center)
+            .push(search_input)
+            .push(close_btn);
+
+        let mut picker_col = Column::new().spacing(8);
+        picker_col = picker_col.push(top_row);
+
+        if self.emoji_search_query.is_empty() {
+            let categories = [
+                (emojis::Group::SmileysAndEmotion, "😄"),
+                (emojis::Group::PeopleAndBody, "👋"),
+                (emojis::Group::AnimalsAndNature, "🌲"),
+                (emojis::Group::FoodAndDrink, "🍔"),
+                (emojis::Group::TravelAndPlaces, "✈️"),
+                (emojis::Group::Activities, "⚽"),
+                (emojis::Group::Objects, "💡"),
+                (emojis::Group::Symbols, "🔣"),
+                (emojis::Group::Flags, "🏁"),
+            ];
+
+            let mut cat_row = Row::new().spacing(4).align_y(Alignment::Center);
+            for (group, symbol) in categories {
+                let is_selected = self.selected_emoji_group == Some(group);
+                
+                if is_selected {
+                    let btn = button::suggested(symbol)
+                        .on_press(Message::SelectEmojiGroup(Some(group)));
+                    cat_row = cat_row.push(btn);
+                } else {
+                    let btn_content = container(text::body(symbol).size(16))
+                        .padding([2, 4])
+                        .align_x(Alignment::Center)
+                        .align_y(Alignment::Center);
+                    let btn = button::custom(btn_content)
+                        .on_press(Message::SelectEmojiGroup(Some(group)));
+                    cat_row = cat_row.push(btn);
+                }
+            }
+            picker_col = picker_col.push(cat_row);
+        }
+
+        let mut emoji_grid = Row::new().spacing(4);
+        let mut has_elements = false;
+        let mut no_results = false;
+        
+        if self.emoji_search_query.is_empty() {
+            if let Some(group) = self.selected_emoji_group {
+                for emoji in group.emojis() {
+                    let emoji_str = emoji.as_str().to_string();
+                    let btn = button::custom(
+                        container(text::body(emoji.as_str()).size(18))
+                            .padding(4)
+                            .align_x(Alignment::Center)
+                            .align_y(Alignment::Center)
+                    )
+                    .on_press(match &item_id {
+                        Some(id) => Message::ToggleReaction(id.clone(), emoji_str),
+                        None => Message::InsertEmoji(emoji_str),
+                    });
+                    emoji_grid = emoji_grid.push(btn);
+                    has_elements = true;
+                }
+            }
+        } else {
+            let query = self.emoji_search_query.to_lowercase();
+            let mut count = 0;
+            for emoji in emojis::iter() {
+                if emoji.name().to_lowercase().contains(&query)
+                    || emoji.shortcodes().any(|s| s.to_lowercase().contains(&query))
+                {
+                    let emoji_str = emoji.as_str().to_string();
+                    let btn = button::custom(
+                        container(text::body(emoji.as_str()).size(18))
+                            .padding(4)
+                            .align_x(Alignment::Center)
+                            .align_y(Alignment::Center)
+                    )
+                    .on_press(match &item_id {
+                        Some(id) => Message::ToggleReaction(id.clone(), emoji_str),
+                        None => Message::InsertEmoji(emoji_str),
+                    });
+                    emoji_grid = emoji_grid.push(btn);
+                    count += 1;
+                    has_elements = true;
+                    if count >= 100 {
+                        break;
+                    }
+                }
+            }
+            if count == 0 {
+                no_results = true;
+            }
+        }
+
+        let scroll_grid = if no_results {
+            let no_found = text::body(crate::fl!("no-results-found")).size(12);
+            scrollable(no_found)
+                .height(200)
+                .width(cosmic::iced::Length::Fill)
+        } else if has_elements {
+            scrollable(emoji_grid.wrap())
+                .height(200)
+                .width(cosmic::iced::Length::Fill)
+        } else {
+            scrollable(cosmic::widget::space().height(0))
+                .height(200)
+                .width(cosmic::iced::Length::Fill)
+        };
+        
+        picker_col = picker_col.push(scroll_grid);
+
+        container(picker_col)
+            .padding(10)
+            .width(cosmic::iced::Length::Fill)
+            .max_width(320)
+            .into()
+    }
+
 
     fn view_sender_info<'a>(
         &'a self,
@@ -438,9 +551,12 @@ impl<'chat> Constellations {
             let mut action_row = Row::new().spacing(5).align_y(Alignment::Center);
 
             // "Add reaction" button
-            let btn = button::text(crate::fl!("reaction")).on_press(Message::OpenReactionPicker(
-                Some(event.identifier().clone()),
-            ));
+            let is_picker_open = self.active_reaction_picker.as_ref() == Some(&event.identifier());
+            let btn = button::text(crate::fl!("reaction")).on_press(if is_picker_open {
+                Message::OpenReactionPicker(None)
+            } else {
+                Message::OpenReactionPicker(Some(event.identifier().clone()))
+            });
             let btn_tooltip = tooltip(
                 btn,
                 text::body(crate::fl!("add-reaction")),
@@ -492,6 +608,11 @@ impl<'chat> Constellations {
             }
 
             bubble_col = bubble_col.push(reaction_row);
+
+            if self.active_reaction_picker.as_ref() == Some(&event.identifier()) {
+                bubble_col = bubble_col.push(self.view_emoji_picker(Some(event.identifier().clone())));
+            }
+
             action_row = action_row.push(self.view_thread_summary(event));
             bubble_col = bubble_col.push(action_row);
 
@@ -759,6 +880,10 @@ impl<'chat> Constellations {
     pub fn view_composer(&self) -> Element<'_, Message> {
         let mut content = Column::new().spacing(10);
 
+        if self.is_composer_emoji_picker_active {
+            content = content.push(self.view_emoji_picker(None));
+        }
+
         if let Some(replying_to) = &self.replying_to {
             let mut snippet = replying_to
                 .item
@@ -856,6 +981,11 @@ impl<'chat> Constellations {
                 button::text(crate::fl!("attach"))
                     .on_press(Message::AddAttachment)
                     .tooltip(crate::fl!("tooltip-attach")),
+            )
+            .push(
+                button::text("😀")
+                    .on_press(Message::ToggleComposerEmojiPicker)
+                    .tooltip(crate::fl!("tooltip-emojis")),
             )
             .push(if self.composer_is_preview {
                 button::text(crate::fl!("edit"))

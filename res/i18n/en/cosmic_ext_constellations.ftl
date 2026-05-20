@@ -59,6 +59,8 @@ replying-to = Replying to { $user }:
 cancel-reply = Cancel
 add-reaction = Add Reaction
 close-picker = Close Picker
+search-emojis = Search emojis...
+no-results-found = No results found
 type-message-or-attach = Type a message or attach a file
 search = Search
 close-search = Close Search
@@ -227,6 +229,7 @@ order-optional = Order (optional)
 
 # Tooltips
 tooltip-attach = Attach
+tooltip-emojis = Emojis
 tooltip-send = Send
 tooltip-edit = Edit
 tooltip-delete = Delete

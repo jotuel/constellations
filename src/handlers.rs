@@ -1210,6 +1210,9 @@ mod tests {
             editing_item: None,
             call_participants: HashMap::new(),
             fullscreen_image: None,
+            emoji_search_query: String::new(),
+            selected_emoji_group: None,
+            is_composer_emoji_picker_active: false,
         }
     }
 

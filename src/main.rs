@@ -195,7 +195,11 @@ struct Constellations {
     app_settings: settings::app::State,
     call_participants: HashMap<std::sync::Arc<str>, Vec<matrix_sdk::ruma::OwnedUserId>>,
     fullscreen_image: Option<image::Handle>,
+    emoji_search_query: String,
+    selected_emoji_group: Option<emojis::Group>,
+    is_composer_emoji_picker_active: bool,
 }
+
 
 #[derive(Debug, Clone)]
 pub enum Message {
@@ -215,6 +219,11 @@ pub enum Message {
     ToggleReaction(matrix::TimelineEventItemId, String),
     ReactionToggled(Result<(), String>),
     OpenReactionPicker(Option<matrix::TimelineEventItemId>),
+    EmojiSearchQueryChanged(String),
+    SelectEmojiGroup(Option<emojis::Group>),
+    ToggleComposerEmojiPicker,
+    InsertEmoji(String),
+
     LoadMoreFinished(Result<(), String>),
     TimelineScrolled(cosmic::iced::widget::scrollable::Viewport, bool),
     UserReady(Option<String>, Result<(), matrix::SyncError>),
@@ -1161,6 +1170,9 @@ impl Application for Constellations {
             app_settings: settings::app::State::from_config(&config),
             call_participants: HashMap::new(),
             fullscreen_image: None,
+            emoji_search_query: String::new(),
+            selected_emoji_group: None,
+            is_composer_emoji_picker_active: false,
         };
 
         let title_task = app.update_title();
@@ -1409,6 +1421,32 @@ impl Application for Constellations {
             }
             Message::OpenReactionPicker(item_id) => {
                 self.active_reaction_picker = item_id;
+                if self.active_reaction_picker.is_some() {
+                    self.is_composer_emoji_picker_active = false;
+                }
+                self.emoji_search_query.clear();
+                self.selected_emoji_group = Some(emojis::Group::SmileysAndEmotion);
+                Task::none()
+            }
+            Message::EmojiSearchQueryChanged(query) => {
+                self.emoji_search_query = query;
+                Task::none()
+            }
+            Message::SelectEmojiGroup(group) => {
+                self.selected_emoji_group = group;
+                Task::none()
+            }
+            Message::ToggleComposerEmojiPicker => {
+                self.is_composer_emoji_picker_active = !self.is_composer_emoji_picker_active;
+                if self.is_composer_emoji_picker_active {
+                    self.emoji_search_query.clear();
+                    self.selected_emoji_group = Some(emojis::Group::SmileysAndEmotion);
+                    self.active_reaction_picker = None;
+                }
+                Task::none()
+            }
+            Message::InsertEmoji(emoji) => {
+                self.composer_text.push_str(&emoji);
                 Task::none()
             }
             Message::ToggleReaction(item_id, key) => {
@@ -1993,6 +2031,9 @@ mod tests {
             last_timeline_offset: Default::default(),
             last_threaded_timeline_offset: Default::default(),
             fullscreen_image: None,
+            emoji_search_query: String::new(),
+            selected_emoji_group: None,
+            is_composer_emoji_picker_active: false,
         }
     }
 

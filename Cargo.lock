@@ -1585,6 +1585,7 @@ dependencies = [
  "chrono",
  "cosmic-text",
  "dirs",
+ "emojis",
  "eyeball-im",
  "futures",
  "i18n-embed 0.15.4",
