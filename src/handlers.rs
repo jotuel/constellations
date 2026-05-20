@@ -3,7 +3,10 @@ use crate::{
     matrix, redact_url,
 };
 use cosmic::{Action, Application, Task};
+use futures::FutureExt;
 use futures::stream::StreamExt;
+use matrix_sdk::ruma::events::room::message::MessageType;
+use std::sync::Arc;
 
 impl Constellations {
     pub fn handle_engine_ready(
@@ -116,6 +119,91 @@ impl Constellations {
         Task::batch(tasks)
     }
 
+    pub fn fetch_missing_media(&mut self) -> Task<Action<Message>> {
+        let mut media_fetches: Vec<
+            futures::future::BoxFuture<'static, (String, Result<Vec<u8>, String>)>,
+        > = Vec::new();
+
+        let matrix = match &self.matrix {
+            Some(m) => m.clone(),
+            None => return Task::none(),
+        };
+
+        let check_item = |item: &Arc<matrix::TimelineItem>, fetches: &mut Vec<_>| {
+            if let Some(event) = item.as_event() {
+                // Fetch avatar
+                if let matrix_sdk_ui::timeline::TimelineDetails::Ready(profile) =
+                    event.sender_profile()
+                    && let Some(avatar_url) = &profile.avatar_url
+                {
+                    let url_str = avatar_url.to_string();
+                    if !self.media_cache.contains_key(&url_str) {
+                        let matrix_clone = matrix.clone();
+                        let source =
+                            matrix_sdk::ruma::events::room::MediaSource::Plain(avatar_url.clone());
+                        fetches.push(
+                            async move {
+                                let res = matrix_clone
+                                    .fetch_media(source)
+                                    .await
+                                    .map_err(|e| e.to_string());
+                                (url_str, res)
+                            }
+                            .boxed(),
+                        );
+                    }
+                }
+
+                // Fetch image if enabled
+                if self.user_settings.media_previews_display_policy {
+                    if let Some(message) = event.content().as_message() {
+                        if let MessageType::Image(image) = message.msgtype() {
+                            let mxc_url = match &image.source {
+                                MediaSource::Plain(uri) => uri.to_string(),
+                                MediaSource::Encrypted(file) => file.url.to_string(),
+                            };
+                            if !self.media_cache.contains_key(&mxc_url) {
+                                let matrix_clone = matrix.clone();
+                                let source = image.source.clone();
+                                fetches.push(
+                                    async move {
+                                        let res = matrix_clone
+                                            .fetch_media(source)
+                                            .await
+                                            .map_err(|e| e.to_string());
+                                        (mxc_url, res)
+                                    }
+                                    .boxed(),
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        };
+
+        for item in &self.timeline_items {
+            check_item(&item.item, &mut media_fetches);
+        }
+        for item in &self.threaded_timeline_items {
+            check_item(&item.item, &mut media_fetches);
+        }
+
+        if !media_fetches.is_empty() {
+            Task::perform(
+                async move {
+                    futures::stream::iter(media_fetches)
+                        .buffer_unordered(10)
+                        .collect::<Vec<_>>()
+                        .await
+                },
+                |results| Message::MediaFetchedBatch(results).into(),
+            )
+        } else {
+            Task::none()
+        }
+    }
+
     pub fn handle_timeline_diff(
         &mut self,
         diff: eyeball_im::VectorDiff<std::sync::Arc<matrix::TimelineItem>>,
@@ -123,27 +211,60 @@ impl Constellations {
         root_id: Option<matrix_sdk::ruma::OwnedEventId>,
     ) -> Task<Action<<Constellations as Application>::Message>> {
         let mut tasks = Vec::new();
-        let mut media_fetches = Vec::new();
+        let mut media_fetches: Vec<
+            futures::future::BoxFuture<'static, (String, Result<Vec<u8>, String>)>,
+        > = Vec::new();
         let check_item = |item: &std::sync::Arc<matrix::TimelineItem>, fetches: &mut Vec<_>| {
-            if let Some(event) = item.as_event()
-                && let matrix_sdk_ui::timeline::TimelineDetails::Ready(profile) =
+            if let Some(event) = item.as_event() {
+                if let matrix_sdk_ui::timeline::TimelineDetails::Ready(profile) =
                     event.sender_profile()
-                && let Some(avatar_url) = &profile.avatar_url
-            {
-                let url_str = avatar_url.to_string();
-                if !self.media_cache.contains_key(&url_str)
-                    && let Some(matrix) = &self.matrix
+                    && let Some(avatar_url) = &profile.avatar_url
                 {
-                    let matrix_clone = matrix.clone();
-                    let source =
-                        matrix_sdk::ruma::events::room::MediaSource::Plain(avatar_url.clone());
-                    fetches.push(async move {
-                        let res = matrix_clone
-                            .fetch_media(source)
-                            .await
-                            .map_err(|e| e.to_string());
-                        (url_str, res)
-                    });
+                    let url_str = avatar_url.to_string();
+                    if !self.media_cache.contains_key(&url_str)
+                        && let Some(matrix) = &self.matrix
+                    {
+                        let matrix_clone = matrix.clone();
+                        let source =
+                            matrix_sdk::ruma::events::room::MediaSource::Plain(avatar_url.clone());
+                        fetches.push(
+                            async move {
+                                let res = matrix_clone
+                                    .fetch_media(source)
+                                    .await
+                                    .map_err(|e| e.to_string());
+                                (url_str, res)
+                            }
+                            .boxed(),
+                        );
+                    }
+                }
+
+                if self.user_settings.media_previews_display_policy {
+                    if let Some(message) = event.content().as_message() {
+                        if let MessageType::Image(image) = message.msgtype() {
+                            let mxc_url = match &image.source {
+                                MediaSource::Plain(uri) => uri.to_string(),
+                                MediaSource::Encrypted(file) => file.url.to_string(),
+                            };
+                            if !self.media_cache.contains_key(&mxc_url)
+                                && let Some(matrix) = &self.matrix
+                            {
+                                let matrix_clone = matrix.clone();
+                                let source = image.source.clone();
+                                fetches.push(
+                                    async move {
+                                        let res = matrix_clone
+                                            .fetch_media(source)
+                                            .await
+                                            .map_err(|e| e.to_string());
+                                        (mxc_url, res)
+                                    }
+                                    .boxed(),
+                                );
+                            }
+                        }
+                    }
                 }
             }
         };
@@ -1088,6 +1209,7 @@ mod tests {
             replying_to: None,
             editing_item: None,
             call_participants: HashMap::new(),
+            fullscreen_image: None,
         }
     }
 
