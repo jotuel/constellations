@@ -239,9 +239,9 @@ pub enum Message {
     SpaceChildrenFetched(OwnedRoomId, Result<Vec<matrix::RoomData>, String>),
     OpenThread(matrix_sdk::ruma::OwnedEventId),
     CloseThread,
-    StartReply(ConstellationsItem),
+    StartReply(matrix::TimelineEventItemId),
     CancelReply,
-    StartEdit(ConstellationsItem),
+    StartEdit(matrix::TimelineEventItemId),
     CancelEdit,
     RedactMessage(matrix::TimelineEventItemId),
     MatrixThreadDiff(
@@ -1218,8 +1218,17 @@ impl Application for Constellations {
                     ),
                 ])
             }
-            Message::StartReply(item) => {
-                self.replying_to = Some(item);
+            Message::StartReply(item_id) => {
+                let mut found_item = None;
+                for item in self.timeline_items.iter().chain(self.threaded_timeline_items.iter()) {
+                    if let Some(event) = item.item.as_event() {
+                        if event.identifier() == item_id {
+                            found_item = Some(item.clone());
+                            break;
+                        }
+                    }
+                }
+                self.replying_to = found_item;
                 Task::none()
             }
             Message::CancelReply => {
@@ -1334,14 +1343,25 @@ impl Application for Constellations {
                 }
                 Task::none()
             }
-            Message::StartEdit(item) => {
-                if let Some(event) = item.item.as_event()
-                    && let Some(msg) = event.content().as_message()
-                {
-                    self.composer_text = msg.body().to_string();
-                    self.composer_preview_events = parse_markdown(&self.composer_text, false);
-                    self.editing_item = Some(item);
-                    self.replying_to = None;
+            Message::StartEdit(item_id) => {
+                let mut found_item = None;
+                for item in self.timeline_items.iter().chain(self.threaded_timeline_items.iter()) {
+                    if let Some(event) = item.item.as_event() {
+                        if event.identifier() == item_id {
+                            found_item = Some(item.clone());
+                            break;
+                        }
+                    }
+                }
+                if let Some(item) = found_item {
+                    if let Some(event) = item.item.as_event()
+                        && let Some(msg) = event.content().as_message()
+                    {
+                        self.composer_text = msg.body().to_string();
+                        self.composer_preview_events = parse_markdown(&self.composer_text, false);
+                        self.editing_item = Some(item);
+                        self.replying_to = None;
+                    }
                 }
                 Task::none()
             }

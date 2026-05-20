@@ -146,7 +146,7 @@ impl Constellations {
         avatar_url: Option<&'a str>,
         sender_name: &'a str,
         timestamp: &'a str,
-        sender_id: Option<matrix_sdk::ruma::OwnedUserId>,
+        sender_id: Option<&'a matrix_sdk::ruma::UserId>,
         is_ignored: bool,
         is_me: bool,
     ) -> Row<'a, Message, cosmic::Theme> {
@@ -176,7 +176,7 @@ impl Constellations {
                 sender_info = sender_info.push(
                     button::icon(Named::new("dialog-error-symbolic"))
                         .on_press(Message::UserSettings(
-                            crate::settings::user::Message::UnignoreUserById(id),
+                            crate::settings::user::Message::UnignoreUserById(id.to_owned()),
                         ))
                         .tooltip(crate::fl!("unignore-user")),
                 );
@@ -184,7 +184,7 @@ impl Constellations {
                 sender_info = sender_info.push(
                     button::icon(Named::new("dialog-error-symbolic"))
                         .on_press(Message::UserSettings(
-                            crate::settings::user::Message::IgnoreUserById(id),
+                            crate::settings::user::Message::IgnoreUserById(id.to_owned()),
                         ))
                         .tooltip(crate::fl!("ignore")),
                 );
@@ -379,7 +379,7 @@ impl Constellations {
                 item.avatar_url.as_deref(),
                 item.sender_name.as_str(),
                 item.timestamp.as_str(),
-                Some(item.sender_id.clone()),
+                Some(&item.sender_id),
                 is_ignored,
                 is_me,
             );
@@ -515,7 +515,7 @@ impl Constellations {
             action_row = action_row.push(action_tooltip);
 
             let reply_btn =
-                button::text(crate::fl!("reply")).on_press(Message::StartReply(item.clone()));
+                button::text(crate::fl!("reply")).on_press(Message::StartReply(event.identifier().clone()));
             let reply_tooltip = tooltip(
                 reply_btn,
                 text::body(crate::fl!("tooltip-reply")),
@@ -525,7 +525,7 @@ impl Constellations {
 
             if is_me {
                 let edit_btn =
-                    button::text(crate::fl!("edit")).on_press(Message::StartEdit(item.clone()));
+                    button::text(crate::fl!("edit")).on_press(Message::StartEdit(event.identifier().clone()));
                 let edit_tooltip = tooltip(
                     edit_btn,
                     text::body(crate::fl!("tooltip-edit")),

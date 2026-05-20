@@ -46,3 +46,10 @@
 ## 2026-05-18 - [Safe Vec reuse with std::mem::take]
 **Learning:** In Rust UI state management, when passing a reused `Vec` buffer via `std::mem::take` into a bulk update method that acquires a lock (e.g., `filter_in_space_bulk_sync`), clearing the buffer *before* acquiring the lock results in UI flicker and lost data if the lock fails.
 **Action:** Always call `.clear()` on the buffer *inside* the success branch of the lock. This ensures that if the lock fails, the unmodified original `Vec` can be safely restored via reassignment, preventing UI flickering and preserving memory capacity.
+## 2024-08-15 - [Avoid Message cloning in view loop]
+**Learning:** `src/view/chat.rs` was constructing `Message::StartReply` and `Message::StartEdit` by cloning the entire `ConstellationsItem` struct for every message in the timeline on every render frame. Since `ConstellationsItem` contains vectors of markdown events and long strings, this resulted in severe `O(N)` heap allocation bottlenecks.
+**Action:** In `iced` or `libcosmic` UI applications, avoid instantiating `Message` variants with fully cloned data structs (e.g., `Message::StartReply(item.clone())`) inside the `view()` render loop. Instead, pass a lightweight identifier (like `TimelineEventItemId`) and retrieve the full data from the application state during the `update()` phase to eliminate `O(N)` heap allocation bottlenecks per frame.
+
+## 2024-08-15 - [Pass UserIds by reference in view loop]
+**Learning:** `view_sender_info` previously accepted `Option<matrix_sdk::ruma::OwnedUserId>`, causing a `.clone()` allocation on `item.sender_id` for every message on every render frame.
+**Action:** In Rust UI render methods (`iced`/`libcosmic`), when passing identifiers like `matrix_sdk::ruma::OwnedUserId` to helper functions, pass them as references (e.g., `Option<&UserId>`) rather than owned copies. If an owned copy is needed for a `Message` variant inside an `on_press` handler, call `.to_owned()` at the exact site of variant construction to defer allocation until interaction.
