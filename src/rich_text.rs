@@ -129,9 +129,10 @@ impl State {
         }
 
         if let Some((s, _)) = spans.last()
-            && s == "\n" {
-                spans.pop();
-            }
+            && s == "\n"
+        {
+            spans.pop();
+        }
 
         (links, spans)
     }

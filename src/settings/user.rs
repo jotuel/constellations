@@ -745,7 +745,12 @@ impl State {
                                 .user_id()
                                 .map(|u| u.to_string())
                                 .unwrap_or_default();
-                            let identifier = matrix_sdk::ruma::api::client::uiaa::UserIdentifier::UserIdOrLocalpart(user_id);
+                            let identifier =
+                                matrix_sdk::ruma::api::client::uiaa::UserIdentifier::Matrix(
+                                    matrix_sdk::ruma::api::client::uiaa::MatrixUserIdentifier::new(
+                                        user_id,
+                                    ),
+                                );
                             let password_auth = matrix_sdk::ruma::api::client::uiaa::Password::new(
                                 identifier,
                                 current_password,
@@ -1111,7 +1116,7 @@ impl State {
                                         );
                                     }
 
-                                    let identifier = matrix_sdk::ruma::api::client::uiaa::UserIdentifier::UserIdOrLocalpart(user_id);
+                                    let identifier = matrix_sdk::ruma::api::client::uiaa::UserIdentifier::Matrix(matrix_sdk::ruma::api::client::uiaa::MatrixUserIdentifier::new(user_id));
                                     let mut password_auth =
                                         matrix_sdk::ruma::api::client::uiaa::Password::new(
                                             identifier, password,
@@ -1179,8 +1184,8 @@ impl State {
                                     }
 
                                     let identifier =
-                                        matrix_sdk::ruma::api::client::uiaa::UserIdentifier::UserIdOrLocalpart(
-                                            user_id,
+                                        matrix_sdk::ruma::api::client::uiaa::UserIdentifier::Matrix(
+                                            matrix_sdk::ruma::api::client::uiaa::MatrixUserIdentifier::new(user_id)
                                         );
                                     let mut password_auth =
                                         matrix_sdk::ruma::api::client::uiaa::Password::new(
@@ -1290,7 +1295,7 @@ impl State {
                                         );
                                     }
 
-                                    let identifier = matrix_sdk::ruma::api::client::uiaa::UserIdentifier::UserIdOrLocalpart(user_id);
+                                    let identifier = matrix_sdk::ruma::api::client::uiaa::UserIdentifier::Matrix(matrix_sdk::ruma::api::client::uiaa::MatrixUserIdentifier::new(user_id));
                                     let mut password_auth =
                                         matrix_sdk::ruma::api::client::uiaa::Password::new(
                                             identifier, password,
@@ -1537,7 +1542,7 @@ impl State {
                                             return Err("Password required to add 3PID".to_string());
                                         }
 
-                                        let identifier = matrix_sdk::ruma::api::client::uiaa::UserIdentifier::UserIdOrLocalpart(user_id);
+                                        let identifier = matrix_sdk::ruma::api::client::uiaa::UserIdentifier::Matrix(matrix_sdk::ruma::api::client::uiaa::MatrixUserIdentifier::new(user_id));
                                         let mut password_auth =
                                             matrix_sdk::ruma::api::client::uiaa::Password::new(
                                                 identifier, password,
@@ -2270,8 +2275,13 @@ impl State {
                 section = section.add(
                     Row::new()
                         .spacing(10)
-                        .push(button::suggested(crate::fl!("match")).on_press(Message::ConfirmEmojis))
-                        .push(button::destructive(crate::fl!("cancel")).on_press(Message::CancelVerification))
+                        .push(
+                            button::suggested(crate::fl!("match")).on_press(Message::ConfirmEmojis),
+                        )
+                        .push(
+                            button::destructive(crate::fl!("cancel"))
+                                .on_press(Message::CancelVerification),
+                        )
                         .wrap(),
                 );
             }

@@ -158,10 +158,10 @@ impl<'chat> Constellations {
             let mut cat_row = Row::new().spacing(4).align_y(Alignment::Center);
             for (group, symbol) in categories {
                 let is_selected = self.selected_emoji_group == Some(group);
-                
+
                 if is_selected {
-                    let btn = button::suggested(symbol)
-                        .on_press(Message::SelectEmojiGroup(Some(group)));
+                    let btn =
+                        button::suggested(symbol).on_press(Message::SelectEmojiGroup(Some(group)));
                     cat_row = cat_row.push(btn);
                 } else {
                     let btn_content = container(text::body(symbol).size(16))
@@ -179,7 +179,7 @@ impl<'chat> Constellations {
         let mut emoji_grid = Row::new().spacing(4);
         let mut has_elements = false;
         let mut no_results = false;
-        
+
         if self.emoji_search_query.is_empty() {
             if let Some(group) = self.selected_emoji_group {
                 for emoji in group.emojis() {
@@ -188,7 +188,7 @@ impl<'chat> Constellations {
                         container(text::body(emoji.as_str()).size(18))
                             .padding(4)
                             .align_x(Alignment::Center)
-                            .align_y(Alignment::Center)
+                            .align_y(Alignment::Center),
                     )
                     .on_press(match &item_id {
                         Some(id) => Message::ToggleReaction(id.clone(), emoji_str),
@@ -203,14 +203,16 @@ impl<'chat> Constellations {
             let mut count = 0;
             for emoji in emojis::iter() {
                 if emoji.name().to_lowercase().contains(&query)
-                    || emoji.shortcodes().any(|s| s.to_lowercase().contains(&query))
+                    || emoji
+                        .shortcodes()
+                        .any(|s| s.to_lowercase().contains(&query))
                 {
                     let emoji_str = emoji.as_str().to_string();
                     let btn = button::custom(
                         container(text::body(emoji.as_str()).size(18))
                             .padding(4)
                             .align_x(Alignment::Center)
-                            .align_y(Alignment::Center)
+                            .align_y(Alignment::Center),
                     )
                     .on_press(match &item_id {
                         Some(id) => Message::ToggleReaction(id.clone(), emoji_str),
@@ -243,7 +245,7 @@ impl<'chat> Constellations {
                 .height(200)
                 .width(cosmic::iced::Length::Fill)
         };
-        
+
         picker_col = picker_col.push(scroll_grid);
 
         container(picker_col)
@@ -252,7 +254,6 @@ impl<'chat> Constellations {
             .max_width(320)
             .into()
     }
-
 
     fn view_sender_info<'a>(
         &'a self,
@@ -329,13 +330,13 @@ impl<'chat> Constellations {
         if self.user_settings.media_previews_display_policy {
             if let Some(handle) = self.media_cache.get(&mxc_url) {
                 bubble_col = bubble_col.push(
-                    button::custom(
-                        cosmic::widget::image(handle.clone()).width(if self.app_settings.compact_mode {
+                    button::custom(cosmic::widget::image(handle.clone()).width(
+                        if self.app_settings.compact_mode {
                             150
                         } else {
                             300
-                        }),
-                    )
+                        },
+                    ))
                     .padding(0)
                     .on_press(Message::OpenImage(handle.clone())),
                 );
@@ -578,8 +579,8 @@ impl<'chat> Constellations {
             );
             action_row = action_row.push(action_tooltip);
 
-            let reply_btn =
-                button::text(crate::fl!("reply")).on_press(Message::StartReply(event.identifier().clone()));
+            let reply_btn = button::text(crate::fl!("reply"))
+                .on_press(Message::StartReply(event.identifier().clone()));
             let reply_tooltip = tooltip(
                 reply_btn,
                 text::body(crate::fl!("tooltip-reply")),
@@ -588,8 +589,8 @@ impl<'chat> Constellations {
             action_row = action_row.push(reply_tooltip);
 
             if is_me {
-                let edit_btn =
-                    button::text(crate::fl!("edit")).on_press(Message::StartEdit(event.identifier().clone()));
+                let edit_btn = button::text(crate::fl!("edit"))
+                    .on_press(Message::StartEdit(event.identifier().clone()));
                 let edit_tooltip = tooltip(
                     edit_btn,
                     text::body(crate::fl!("tooltip-edit")),
@@ -610,7 +611,8 @@ impl<'chat> Constellations {
             bubble_col = bubble_col.push(reaction_row);
 
             if self.active_reaction_picker.as_ref() == Some(&event.identifier()) {
-                bubble_col = bubble_col.push(self.view_emoji_picker(Some(event.identifier().clone())));
+                bubble_col =
+                    bubble_col.push(self.view_emoji_picker(Some(event.identifier().clone())));
             }
 
             action_row = action_row.push(self.view_thread_summary(event));
@@ -937,14 +939,18 @@ impl<'chat> Constellations {
 
         let mut attachments_view = Column::new().spacing(5);
         if !self.composer_attachments.is_empty() {
-            attachments_view = attachments_view.push(text::body(crate::fl!("attachments")).size(12));
+            attachments_view =
+                attachments_view.push(text::body(crate::fl!("attachments")).size(12));
             for (i, path) in self.composer_attachments.iter().enumerate() {
                 let filename = path.file_name().unwrap_or_default().to_string_lossy();
                 let attachment_row = Row::new()
                     .spacing(10)
                     .align_y(Alignment::Center)
                     .push(text::body(filename).size(12))
-                    .push(button::destructive(crate::fl!("remove-attachment")).on_press(Message::RemoveAttachment(i)));
+                    .push(
+                        button::destructive(crate::fl!("remove-attachment"))
+                            .on_press(Message::RemoveAttachment(i)),
+                    );
                 attachments_view = attachments_view.push(attachment_row);
             }
         }
@@ -1011,7 +1017,6 @@ fn view_reply_bar(
     snippet: String,
     replying_to: &crate::ConstellationsItem,
 ) -> Row<'_, Message, Theme> {
-
     Row::new()
         .spacing(10)
         .align_y(Alignment::Center)

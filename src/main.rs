@@ -200,7 +200,6 @@ struct Constellations {
     is_composer_emoji_picker_active: bool,
 }
 
-
 #[derive(Debug, Clone)]
 pub enum Message {
     Matrix(matrix::MatrixEvent),
@@ -1237,7 +1236,11 @@ impl Application for Constellations {
             }
             Message::StartReply(item_id) => {
                 let mut found_item = None;
-                for item in self.timeline_items.iter().chain(self.threaded_timeline_items.iter()) {
+                for item in self
+                    .timeline_items
+                    .iter()
+                    .chain(self.threaded_timeline_items.iter())
+                {
                     if let Some(event) = item.item.as_event() {
                         if event.identifier() == item_id {
                             found_item = Some(item.clone());
@@ -1362,7 +1365,11 @@ impl Application for Constellations {
             }
             Message::StartEdit(item_id) => {
                 let mut found_item = None;
-                for item in self.timeline_items.iter().chain(self.threaded_timeline_items.iter()) {
+                for item in self
+                    .timeline_items
+                    .iter()
+                    .chain(self.threaded_timeline_items.iter())
+                {
                     if let Some(event) = item.item.as_event() {
                         if event.identifier() == item_id {
                             found_item = Some(item.clone());

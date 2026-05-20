@@ -278,7 +278,12 @@ impl<'switcher> Constellations {
         room: &'switcher crate::matrix::RoomData,
     ) -> Row<'switcher, Message, cosmic::prelude::Theme> {
         let name_fallback = crate::fl!("unknown-room");
-        let name = text::body(room.name.as_deref().unwrap_or(name_fallback.as_str()).to_string());
+        let name = text::body(
+            room.name
+                .as_deref()
+                .unwrap_or(name_fallback.as_str())
+                .to_string(),
+        );
         let mut header = Row::new().spacing(10).align_y(Alignment::Center);
         let default_avatar = crate::fl!("room-has-no-avatar");
         if let Some(avatar_url) = &room.avatar_url {
@@ -338,7 +343,6 @@ fn view_menu_create() -> menu::MenuBar<Message> {
             ],
         ),
     );
-
 
     menu::bar(vec![menu_tree])
         .item_height(menu::ItemHeight::Dynamic(40))

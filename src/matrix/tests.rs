@@ -475,7 +475,7 @@ async fn test_start_sync_task_management() {
     };
 
     // We need a real-ish client to build a SyncService
-    let store_config = StoreConfig::new("test".to_owned());
+    let store_config = StoreConfig::new(matrix_sdk::cross_process_lock::CrossProcessLockConfig::MultiProcess { holder_name: "test".to_owned() });
     let client = Client::builder()
         .homeserver_url("https://localhost:8080")
         .store_config(store_config)
@@ -646,7 +646,7 @@ async fn test_paginate_backwards_success() {
         }
     };
 
-    let store_config = StoreConfig::new("test".to_owned());
+    let store_config = StoreConfig::new(matrix_sdk::cross_process_lock::CrossProcessLockConfig::MultiProcess { holder_name: "test".to_owned() });
     let client = Client::builder()
         .homeserver_url(mock_server.uri())
         .store_config(store_config)
@@ -882,7 +882,7 @@ async fn test_create_room() {
         }
     };
 
-    let store_config = StoreConfig::new("test_create_room".to_owned());
+    let store_config = StoreConfig::new(matrix_sdk::cross_process_lock::CrossProcessLockConfig::MultiProcess { holder_name: "test_create_room".to_owned() });
     let client = Client::builder()
         .homeserver_url(server.uri())
         .store_config(store_config)
@@ -1262,7 +1262,7 @@ async fn test_leave_room_success() {
         }
     };
 
-    let store_config = StoreConfig::new("test_leave_room".to_owned());
+    let store_config = StoreConfig::new(matrix_sdk::cross_process_lock::CrossProcessLockConfig::MultiProcess { holder_name: "test_leave_room".to_owned() });
     let client = Client::builder()
         .homeserver_url(mock_server.uri())
         .store_config(store_config)
@@ -1327,7 +1327,7 @@ async fn test_leave_room_error() {
         }
     };
 
-    let store_config = StoreConfig::new("test_leave_room_err".to_owned());
+    let store_config = StoreConfig::new(matrix_sdk::cross_process_lock::CrossProcessLockConfig::MultiProcess { holder_name: "test_leave_room_err".to_owned() });
     let client = Client::builder()
         .homeserver_url(mock_server.uri())
         .store_config(store_config)

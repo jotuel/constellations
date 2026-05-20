@@ -18,10 +18,10 @@ libcosmic = { git = "https://github.com/pop-os/libcosmic", branch = "master", fe
     "desktop-systemd-scope",
     "xdg-portal",
 ] }
-matrix-sdk = { version = "0.16.0", features = ["sqlite", "e2e-encryption", "sso-login", "testing", "experimental-search", "experimental-widgets", "uniffi"] }
-matrix-sdk-ui = "0.16.0"
-matrix-sdk-sqlite = "0.16.0"
-matrix-sdk-base = "0.16.0"
+matrix-sdk = { version = "0.17.0", features = ["sqlite", "e2e-encryption", "sso-login", "testing", "experimental-search", "experimental-widgets", "uniffi"] }
+matrix-sdk-ui = "0.17.0"
+matrix-sdk-sqlite = "0.17.0"
+matrix-sdk-base = "0.17.0"
 tokio = { version = "1", features = ["full"] }
 oo7 = "0.3"
 serde = { version = "1", features = ["derive"] }

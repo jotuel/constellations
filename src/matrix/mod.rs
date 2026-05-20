@@ -3,13 +3,13 @@ use eyeball_im::VectorDiff;
 use matrix_sdk::authentication::matrix::MatrixSession;
 use matrix_sdk::media::MediaFormat;
 pub use matrix_sdk::room::edit::EditedContent;
+use matrix_sdk::ruma::events::SyncStateEvent;
 use matrix_sdk::ruma::events::ignored_user_list::IgnoredUserListEventContent;
 use matrix_sdk::ruma::events::room::MediaSource;
 use matrix_sdk::ruma::events::room::message::RoomMessageEventContent;
 use matrix_sdk::ruma::events::room::pinned_events::RoomPinnedEventsEventContent;
 use matrix_sdk::ruma::events::space::child::SpaceChildEventContent;
 use matrix_sdk::ruma::events::space::parent::SpaceParentEventContent;
-use matrix_sdk::ruma::events::{AnySyncMessageLikeEvent, AnySyncTimelineEvent, SyncStateEvent};
 use matrix_sdk::{
     Client, Room, SessionChange, SessionTokens,
     ruma::{OwnedDeviceId, OwnedRoomId, RoomId, UserId, room::RoomType},
@@ -968,26 +968,39 @@ impl MatrixEngine {
         let unread_count = room.unread_notification_counts().notification_count as u32;
         let avatar_url = room.avatar_url().map(|u| u.to_string());
 
-        let last_message = if let Some(latest_event) = room.latest_event() {
-            if let Ok(event) = latest_event.event().raw().deserialize() {
-                match event {
-                    AnySyncTimelineEvent::MessageLike(AnySyncMessageLikeEvent::RoomMessage(e)) => {
-                        e.as_original().map(|o| {
-                            let mut msg = o.content.body().to_string();
-                            if msg.len() > 30 {
-                                msg.truncate(26);
-                                msg.push_str("...");
-                            }
-                            msg
-                        })
+        // TODO: debug why it no longer function as expected
+        let last_message = match room.latest_event().await {
+            matrix_sdk_ui::timeline::LatestEventValue::Remote { content, .. } => match content {
+                matrix_sdk_ui::timeline::TimelineItemContent::MsgLike(m) => {
+                    if let matrix_sdk_ui::timeline::MsgLikeKind::Message(msg_content) = &m.kind {
+                        let mut msg = msg_content.body().to_string();
+                        if msg.len() > 30 {
+                            msg.truncate(26);
+                            msg.push_str("...");
+                        }
+                        Some(msg)
+                    } else {
+                        None
                     }
-                    _ => None,
                 }
-            } else {
-                None
-            }
-        } else {
-            None
+                _ => None,
+            },
+            matrix_sdk_ui::timeline::LatestEventValue::Local { content, .. } => match content {
+                matrix_sdk_ui::timeline::TimelineItemContent::MsgLike(m) => {
+                    if let matrix_sdk_ui::timeline::MsgLikeKind::Message(msg_content) = &m.kind {
+                        let mut msg = msg_content.body().to_string();
+                        if msg.len() > 30 {
+                            msg.truncate(26);
+                            msg.push_str("...");
+                        }
+                        Some(msg)
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            },
+            _ => None,
         };
 
         let room_type = room.room_type();
@@ -2310,10 +2323,11 @@ impl MatrixEngine {
         tokio::spawn(async move {
             while let Some(event) = room_events.recv().await {
                 if let RoomEvent::TrackSubscribed {
-                        track,
-                        publication: _,
-                        participant: _,
-                    } = event {
+                    track,
+                    publication: _,
+                    participant: _,
+                } = event
+                {
                     info!("Track subscribed: {:?}", track.sid());
                 }
             }

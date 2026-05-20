@@ -1302,9 +1302,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_fetch_media() {
-        use matrix_sdk::ruma::events::room::EncryptedFile;
-        use matrix_sdk::ruma::events::room::EncryptedFileInit;
-        use matrix_sdk::ruma::events::room::JsonWebKeyInit;
         use std::collections::BTreeMap;
 
         let mut app = create_dummy_constellations();
@@ -1328,21 +1325,17 @@ mod tests {
         assert!(app.media_cache.is_empty());
 
         // Case 2: Encrypted MediaSource
-        let jwk_init = JsonWebKeyInit {
-            kty: "oct".to_owned(),
-            key_ops: vec!["encrypt".to_owned(), "decrypt".to_owned()],
-            alg: "A256CTR".to_owned(),
-            k: matrix_sdk::ruma::serde::Base64::parse("test").unwrap(),
-            ext: true,
-        };
-        let encrypted_file_init = EncryptedFileInit {
-            url: matrix_sdk::ruma::mxc_uri!("mxc://example.com/encrypted").to_owned(),
-            key: jwk_init.into(),
-            iv: matrix_sdk::ruma::serde::Base64::parse("iv").unwrap(),
-            hashes: BTreeMap::new(),
-            v: "v2".to_owned(),
-        };
-        let file = EncryptedFile::from(encrypted_file_init);
+        let v2_info = matrix_sdk::ruma::events::room::V2EncryptedFileInfo::new(
+            matrix_sdk::ruma::serde::Base64::parse("testtesttesttesttesttesttesttesttesttesttes=").unwrap(),
+            matrix_sdk::ruma::serde::Base64::parse("iviviviviviviviviviviv==").unwrap(),
+        );
+        let info = matrix_sdk::ruma::events::room::EncryptedFileInfo::V2(v2_info);
+        
+        let file = matrix_sdk::ruma::events::room::EncryptedFile::new(
+            matrix_sdk::ruma::mxc_uri!("mxc://example.com/encrypted").to_owned(),
+            info,
+            matrix_sdk::ruma::events::room::EncryptedFileHashes::new(),
+        );
         let encrypted_source =
             matrix_sdk::ruma::events::room::MediaSource::Encrypted(Box::new(file));
 

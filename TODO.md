@@ -8,6 +8,8 @@
 
 [ ] Sync error messages stays even after resolving issue
 
+[ ] Latest message from Room no longer shows up
+
 # ***General***
 
 [x] Fluent for localization
