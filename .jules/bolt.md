@@ -1,0 +1,3 @@
+## 2024-05-20 - [Optimize Chat String Allocations]
+**Learning:** In `src/view/chat.rs`, the rendering hot loop (specifically `view_item` and `view_thread_summary`) was unnecessarily allocating large `String` objects via `.to_string()`, `.clone()`, and `.truncate()` byte boundary methods for every single message on screen, every single frame. `let_chains` is also not stabilized so must be avoided.
+**Action:** Pre-allocate fixed-size buffers (`String::with_capacity`), utilize `.as_str()` heavily for passing references rather than owned objects, and utilize `char_indices` for properly truncating unicode strings without O(N) operations. Use fallbacks or manual buffers if you need to extend lifetimes of references taken out of temporary inner scopes (like `thread_summary`).

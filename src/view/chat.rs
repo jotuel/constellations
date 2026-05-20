@@ -389,30 +389,46 @@ impl<'chat> Constellations {
                 .push(sender_info);
 
             if let Some(in_reply_to) = event.content().in_reply_to() {
-                let mut reply_snippet = String::from("Replying...");
-                let mut reply_sender = String::new();
+                let mut reply_sender = "";
+                let mut reply_body = "";
 
                 if let matrix_sdk_ui::timeline::TimelineDetails::Ready(replied_ev) =
                     &in_reply_to.event
                 {
-                    reply_sender = replied_ev.sender.to_string();
+                    reply_sender = replied_ev.sender.as_str();
                     if let Some(msg) = replied_ev.content.as_message() {
-                        reply_snippet = msg.body().to_string();
+                        reply_body = msg.body();
                     }
                 }
 
-                if reply_snippet.len() > 50 {
-                    reply_snippet.truncate(47);
-                    reply_snippet.push_str("...");
+                let mut reply_snippet = String::with_capacity(64);
+                if !reply_sender.is_empty() {
+                    reply_snippet.push_str(reply_sender);
+                    reply_snippet.push_str(": ");
+                }
+
+                if reply_body.len() <= 50 {
+                    if !reply_body.is_empty() {
+                        reply_snippet.push_str(reply_body);
+                    } else {
+                        reply_snippet.push_str("Replying...");
+                    }
+                } else {
+                    let mut char_indices = reply_body.char_indices();
+                    if let Some((idx_47, _)) = char_indices.nth(47) {
+                        if char_indices.nth(2).is_some() { // 50th char
+                            reply_snippet.push_str(&reply_body[..idx_47]);
+                            reply_snippet.push_str("...");
+                        } else {
+                            reply_snippet.push_str(reply_body);
+                        }
+                    } else {
+                        reply_snippet.push_str(reply_body);
+                    }
                 }
 
                 let reply_indicator = Row::new().spacing(5).push(text::body("⤴").size(10)).push(
-                    text::body(if reply_sender.is_empty() {
-                        reply_snippet
-                    } else {
-                        format!("{}: {}", reply_sender, reply_snippet)
-                    })
-                    .size(10),
+                    text::body(reply_snippet).size(10),
                 );
 
                 bubble_col = bubble_col.push(container(reply_indicator).padding([0, 0, 5, 10]));
@@ -546,6 +562,9 @@ impl<'chat> Constellations {
         if num_replies > 0 && !has_thread_root && self.active_thread_root.is_none() {
             let mut latest_sender = None;
             let mut latest_body = None;
+            // Buffers to hold strings from thread_summary to avoid borrow checker issues with `summary` dropping
+            let mut fallback_sender_buf = String::new();
+            let mut fallback_body_buf = String::new();
 
             if let Some(summary) = event.content().thread_summary() {
                 if let matrix_sdk_ui::timeline::TimelineDetails::Ready(latest_ev) =
@@ -562,17 +581,17 @@ impl<'chat> Constellations {
                             })
                             .unwrap_or(false)
                     }) {
-                        latest_sender = Some(item.sender_name.clone());
+                        latest_sender = Some(item.sender_name.as_str());
                         if let Some(ev) = item.item.as_event() {
                             if let Some(msg) = ev.content().as_message() {
-                                latest_body = Some(msg.body().to_string());
+                                latest_body = Some(msg.body());
                             }
                         }
                     } else {
                         // Use info from embedded event
-                        latest_sender = Some(latest_ev.sender.to_string());
+                        fallback_sender_buf.push_str(latest_ev.sender.as_str());
                         if let Some(msg) = latest_ev.content.as_message() {
-                            latest_body = Some(msg.body().to_string());
+                            fallback_body_buf.push_str(msg.body());
                         }
                     }
                 }
@@ -580,7 +599,7 @@ impl<'chat> Constellations {
 
             // If we still don't have it (e.g. summary was missing or not ready),
             // try manual search by thread root
-            if latest_body.is_none() {
+            if latest_body.is_none() && fallback_body_buf.is_empty() {
                 if let Some(event_id) = event.event_id() {
                     if let Some(item) = self.timeline_items.iter().rfind(|i| {
                         i.item
@@ -589,10 +608,10 @@ impl<'chat> Constellations {
                             .map(|r| r == event_id)
                             .unwrap_or(false)
                     }) {
-                        latest_sender = Some(item.sender_name.clone());
+                        latest_sender = Some(item.sender_name.as_str());
                         if let Some(ev) = item.item.as_event() {
                             if let Some(msg) = ev.content().as_message() {
-                                latest_body = Some(msg.body().to_string());
+                                latest_body = Some(msg.body());
                             }
                         }
                     }
@@ -616,17 +635,42 @@ impl<'chat> Constellations {
                 )
                 .push(cosmic::widget::icon::from_name("chat-bubble-symbolic").size(14));
 
-            if let Some(mut body) = latest_body {
-                if body.len() > 30 {
-                    body.truncate(27);
-                    body.push_str("...");
+            let final_body = latest_body.unwrap_or({
+                if !fallback_body_buf.is_empty() {
+                    fallback_body_buf.as_str()
+                } else {
+                    ""
                 }
+            });
 
-                if !body.is_empty() {
-                    let sender = latest_sender.unwrap_or_else(|| "Unknown".to_string());
-                    summary_row =
-                        summary_row.push(text::body(format!("{}: {}", sender, body)).size(12));
+            if !final_body.is_empty() {
+                let sender = latest_sender.unwrap_or({
+                    if !fallback_sender_buf.is_empty() {
+                        fallback_sender_buf.as_str()
+                    } else {
+                        "Unknown"
+                    }
+                });
+                let mut text_str = String::with_capacity(64);
+                text_str.push_str(sender);
+                text_str.push_str(": ");
+
+                if final_body.len() <= 30 {
+                    text_str.push_str(final_body);
+                } else {
+                    let mut char_indices = final_body.char_indices();
+                    if let Some((idx_27, _)) = char_indices.nth(27) {
+                        if char_indices.nth(2).is_some() { // 30th char
+                            text_str.push_str(&final_body[..idx_27]);
+                            text_str.push_str("...");
+                        } else {
+                            text_str.push_str(final_body);
+                        }
+                    } else {
+                        text_str.push_str(final_body);
+                    }
                 }
+                summary_row = summary_row.push(text::body(text_str).size(12));
             }
 
             let summary_btn = button::custom(container(summary_row).padding([0, 5])).on_press(
