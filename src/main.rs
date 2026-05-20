@@ -12,6 +12,7 @@ use cosmic::iced::widget::image;
 use cosmic::iced::widget::scrollable;
 use cosmic::iced::widget::tooltip;
 use cosmic::iced::{Alignment, Subscription};
+use cosmic::widget::Widget;
 use cosmic::widget::icon::Named;
 use cosmic::widget::menu::action::MenuAction;
 use cosmic::widget::tooltip::Position;
@@ -193,6 +194,7 @@ struct Constellations {
     space_settings: settings::space::State,
     app_settings: settings::app::State,
     call_participants: HashMap<std::sync::Arc<str>, Vec<matrix_sdk::ruma::OwnedUserId>>,
+    fullscreen_image: Option<image::Handle>,
 }
 
 #[derive(Debug, Clone)]
@@ -273,6 +275,8 @@ pub enum Message {
     CallJoined(Result<(), String>),
     CallLeft(Result<(), String>),
     OpenUrl(String),
+    OpenImage(image::Handle),
+    CloseImage,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -1156,6 +1160,7 @@ impl Application for Constellations {
             space_settings: Default::default(),
             app_settings: settings::app::State::from_config(&config),
             call_participants: HashMap::new(),
+            fullscreen_image: None,
         };
 
         let title_task = app.update_title();
@@ -1687,6 +1692,14 @@ impl Application for Constellations {
                 },
                 |_| Action::from(Message::NoOp),
             ),
+            Message::OpenImage(handle) => {
+                self.fullscreen_image = Some(handle);
+                Task::none()
+            }
+            Message::CloseImage => {
+                self.fullscreen_image = None;
+                Task::none()
+            }
         }
     }
 
@@ -1732,6 +1745,7 @@ impl Application for Constellations {
             .push(sidebar)
             .push(content);
 
+        let mut final_view: Element<'_, Message> = main_view.into();
         if self.app_settings.show_sync_indicator && self.is_sync_indicator_active {
             let sync_widget: Element<'_, Message> = match self.sync_status {
                 matrix::SyncStatus::Syncing => {
@@ -1759,10 +1773,50 @@ impl Application for Constellations {
                 .align_x(Alignment::End)
                 .align_y(Alignment::End);
 
-            return cosmic::iced::widget::stack![main_view, sync_overlay].into();
+            final_view = cosmic::iced::widget::stack![final_view, sync_overlay].into();
         }
 
-        main_view.into()
+        if let Some(handle) = &self.fullscreen_image {
+            let image: image::Image<'_> = cosmic::widget::image(handle.clone())
+                .width(cosmic::iced::Length::Fill)
+                .height(cosmic::iced::Length::Fill)
+                .content_fit(cosmic::iced::ContentFit::Contain);
+            let image_viewer = container(image)
+                .width(cosmic::iced::Length::Fill)
+                .height(cosmic::iced::Length::Fill)
+                .padding(40)
+                .align_x(Alignment::Center)
+                .align_y(Alignment::Center);
+
+            let close_button = container(
+                button::icon(cosmic::widget::icon::from_name("window-close-symbolic"))
+                    .on_press(Message::CloseImage),
+            )
+            .width(cosmic::iced::Length::Fill)
+            .height(cosmic::iced::Length::Fill)
+            .padding(10)
+            .align_right(image_viewer.size_hint().width)
+            .align_top(image_viewer.size_hint().height);
+
+            // Overlay that closes on click
+            let dismiss_overlay = button::custom(
+                container(cosmic::iced::widget::Space::new())
+                    .width(cosmic::iced::Length::Fill)
+                    .height(cosmic::iced::Length::Fill),
+            )
+            .on_press(Message::CloseImage)
+            .padding(0);
+
+            final_view = cosmic::iced::widget::stack![
+                final_view,
+                dismiss_overlay,
+                image_viewer,
+                close_button
+            ]
+            .into();
+        }
+
+        final_view
     }
 
     fn subscription(&self) -> Subscription<Self::Message> {
@@ -1918,6 +1972,7 @@ mod tests {
             call_participants: HashMap::new(),
             last_timeline_offset: Default::default(),
             last_threaded_timeline_offset: Default::default(),
+            fullscreen_image: None,
         }
     }
 

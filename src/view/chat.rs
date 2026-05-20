@@ -215,13 +215,17 @@ impl<'chat> Constellations {
 
         if self.user_settings.media_previews_display_policy {
             if let Some(handle) = self.media_cache.get(&mxc_url) {
-                bubble_col = bubble_col.push(cosmic::widget::image(handle.clone()).width(
-                    if self.app_settings.compact_mode {
-                        150
-                    } else {
-                        300
-                    },
-                ));
+                bubble_col = bubble_col.push(
+                    button::custom(
+                        cosmic::widget::image(handle.clone()).width(if self.app_settings.compact_mode {
+                            150
+                        } else {
+                            300
+                        }),
+                    )
+                    .padding(0)
+                    .on_press(Message::OpenImage(handle.clone())),
+                );
             } else {
                 bubble_col = bubble_col.push(
                     button::text(crate::fl!("download-image"))

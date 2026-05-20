@@ -2,10 +2,10 @@ use crate::{
     ApplyVectorDiffExt, Constellations, ConstellationsItem, MediaSource, Message, OwnedRoomId, Url,
     matrix, redact_url,
 };
-use matrix_sdk::ruma::events::room::message::MessageType;
 use cosmic::{Action, Application, Task};
-use futures::stream::StreamExt;
 use futures::FutureExt;
+use futures::stream::StreamExt;
+use matrix_sdk::ruma::events::room::message::MessageType;
 use std::sync::Arc;
 
 impl Constellations {
@@ -211,8 +211,9 @@ impl Constellations {
         root_id: Option<matrix_sdk::ruma::OwnedEventId>,
     ) -> Task<Action<<Constellations as Application>::Message>> {
         let mut tasks = Vec::new();
-        let mut media_fetches: Vec<futures::future::BoxFuture<'static, (String, Result<Vec<u8>, String>)>> =
-            Vec::new();
+        let mut media_fetches: Vec<
+            futures::future::BoxFuture<'static, (String, Result<Vec<u8>, String>)>,
+        > = Vec::new();
         let check_item = |item: &std::sync::Arc<matrix::TimelineItem>, fetches: &mut Vec<_>| {
             if let Some(event) = item.as_event() {
                 if let matrix_sdk_ui::timeline::TimelineDetails::Ready(profile) =
@@ -220,7 +221,9 @@ impl Constellations {
                     && let Some(avatar_url) = &profile.avatar_url
                 {
                     let url_str = avatar_url.to_string();
-                    if !self.media_cache.contains_key(&url_str) && let Some(matrix) = &self.matrix {
+                    if !self.media_cache.contains_key(&url_str)
+                        && let Some(matrix) = &self.matrix
+                    {
                         let matrix_clone = matrix.clone();
                         let source =
                             matrix_sdk::ruma::events::room::MediaSource::Plain(avatar_url.clone());
@@ -1206,6 +1209,7 @@ mod tests {
             replying_to: None,
             editing_item: None,
             call_participants: HashMap::new(),
+            fullscreen_image: None,
         }
     }
 
