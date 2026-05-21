@@ -972,11 +972,10 @@ async fn test_join_room_error() {
         .mount(&mock_server)
         .await;
 
-    // We also need to mock aliases resolution since the join by ID first resolves it if it's an alias,
-    // and room ID lookup fails via Matrix SDK without a proper fallback or if it hits room join directly.
+    // mock for join_room_by_id
     Mock::given(method("POST"))
         .and(path_regex(
-            r"^/_matrix/client/v3/join/.*",
+            r"^/_matrix/client/v3/rooms/[^/]+/join",
         ))
         .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
             "errcode": "M_FORBIDDEN",
