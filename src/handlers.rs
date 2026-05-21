@@ -1302,8 +1302,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_handle_fetch_media() {
-        use std::collections::BTreeMap;
-
         let mut app = create_dummy_constellations();
 
         // We need to set app.matrix to Some(...) to evaluate the inner path.
@@ -1326,11 +1324,12 @@ mod tests {
 
         // Case 2: Encrypted MediaSource
         let v2_info = matrix_sdk::ruma::events::room::V2EncryptedFileInfo::new(
-            matrix_sdk::ruma::serde::Base64::parse("testtesttesttesttesttesttesttesttesttesttes=").unwrap(),
+            matrix_sdk::ruma::serde::Base64::parse("testtesttesttesttesttesttesttesttesttesttes=")
+                .unwrap(),
             matrix_sdk::ruma::serde::Base64::parse("iviviviviviviviviviviv==").unwrap(),
         );
         let info = matrix_sdk::ruma::events::room::EncryptedFileInfo::V2(v2_info);
-        
+
         let file = matrix_sdk::ruma::events::room::EncryptedFile::new(
             matrix_sdk::ruma::mxc_uri!("mxc://example.com/encrypted").to_owned(),
             info,
