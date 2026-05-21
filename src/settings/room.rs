@@ -2,6 +2,7 @@ use crate::matrix::MatrixEngine;
 use cosmic::iced::Alignment;
 use cosmic::widget::{Column, Row, button, settings, text, text_input, tooltip, tooltip::Position};
 use cosmic::{Action, Element, Task};
+use matrix_sdk::room::power_levels::RoomPowerLevelChanges;
 use matrix_sdk::ruma::RoomId;
 use matrix_sdk::ruma::events::room::MediaSource;
 use matrix_sdk::ruma::events::room::history_visibility::HistoryVisibility;
@@ -76,7 +77,7 @@ pub struct State {
 #[derive(Debug, Clone)]
 pub enum Message {
     LoadRoom(std::sync::Arc<str>),
-    RoomLoaded(Result<RoomInfo, String>),
+    RoomLoaded(Box<Result<RoomInfo, String>>),
     NameChanged(String),
     TopicChanged(String),
     SaveRoom,
@@ -301,7 +302,11 @@ impl State {
                                 alt_aliases,
                             })
                         },
-                        |res| Action::from(crate::Message::RoomSettings(Message::RoomLoaded(res))),
+                        |res| {
+                            Action::from(crate::Message::RoomSettings(Message::RoomLoaded(
+                                Box::new(res),
+                            )))
+                        },
                     )
                 } else {
                     Task::none()
@@ -309,7 +314,7 @@ impl State {
             }
             Message::RoomLoaded(res) => {
                 self.is_loading = false;
-                match res {
+                match *res {
                     Ok(info) => {
                         self.name = info.name.clone();
                         self.original_name = info.name;
@@ -828,45 +833,57 @@ impl State {
                                     engine
                                         .update_room_power_level_settings(
                                             &room_id_clone,
-                                            if new_ban != original_ban {
-                                                Some(new_ban)
-                                            } else {
-                                                None
-                                            },
-                                            if new_invite != original_invite {
-                                                Some(new_invite)
-                                            } else {
-                                                None
-                                            },
-                                            if new_kick != original_kick {
-                                                Some(new_kick)
-                                            } else {
-                                                None
-                                            },
-                                            if new_redact != original_redact {
-                                                Some(new_redact)
-                                            } else {
-                                                None
-                                            },
-                                            if new_events_default != original_events_default {
-                                                Some(new_events_default)
-                                            } else {
-                                                None
-                                            },
-                                            if new_room_name != original_room_name {
-                                                Some(new_room_name)
-                                            } else {
-                                                None
-                                            },
-                                            if new_room_topic != original_room_topic {
-                                                Some(new_room_topic)
-                                            } else {
-                                                None
-                                            },
-                                            if new_room_avatar != original_room_avatar {
-                                                Some(new_room_avatar)
-                                            } else {
-                                                None
+                                            RoomPowerLevelChanges {
+                                                ban: if new_ban != original_ban {
+                                                    Some(new_ban)
+                                                } else {
+                                                    None
+                                                },
+                                                invite: if new_invite != original_invite {
+                                                    Some(new_invite)
+                                                } else {
+                                                    None
+                                                },
+                                                kick: if new_kick != original_kick {
+                                                    Some(new_kick)
+                                                } else {
+                                                    None
+                                                },
+                                                redact: if new_redact != original_redact {
+                                                    Some(new_redact)
+                                                } else {
+                                                    None
+                                                },
+                                                events_default: if new_events_default
+                                                    != original_events_default
+                                                {
+                                                    Some(new_events_default)
+                                                } else {
+                                                    None
+                                                },
+                                                room_name: if new_room_name != original_room_name {
+                                                    Some(new_room_name)
+                                                } else {
+                                                    None
+                                                },
+                                                room_topic: if new_room_topic != original_room_topic
+                                                {
+                                                    Some(new_room_topic)
+                                                } else {
+                                                    None
+                                                },
+                                                room_avatar: if new_room_avatar
+                                                    != original_room_avatar
+                                                {
+                                                    Some(new_room_avatar)
+                                                } else {
+                                                    None
+                                                },
+                                                state_default: None,
+                                                users_default: None,
+                                                space_child: None,
+                                                beacon: None,
+                                                beacon_info: None,
                                             },
                                         )
                                         .await

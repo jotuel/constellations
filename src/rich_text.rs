@@ -37,6 +37,8 @@ pub struct State {
     pub content: Vec<crate::PreviewEvent>,
 }
 
+type RichText = (Vec<(Range<usize>, String)>, Vec<(String, Attrs<'static>)>);
+
 impl State {
     pub fn new(content: &[crate::PreviewEvent]) -> Self {
         let mut font_system = FONT_SYSTEM.lock().unwrap();
@@ -73,9 +75,7 @@ impl State {
         self.content = content.to_vec();
     }
 
-    fn parse_content(
-        content: &[crate::PreviewEvent],
-    ) -> (Vec<(Range<usize>, String)>, Vec<(String, Attrs<'static>)>) {
+    fn parse_content(content: &[crate::PreviewEvent]) -> RichText {
         let mut current_link = None;
         let mut is_heading = false;
 
@@ -238,21 +238,20 @@ where
                 state.is_dragging = false;
                 shell.request_redraw();
             }
-            Event::Mouse(mouse::Event::CursorMoved { .. })
-                if state.is_dragging => {
-                    let cursor_pos = cursor.position().unwrap_or(Point::ORIGIN);
-                    let buf_x = cursor_pos.x - bounds.x;
-                    let buf_y = cursor_pos.y - bounds.y - y_offset;
-                    state.editor.action(
-                        &mut font_system,
-                        cosmic_text::Action::Drag {
-                            x: buf_x as i32,
-                            y: buf_y as i32,
-                        },
-                    );
-                    shell.capture_event();
-                    shell.request_redraw();
-                }
+            Event::Mouse(mouse::Event::CursorMoved { .. }) if state.is_dragging => {
+                let cursor_pos = cursor.position().unwrap_or(Point::ORIGIN);
+                let buf_x = cursor_pos.x - bounds.x;
+                let buf_y = cursor_pos.y - bounds.y - y_offset;
+                state.editor.action(
+                    &mut font_system,
+                    cosmic_text::Action::Drag {
+                        x: buf_x as i32,
+                        y: buf_y as i32,
+                    },
+                );
+                shell.capture_event();
+                shell.request_redraw();
+            }
             _ => {}
         }
     }

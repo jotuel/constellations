@@ -3,6 +3,7 @@ use eyeball_im::VectorDiff;
 use matrix_sdk::authentication::matrix::MatrixSession;
 use matrix_sdk::media::MediaFormat;
 pub use matrix_sdk::room::edit::EditedContent;
+use matrix_sdk::room::power_levels::RoomPowerLevelChanges;
 use matrix_sdk::ruma::events::SyncStateEvent;
 use matrix_sdk::ruma::events::ignored_user_list::IgnoredUserListEventContent;
 use matrix_sdk::ruma::events::room::MediaSource;
@@ -16,6 +17,7 @@ use matrix_sdk::{
 };
 pub use matrix_sdk_ui::room_list_service::{RoomListDynamicEntriesController, RoomListService};
 use matrix_sdk_ui::sync_service::SyncService;
+use matrix_sdk_ui::timeline::{LatestEventValue, MsgLikeKind, TimelineItemContent};
 pub use matrix_sdk_ui::timeline::{
     RoomExt, Timeline, TimelineEventItemId, TimelineFocus, TimelineItem, VirtualTimelineItem,
 };
@@ -234,7 +236,7 @@ impl SpaceHierarchy {
 pub enum MatrixEvent {
     SyncStatusChanged(SyncStatus),
     SyncIndicatorChanged(bool),
-    RoomDiff(RoomListDiff),
+    RoomDiff(Box<RoomListDiff>),
     TimelineDiff(TimelineDiff<TimelineItem>),
     TimelineReset,
     ReactionAdded {
@@ -376,7 +378,10 @@ impl MatrixEngine {
         } {
             Ok(k) => k,
             Err(e) => {
-                tracing::warn!("Failed to initialize Keyring: {}. Falling back to file-based session storage.", e);
+                tracing::warn!(
+                    "Failed to initialize Keyring: {}. Falling back to file-based session storage.",
+                    e
+                );
                 let path = Self::get_fallback_path("matrix-session");
                 std::fs::write(&path, &secret)?;
                 return Ok(());
@@ -393,7 +398,10 @@ impl MatrixEngine {
         {
             Ok(_) => Ok(()),
             Err(e) => {
-                tracing::warn!("Failed to create session item in Keyring: {}. Falling back to file-based session storage.", e);
+                tracing::warn!(
+                    "Failed to create session item in Keyring: {}. Falling back to file-based session storage.",
+                    e
+                );
                 let path = Self::get_fallback_path("matrix-session");
                 std::fs::write(&path, &secret)?;
                 Ok(())
@@ -824,7 +832,10 @@ impl MatrixEngine {
             } {
                 Ok(k) => k,
                 Err(e) => {
-                    tracing::warn!("Failed to initialize Keyring for restore: {}. Attempting file-based fallback.", e);
+                    tracing::warn!(
+                        "Failed to initialize Keyring for restore: {}. Attempting file-based fallback.",
+                        e
+                    );
                     if let Some(data) = use_fallback()? {
                         break 'find_secret Some(data);
                     }
@@ -839,12 +850,16 @@ impl MatrixEngine {
             match keyring.search_items(&attributes).await {
                 Ok(items) => {
                     if let Some(item) = items.first()
-                        && let Ok(secret) = item.secret().await {
-                            break 'find_secret Some(secret.to_vec());
-                        }
+                        && let Ok(secret) = item.secret().await
+                    {
+                        break 'find_secret Some(secret.to_vec());
+                    }
                 }
                 Err(e) => {
-                    tracing::warn!("Failed to search Keyring items for restore: {}. Attempting file-based fallback.", e);
+                    tracing::warn!(
+                        "Failed to search Keyring items for restore: {}. Attempting file-based fallback.",
+                        e
+                    );
                 }
             }
 
@@ -942,7 +957,10 @@ impl MatrixEngine {
         } {
             Ok(k) => k,
             Err(e) => {
-                tracing::warn!("Failed to initialize Keyring for logout: {}. Local fallback files have been deleted.", e);
+                tracing::warn!(
+                    "Failed to initialize Keyring for logout: {}. Local fallback files have been deleted.",
+                    e
+                );
                 return Ok(());
             }
         };
@@ -1060,36 +1078,36 @@ impl MatrixEngine {
 
         // TODO: debug why it no longer function as expected
         let last_message = match room.latest_event().await {
-            matrix_sdk_ui::timeline::LatestEventValue::Remote { content, .. } => match content {
-                matrix_sdk_ui::timeline::TimelineItemContent::MsgLike(m) => {
-                    if let matrix_sdk_ui::timeline::MsgLikeKind::Message(msg_content) = &m.kind {
-                        let mut msg = msg_content.body().to_string();
-                        if msg.len() > 30 {
-                            msg.truncate(26);
-                            msg.push_str("...");
-                        }
-                        Some(msg)
-                    } else {
-                        None
+            LatestEventValue::Remote {
+                content: TimelineItemContent::MsgLike(m),
+                ..
+            } => {
+                if let MsgLikeKind::Message(msg_content) = &m.kind {
+                    let mut msg = msg_content.body().to_string();
+                    if msg.len() > 30 {
+                        msg.truncate(26);
+                        msg.push_str("...");
                     }
+                    Some(msg)
+                } else {
+                    None
                 }
-                _ => None,
-            },
-            matrix_sdk_ui::timeline::LatestEventValue::Local { content, .. } => match content {
-                matrix_sdk_ui::timeline::TimelineItemContent::MsgLike(m) => {
-                    if let matrix_sdk_ui::timeline::MsgLikeKind::Message(msg_content) = &m.kind {
-                        let mut msg = msg_content.body().to_string();
-                        if msg.len() > 30 {
-                            msg.truncate(26);
-                            msg.push_str("...");
-                        }
-                        Some(msg)
-                    } else {
-                        None
+            }
+            LatestEventValue::Local {
+                content: TimelineItemContent::MsgLike(m),
+                ..
+            } => {
+                if let MsgLikeKind::Message(msg_content) = &m.kind {
+                    let mut msg = msg_content.body().to_string();
+                    if msg.len() > 30 {
+                        msg.truncate(26);
+                        msg.push_str("...");
                     }
+                    Some(msg)
+                } else {
+                    None
                 }
-                _ => None,
-            },
+            }
             _ => None,
         };
 
@@ -1592,28 +1610,21 @@ impl MatrixEngine {
     pub async fn update_room_power_level_settings(
         &self,
         room_id: &str,
-        ban: Option<i64>,
-        invite: Option<i64>,
-        kick: Option<i64>,
-        redact: Option<i64>,
-        events_default: Option<i64>,
-        room_name: Option<i64>,
-        room_topic: Option<i64>,
-        room_avatar: Option<i64>,
+        powers: RoomPowerLevelChanges,
     ) -> Result<()> {
         let room_id_parsed = RoomId::parse(room_id)?;
         let client = self.client().await;
         let room = client.get_room(&room_id_parsed).context("Room not found")?;
 
-        let mut changes = matrix_sdk::room::power_levels::RoomPowerLevelChanges::new();
-        changes.ban = ban;
-        changes.invite = invite;
-        changes.kick = kick;
-        changes.redact = redact;
-        changes.events_default = events_default;
-        changes.room_name = room_name;
-        changes.room_topic = room_topic;
-        changes.room_avatar = room_avatar;
+        let mut changes = RoomPowerLevelChanges::new();
+        changes.ban = powers.ban;
+        changes.invite = powers.invite;
+        changes.kick = powers.kick;
+        changes.redact = powers.redact;
+        changes.events_default = powers.events_default;
+        changes.room_name = powers.room_name;
+        changes.room_topic = powers.room_topic;
+        changes.room_avatar = powers.room_avatar;
 
         room.apply_power_level_changes(changes).await?;
         Ok(())
@@ -2200,9 +2211,10 @@ impl MatrixEngine {
         let use_fallback = || {
             let path = Self::get_fallback_path("store-passphrase");
             if path.exists()
-                && let Ok(passphrase) = std::fs::read_to_string(&path) {
-                    return Ok(passphrase);
-                }
+                && let Ok(passphrase) = std::fs::read_to_string(&path)
+            {
+                return Ok(passphrase);
+            }
             let mut buf = [0u8; 32];
             SysRng
                 .try_fill_bytes(&mut buf)
@@ -2222,7 +2234,10 @@ impl MatrixEngine {
                 if std::env::var("CONSTELLATIONS_DISABLE_FALLBACK").is_ok() {
                     return Err(e);
                 }
-                tracing::warn!("Failed to initialize Keyring: {}. Falling back to file-based passphrase storage.", e);
+                tracing::warn!(
+                    "Failed to initialize Keyring: {}. Falling back to file-based passphrase storage.",
+                    e
+                );
                 return use_fallback();
             }
         };
@@ -2235,15 +2250,19 @@ impl MatrixEngine {
             Ok(items) => {
                 if let Some(item) = items.first()
                     && let Ok(secret) = item.secret().await
-                        && let Ok(passphrase) = String::from_utf8(secret.to_vec()) {
-                            return Ok(passphrase);
-                        }
+                    && let Ok(passphrase) = String::from_utf8(secret.to_vec())
+                {
+                    return Ok(passphrase);
+                }
             }
             Err(e) => {
                 if std::env::var("CONSTELLATIONS_DISABLE_FALLBACK").is_ok() {
                     return Err(e.into());
                 }
-                tracing::warn!("Failed to search items in Keyring: {}. Falling back to file-based passphrase storage.", e);
+                tracing::warn!(
+                    "Failed to search items in Keyring: {}. Falling back to file-based passphrase storage.",
+                    e
+                );
                 return use_fallback();
             }
         }
@@ -2252,18 +2271,19 @@ impl MatrixEngine {
         // to keep it stable across calls in environments where keyring is broken/partially functional.
         let path = Self::get_fallback_path("store-passphrase");
         if path.exists()
-            && let Ok(passphrase) = std::fs::read_to_string(&path) {
-                // Try to write it to keyring in case it is now writable
-                let _ = keyring
-                    .create_item(
-                        "Constellations Store Passphrase",
-                        &attributes,
-                        passphrase.as_bytes(),
-                        true,
-                    )
-                    .await;
-                return Ok(passphrase);
-            }
+            && let Ok(passphrase) = std::fs::read_to_string(&path)
+        {
+            // Try to write it to keyring in case it is now writable
+            let _ = keyring
+                .create_item(
+                    "Constellations Store Passphrase",
+                    &attributes,
+                    passphrase.as_bytes(),
+                    true,
+                )
+                .await;
+            return Ok(passphrase);
+        }
 
         let mut buf = [0u8; 32];
         SysRng
@@ -2286,7 +2306,10 @@ impl MatrixEngine {
                 if std::env::var("CONSTELLATIONS_DISABLE_FALLBACK").is_ok() {
                     return Err(e.into());
                 }
-                tracing::warn!("Failed to create item in Keyring: {}. Falling back to file-based passphrase storage.", e);
+                tracing::warn!(
+                    "Failed to create item in Keyring: {}. Falling back to file-based passphrase storage.",
+                    e
+                );
                 let _ = std::fs::write(&path, &passphrase);
                 Ok(passphrase)
             }
@@ -2350,8 +2373,6 @@ impl MatrixEngine {
             Ok(false)
         }
     }
-
-
 
     pub async fn get_livekit_token(&self, room_id: &RoomId) -> Result<(String, String)> {
         let client = self.client().await;

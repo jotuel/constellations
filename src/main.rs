@@ -890,8 +890,9 @@ impl Constellations {
                         };
 
                         if let Some(diff) = room_diff {
-                            let _ =
-                                tx_rooms.send(Message::Matrix(matrix::MatrixEvent::RoomDiff(diff)));
+                            let _ = tx_rooms.send(Message::Matrix(matrix::MatrixEvent::RoomDiff(
+                                Box::new(diff),
+                            )));
                         }
                     }
                 }
@@ -1241,10 +1242,11 @@ impl Application for Constellations {
                     .chain(self.threaded_timeline_items.iter())
                 {
                     if let Some(event) = item.item.as_event()
-                        && event.identifier() == item_id {
-                            found_item = Some(item.clone());
-                            break;
-                        }
+                        && event.identifier() == item_id
+                    {
+                        found_item = Some(item.clone());
+                        break;
+                    }
                 }
                 self.replying_to = found_item;
                 Task::none()
@@ -1369,20 +1371,21 @@ impl Application for Constellations {
                     .chain(self.threaded_timeline_items.iter())
                 {
                     if let Some(event) = item.item.as_event()
-                        && event.identifier() == item_id {
-                            found_item = Some(item.clone());
-                            break;
-                        }
+                        && event.identifier() == item_id
+                    {
+                        found_item = Some(item.clone());
+                        break;
+                    }
                 }
                 if let Some(item) = found_item
                     && let Some(event) = item.item.as_event()
-                        && let Some(msg) = event.content().as_message()
-                    {
-                        self.composer_text = msg.body().to_string();
-                        self.composer_preview_events = parse_markdown(&self.composer_text, false);
-                        self.editing_item = Some(item);
-                        self.replying_to = None;
-                    }
+                    && let Some(msg) = event.content().as_message()
+                {
+                    self.composer_text = msg.body().to_string();
+                    self.composer_preview_events = parse_markdown(&self.composer_text, false);
+                    self.editing_item = Some(item);
+                    self.replying_to = None;
+                }
                 Task::none()
             }
             Message::CancelEdit => {

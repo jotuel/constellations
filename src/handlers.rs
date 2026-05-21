@@ -1,3 +1,4 @@
+use crate::matrix::TimelineItem;
 use crate::{
     ApplyVectorDiffExt, Constellations, ConstellationsItem, MediaSource, Message, OwnedRoomId, Url,
     matrix, redact_url,
@@ -5,8 +6,13 @@ use crate::{
 use cosmic::{Action, Application, Task};
 use futures::FutureExt;
 use futures::stream::StreamExt;
+use matrix_sdk::ruma::OwnedEventId;
 use matrix_sdk::ruma::events::room::message::MessageType;
+use matrix_sdk_ui::timeline::TimelineDetails;
 use std::sync::Arc;
+
+type PinnedOutput =
+    std::pin::Pin<Box<dyn Future<Output = (String, Result<Vec<u8>, String>)> + Send + 'static>>;
 
 impl Constellations {
     pub fn handle_engine_ready(
@@ -93,7 +99,7 @@ impl Constellations {
                     let matrix_clone = matrix.clone();
                     let url_str = avatar_url.clone();
                     let uri = matrix_sdk::ruma::OwnedMxcUri::from(avatar_url.as_str());
-                    let source = matrix_sdk::ruma::events::room::MediaSource::Plain(uri);
+                    let source = MediaSource::Plain(uri);
                     media_fetches.push(async move {
                         let res = matrix_clone
                             .fetch_media(source)
@@ -120,27 +126,23 @@ impl Constellations {
     }
 
     pub fn fetch_missing_media(&mut self) -> Task<Action<Message>> {
-        let mut media_fetches: Vec<
-            futures::future::BoxFuture<'static, (String, Result<Vec<u8>, String>)>,
-        > = Vec::new();
+        let mut media_fetches: Vec<PinnedOutput> = Vec::new();
 
         let matrix = match &self.matrix {
             Some(m) => m.clone(),
             None => return Task::none(),
         };
 
-        let check_item = |item: &Arc<matrix::TimelineItem>, fetches: &mut Vec<_>| {
+        let check_item = |item: &Arc<TimelineItem>, fetches: &mut Vec<_>| {
             if let Some(event) = item.as_event() {
                 // Fetch avatar
-                if let matrix_sdk_ui::timeline::TimelineDetails::Ready(profile) =
-                    event.sender_profile()
+                if let TimelineDetails::Ready(profile) = event.sender_profile()
                     && let Some(avatar_url) = &profile.avatar_url
                 {
                     let url_str = avatar_url.to_string();
                     if !self.media_cache.contains_key(&url_str) {
                         let matrix_clone = matrix.clone();
-                        let source =
-                            matrix_sdk::ruma::events::room::MediaSource::Plain(avatar_url.clone());
+                        let source = MediaSource::Plain(avatar_url.clone());
                         fetches.push(
                             async move {
                                 let res = matrix_clone
@@ -157,26 +159,27 @@ impl Constellations {
                 // Fetch image if enabled
                 if self.user_settings.media_previews_display_policy
                     && let Some(message) = event.content().as_message()
-                        && let MessageType::Image(image) = message.msgtype() {
-                            let mxc_url = match &image.source {
-                                MediaSource::Plain(uri) => uri.to_string(),
-                                MediaSource::Encrypted(file) => file.url.to_string(),
-                            };
-                            if !self.media_cache.contains_key(&mxc_url) {
-                                let matrix_clone = matrix.clone();
-                                let source = image.source.clone();
-                                fetches.push(
-                                    async move {
-                                        let res = matrix_clone
-                                            .fetch_media(source)
-                                            .await
-                                            .map_err(|e| e.to_string());
-                                        (mxc_url, res)
-                                    }
-                                    .boxed(),
-                                );
+                    && let MessageType::Image(image) = message.msgtype()
+                {
+                    let mxc_url = match &image.source {
+                        MediaSource::Plain(uri) => uri.to_string(),
+                        MediaSource::Encrypted(file) => file.url.to_string(),
+                    };
+                    if !self.media_cache.contains_key(&mxc_url) {
+                        let matrix_clone = matrix.clone();
+                        let source = image.source.clone();
+                        fetches.push(
+                            async move {
+                                let res = matrix_clone
+                                    .fetch_media(source)
+                                    .await
+                                    .map_err(|e| e.to_string());
+                                (mxc_url, res)
                             }
-                        }
+                            .boxed(),
+                        );
+                    }
+                }
             }
         };
 
@@ -204,18 +207,15 @@ impl Constellations {
 
     pub fn handle_timeline_diff(
         &mut self,
-        diff: eyeball_im::VectorDiff<std::sync::Arc<matrix::TimelineItem>>,
+        diff: eyeball_im::VectorDiff<Arc<TimelineItem>>,
         is_thread: bool,
-        root_id: Option<matrix_sdk::ruma::OwnedEventId>,
+        root_id: Option<OwnedEventId>,
     ) -> Task<Action<<Constellations as Application>::Message>> {
         let mut tasks = Vec::new();
-        let mut media_fetches: Vec<
-            futures::future::BoxFuture<'static, (String, Result<Vec<u8>, String>)>,
-        > = Vec::new();
-        let check_item = |item: &std::sync::Arc<matrix::TimelineItem>, fetches: &mut Vec<_>| {
+        let mut media_fetches: Vec<PinnedOutput> = Vec::new();
+        let check_item = |item: &Arc<TimelineItem>, fetches: &mut Vec<_>| {
             if let Some(event) = item.as_event() {
-                if let matrix_sdk_ui::timeline::TimelineDetails::Ready(profile) =
-                    event.sender_profile()
+                if let TimelineDetails::Ready(profile) = event.sender_profile()
                     && let Some(avatar_url) = &profile.avatar_url
                 {
                     let url_str = avatar_url.to_string();
@@ -223,8 +223,7 @@ impl Constellations {
                         && let Some(matrix) = &self.matrix
                     {
                         let matrix_clone = matrix.clone();
-                        let source =
-                            matrix_sdk::ruma::events::room::MediaSource::Plain(avatar_url.clone());
+                        let source = MediaSource::Plain(avatar_url.clone());
                         fetches.push(
                             async move {
                                 let res = matrix_clone
@@ -240,28 +239,29 @@ impl Constellations {
 
                 if self.user_settings.media_previews_display_policy
                     && let Some(message) = event.content().as_message()
-                        && let MessageType::Image(image) = message.msgtype() {
-                            let mxc_url = match &image.source {
-                                MediaSource::Plain(uri) => uri.to_string(),
-                                MediaSource::Encrypted(file) => file.url.to_string(),
-                            };
-                            if !self.media_cache.contains_key(&mxc_url)
-                                && let Some(matrix) = &self.matrix
-                            {
-                                let matrix_clone = matrix.clone();
-                                let source = image.source.clone();
-                                fetches.push(
-                                    async move {
-                                        let res = matrix_clone
-                                            .fetch_media(source)
-                                            .await
-                                            .map_err(|e| e.to_string());
-                                        (mxc_url, res)
-                                    }
-                                    .boxed(),
-                                );
+                    && let MessageType::Image(image) = message.msgtype()
+                {
+                    let mxc_url = match &image.source {
+                        MediaSource::Plain(uri) => uri.to_string(),
+                        MediaSource::Encrypted(file) => file.url.to_string(),
+                    };
+                    if !self.media_cache.contains_key(&mxc_url)
+                        && let Some(matrix) = &self.matrix
+                    {
+                        let matrix_clone = matrix.clone();
+                        let source = image.source.clone();
+                        fetches.push(
+                            async move {
+                                let res = matrix_clone
+                                    .fetch_media(source)
+                                    .await
+                                    .map_err(|e| e.to_string());
+                                (mxc_url, res)
                             }
-                        }
+                            .boxed(),
+                        );
+                    }
+                }
             }
         };
 
@@ -358,7 +358,7 @@ impl Constellations {
                 Task::none()
             }
             matrix::MatrixEvent::RoomDiff(diff) => {
-                match &diff {
+                match &*diff {
                     eyeball_im::VectorDiff::Insert { value, .. }
                     | eyeball_im::VectorDiff::PushBack { value }
                     | eyeball_im::VectorDiff::PushFront { value } => {
@@ -400,7 +400,7 @@ impl Constellations {
                     }
                 }
 
-                self.room_list.apply_diff(diff);
+                self.room_list.apply_diff(*diff);
                 self.update_filtered_rooms();
                 self.update_title()
             }
@@ -453,12 +453,7 @@ impl Constellations {
             let matrix = matrix.clone();
             let room_id = room_id.clone();
             Task::perform(
-                async move {
-                    matrix
-                        .join_call(&room_id)
-                        .await
-                        .map_err(|e| e.to_string())
-                },
+                async move { matrix.join_call(&room_id).await.map_err(|e| e.to_string()) },
                 |res| Action::from(Message::CallJoined(res)),
             )
         } else {
@@ -808,7 +803,7 @@ impl Constellations {
                             && !self.media_cache.contains_key(avatar_url)
                         {
                             let uri = matrix_sdk::ruma::OwnedMxcUri::from(avatar_url.as_str());
-                            let source = matrix_sdk::ruma::events::room::MediaSource::Plain(uri);
+                            let source = MediaSource::Plain(uri);
                             urls_to_fetch.push((avatar_url.clone(), source));
                         }
                     }

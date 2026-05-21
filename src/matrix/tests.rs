@@ -246,13 +246,17 @@ fn test_matrix_event_variants() {
         order: None,
         suggested: false,
     };
-    let event = MatrixEvent::RoomDiff(VectorDiff::Insert {
+    let event = MatrixEvent::RoomDiff(Box::new(VectorDiff::Insert {
         index: 0,
         value: room_data.clone(),
-    });
-    if let MatrixEvent::RoomDiff(VectorDiff::Insert { index, value }) = event {
-        assert_eq!(index, 0);
-        assert_eq!(value.id, "1".into());
+    }));
+    if let MatrixEvent::RoomDiff(diff) = event {
+        if let VectorDiff::Insert { index, value } = *diff {
+            assert_eq!(index, 0);
+            assert_eq!(value.id, "1".into());
+        } else {
+            panic!("Expected RoomDiff(Insert) variant");
+        }
     } else {
         panic!("Expected RoomDiff(Insert) variant");
     }
@@ -475,7 +479,11 @@ async fn test_start_sync_task_management() {
     };
 
     // We need a real-ish client to build a SyncService
-    let store_config = StoreConfig::new(matrix_sdk::cross_process_lock::CrossProcessLockConfig::MultiProcess { holder_name: "test".to_owned() });
+    let store_config = StoreConfig::new(
+        matrix_sdk::cross_process_lock::CrossProcessLockConfig::MultiProcess {
+            holder_name: "test".to_owned(),
+        },
+    );
     let client = Client::builder()
         .homeserver_url("https://localhost:8080")
         .store_config(store_config)
@@ -532,7 +540,8 @@ async fn test_paginate_backwards_invalid_room_id() {
     assert!(result.is_err());
     let err_msg = result.unwrap_err().to_string();
     assert!(
-        err_msg.contains("leading sigil is incorrect or missing") || err_msg.contains("Invalid room ID"),
+        err_msg.contains("leading sigil is incorrect or missing")
+            || err_msg.contains("Invalid room ID"),
         "Expected invalid room ID error, got: {}",
         err_msg
     );
@@ -693,7 +702,11 @@ async fn test_paginate_backwards_success() {
         }
     };
 
-    let store_config = StoreConfig::new(matrix_sdk::cross_process_lock::CrossProcessLockConfig::MultiProcess { holder_name: "test".to_owned() });
+    let store_config = StoreConfig::new(
+        matrix_sdk::cross_process_lock::CrossProcessLockConfig::MultiProcess {
+            holder_name: "test".to_owned(),
+        },
+    );
     let client = Client::builder()
         .homeserver_url(mock_server.uri())
         .store_config(store_config)
@@ -722,8 +735,9 @@ async fn test_paginate_backwards_success() {
     // Run pagination with a timeout to prevent potential hangs
     let result = tokio::time::timeout(
         std::time::Duration::from_secs(5),
-        engine.paginate_backwards("!mockroom:example.com", 20)
-    ).await;
+        engine.paginate_backwards("!mockroom:example.com", 20),
+    )
+    .await;
 
     // Clean up sync service
     if let Some(handle) = {
@@ -869,7 +883,12 @@ async fn test_send_message_success() {
         if let Some(requests) = mock_server.received_requests().await {
             println!("Total received requests: {}", requests.len());
             for req in requests {
-                println!("Received request: {} {} {:?}", req.method, req.url.path(), req.url.query());
+                println!(
+                    "Received request: {} {} {:?}",
+                    req.method,
+                    req.url.path(),
+                    req.url.query()
+                );
             }
         }
     }
@@ -1051,7 +1070,10 @@ impl EnvVarGuard {
         unsafe {
             std::env::set_var(key, value);
         }
-        Self { key, original_value }
+        Self {
+            key,
+            original_value,
+        }
     }
 }
 
@@ -1083,9 +1105,7 @@ async fn test_join_room_error() {
 
     // mock for join_room_by_id
     Mock::given(method("POST"))
-        .and(path_regex(
-            r"^/_matrix/client/(?:v3|r0)/rooms/[^/]+/join",
-        ))
+        .and(path_regex(r"^/_matrix/client/(?:v3|r0)/rooms/[^/]+/join"))
         .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
             "errcode": "M_FORBIDDEN",
             "error": "You don't have permission to join this room"
@@ -1195,7 +1215,10 @@ async fn test_join_room_success() {
 #[tokio::test]
 #[serial_test::serial]
 async fn test_get_or_create_store_passphrase_dbus_failure() {
-    let _dbus_guard = EnvVarGuard::new("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/dbus/socket");
+    let _dbus_guard = EnvVarGuard::new(
+        "DBUS_SESSION_BUS_ADDRESS",
+        "unix:path=/nonexistent/dbus/socket",
+    );
     let _fallback_guard = EnvVarGuard::new("CONSTELLATIONS_DISABLE_FALLBACK", "1");
     let _keyring_guard = EnvVarGuard::new("CONSTELLATIONS_TEST_KEYRING", "1");
 
@@ -1372,25 +1395,33 @@ async fn test_leave_room_success() {
         .await;
 
     Mock::given(method("POST"))
-        .and(wiremock::matchers::path("/_matrix/client/r0/rooms/!leave_test_room:example.com/leave"))
+        .and(wiremock::matchers::path(
+            "/_matrix/client/r0/rooms/!leave_test_room:example.com/leave",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
         .mount(&mock_server)
         .await;
 
     Mock::given(method("POST"))
-        .and(wiremock::matchers::path("/_matrix/client/v3/rooms/!leave_test_room:example.com/leave"))
+        .and(wiremock::matchers::path(
+            "/_matrix/client/v3/rooms/!leave_test_room:example.com/leave",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
         .mount(&mock_server)
         .await;
 
     Mock::given(method("POST"))
-        .and(wiremock::matchers::path("/_matrix/client/r0/rooms/%21leave_test_room%3Aexample.com/leave"))
+        .and(wiremock::matchers::path(
+            "/_matrix/client/r0/rooms/%21leave_test_room%3Aexample.com/leave",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
         .mount(&mock_server)
         .await;
 
     Mock::given(method("POST"))
-        .and(wiremock::matchers::path("/_matrix/client/v3/rooms/%21leave_test_room%3Aexample.com/leave"))
+        .and(wiremock::matchers::path(
+            "/_matrix/client/v3/rooms/%21leave_test_room%3Aexample.com/leave",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
         .mount(&mock_server)
         .await;
@@ -1441,7 +1472,9 @@ async fn test_leave_room_error() {
         .await;
 
     Mock::given(method("POST"))
-        .and(wiremock::matchers::path("/_matrix/client/r0/rooms/!leave_err_room:example.com/leave"))
+        .and(wiremock::matchers::path(
+            "/_matrix/client/r0/rooms/!leave_err_room:example.com/leave",
+        ))
         .respond_with(|_req: &wiremock::Request| {
             println!("DIAGNOSTIC: /r0/rooms/!leave_err_room:example.com/leave mock matched!");
             ResponseTemplate::new(403).set_body_json(serde_json::json!({
@@ -1453,7 +1486,9 @@ async fn test_leave_room_error() {
         .await;
 
     Mock::given(method("POST"))
-        .and(wiremock::matchers::path("/_matrix/client/v3/rooms/!leave_err_room:example.com/leave"))
+        .and(wiremock::matchers::path(
+            "/_matrix/client/v3/rooms/!leave_err_room:example.com/leave",
+        ))
         .respond_with(|_req: &wiremock::Request| {
             println!("DIAGNOSTIC: /v3/rooms/!leave_err_room:example.com/leave mock matched!");
             ResponseTemplate::new(403).set_body_json(serde_json::json!({
@@ -1465,7 +1500,9 @@ async fn test_leave_room_error() {
         .await;
 
     Mock::given(method("POST"))
-        .and(wiremock::matchers::path("/_matrix/client/r0/rooms/%21leave_err_room%3Aexample.com/leave"))
+        .and(wiremock::matchers::path(
+            "/_matrix/client/r0/rooms/%21leave_err_room%3Aexample.com/leave",
+        ))
         .respond_with(|_req: &wiremock::Request| {
             println!("DIAGNOSTIC: /r0/rooms/%21leave_err_room%3Aexample.com/leave mock matched!");
             ResponseTemplate::new(403).set_body_json(serde_json::json!({
@@ -1477,7 +1514,9 @@ async fn test_leave_room_error() {
         .await;
 
     Mock::given(method("POST"))
-        .and(wiremock::matchers::path("/_matrix/client/v3/rooms/%21leave_err_room%3Aexample.com/leave"))
+        .and(wiremock::matchers::path(
+            "/_matrix/client/v3/rooms/%21leave_err_room%3Aexample.com/leave",
+        ))
         .respond_with(|_req: &wiremock::Request| {
             println!("DIAGNOSTIC: /v3/rooms/%21leave_err_room%3Aexample.com/leave mock matched!");
             ResponseTemplate::new(403).set_body_json(serde_json::json!({
@@ -1511,9 +1550,17 @@ async fn test_leave_room_error() {
     if let Ok(_) = result {
         println!("Test leave_room succeeded unexpectedly!");
         if let Some(requests) = mock_server.received_requests().await {
-            println!("Total received requests in leave_room_error: {}", requests.len());
+            println!(
+                "Total received requests in leave_room_error: {}",
+                requests.len()
+            );
             for req in requests {
-                println!("Received request: {} {} {:?}", req.method, req.url.path(), req.url.query());
+                println!(
+                    "Received request: {} {} {:?}",
+                    req.method,
+                    req.url.path(),
+                    req.url.query()
+                );
             }
         }
     }
