@@ -1153,7 +1153,6 @@ impl Constellations {
 
 #[cfg(test)]
 mod tests {
-    use imbl::GenericVector;
     use matrix_sdk::ruma::RoomId;
 
     use super::*;
@@ -1202,7 +1201,7 @@ mod tests {
             active_reaction_picker: None,
             creating_space: false,
             active_thread_root: None,
-            threaded_timeline_items: GenericVector::new(),
+            threaded_timeline_items: eyeball_im::Vector::new(),
             is_loading_more: false,
             last_timeline_offset: 0.0,
             last_threaded_timeline_offset: 0.0,

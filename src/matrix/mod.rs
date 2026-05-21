@@ -355,18 +355,53 @@ impl MatrixEngine {
         Ok(engine)
     }
 
+    fn get_fallback_path(secret_type: &str) -> PathBuf {
+        let data_dir = dirs::data_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("cosmic-ext-constellations");
+        if !data_dir.exists() {
+            let _ = std::fs::create_dir_all(&data_dir);
+        }
+        data_dir.join(format!("{}.fallback", secret_type))
+    }
+
+    fn should_bypass_keyring() -> bool {
+        cfg!(test) && std::env::var("CONSTELLATIONS_TEST_KEYRING").is_err()
+    }
+
     async fn save_session_to_keyring(session_data: &SessionData) -> Result<()> {
-        let keyring = Keyring::new().await?;
+        let secret = serde_json::to_vec(session_data)?;
+
+        let keyring = match if Self::should_bypass_keyring() {
+            Err(anyhow::anyhow!("Bypassing keyring in test"))
+        } else {
+            Keyring::new().await.map_err(|e| e.into())
+        } {
+            Ok(k) => k,
+            Err(e) => {
+                tracing::warn!("Failed to initialize Keyring: {}. Falling back to file-based session storage.", e);
+                let path = Self::get_fallback_path("matrix-session");
+                std::fs::write(&path, &secret)?;
+                return Ok(());
+            }
+        };
+
         let mut attributes = HashMap::new();
         attributes.insert("app_id", "fi.joonastuomi.CosmicExtConstellations");
         attributes.insert("type", "matrix-session");
 
-        let secret = serde_json::to_vec(session_data)?;
-
-        keyring
+        match keyring
             .create_item("Constellations Matrix Session", &attributes, &secret, true)
-            .await?;
-        Ok(())
+            .await
+        {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                tracing::warn!("Failed to create session item in Keyring: {}. Falling back to file-based session storage.", e);
+                let path = Self::get_fallback_path("matrix-session");
+                std::fs::write(&path, &secret)?;
+                Ok(())
+            }
+        }
     }
 
     async fn spawn_session_change_handler(&self, client: Client) {
@@ -775,87 +810,150 @@ impl MatrixEngine {
     }
 
     pub async fn restore_session(&self) -> Result<bool> {
-        let keyring = Keyring::new().await?;
-        let mut attributes = HashMap::new();
-        attributes.insert("app_id", "fi.joonastuomi.CosmicExtConstellations");
-        attributes.insert("type", "matrix-session");
+        let use_fallback = || -> Result<Option<Vec<u8>>> {
+            let path = Self::get_fallback_path("matrix-session");
+            if path.exists() {
+                let data = std::fs::read(&path)?;
+                return Ok(Some(data));
+            }
+            Ok(None)
+        };
 
-        let items = keyring.search_items(&attributes).await?;
-
-        if let Some(item) = items.first() {
-            let secret = item.secret().await?;
-            let session_data: SessionData = serde_json::from_slice(&secret)?;
-
-            let data_dir = self.inner.read().await.data_dir.clone();
-            let client = Self::setup_client(data_dir, &session_data.homeserver).await?;
-
-            if session_data.is_oidc {
-                client.oauth().restore_registered_client(
-                    matrix_sdk::authentication::oauth::ClientId::new(OIDC_CLIENT_ID.to_string()),
-                );
-                client
-                    .oauth()
-                    .restore_session(
-                        matrix_sdk::authentication::oauth::OAuthSession {
-                            client_id: matrix_sdk::authentication::oauth::ClientId::new(
-                                OIDC_CLIENT_ID.to_string(),
-                            ),
-                            user: matrix_sdk::authentication::oauth::UserSession {
-                                meta: matrix_sdk::SessionMeta {
-                                    user_id: UserId::parse(session_data.user_id.clone())?,
-                                    device_id: OwnedDeviceId::from(session_data.device_id),
-                                },
-                                tokens: SessionTokens {
-                                    access_token: session_data.access_token,
-                                    refresh_token: session_data.refresh_token,
-                                },
-                            },
-                        },
-                        matrix_sdk::store::RoomLoadSettings::default(),
-                    )
-                    .await?;
+        let secret_data = 'find_secret: {
+            let keyring = match if Self::should_bypass_keyring() {
+                Err(anyhow::anyhow!("Bypassing keyring in test"))
             } else {
-                let matrix_session = MatrixSession {
-                    meta: matrix_sdk::SessionMeta {
-                        user_id: UserId::parse(session_data.user_id.clone())?,
-                        device_id: OwnedDeviceId::from(session_data.device_id),
-                    },
-                    tokens: SessionTokens {
-                        access_token: session_data.access_token,
-                        refresh_token: session_data.refresh_token,
-                    },
-                };
-                client
-                    .matrix_auth()
-                    .restore_session(
-                        matrix_session,
-                        matrix_sdk::store::RoomLoadSettings::default(),
-                    )
-                    .await?;
+                Keyring::new().await.map_err(|e| e.into())
+            } {
+                Ok(k) => k,
+                Err(e) => {
+                    tracing::warn!("Failed to initialize Keyring for restore: {}. Attempting file-based fallback.", e);
+                    if let Some(data) = use_fallback()? {
+                        break 'find_secret Some(data);
+                    }
+                    return Ok(false);
+                }
+            };
+
+            let mut attributes = HashMap::new();
+            attributes.insert("app_id", "fi.joonastuomi.CosmicExtConstellations");
+            attributes.insert("type", "matrix-session");
+
+            match keyring.search_items(&attributes).await {
+                Ok(items) => {
+                    if let Some(item) = items.first() {
+                        if let Ok(secret) = item.secret().await {
+                            break 'find_secret Some(secret.to_vec());
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to search Keyring items for restore: {}. Attempting file-based fallback.", e);
+                }
             }
 
-            let sync_service: Arc<SyncService> =
-                Arc::new(SyncService::builder(client.clone()).build().await?);
-            let room_list_service = sync_service.room_list_service();
+            if let Some(data) = use_fallback()? {
+                Some(data)
+            } else {
+                None
+            }
+        };
 
-            self.setup_event_handlers(&client);
+        let Some(secret) = secret_data else {
+            return Ok(false);
+        };
 
-            let mut inner = self.inner.write().await;
-            inner.client = client.clone();
-            inner.sync_service = Some(sync_service);
-            inner.room_list_service = Some(room_list_service);
+        let session_data: SessionData = serde_json::from_slice(&secret)?;
 
-            drop(inner);
-            self.spawn_session_change_handler(client).await;
+        let data_dir = self.inner.read().await.data_dir.clone();
+        let client = Self::setup_client(data_dir, &session_data.homeserver).await?;
 
-            return Ok(true);
+        if session_data.is_oidc {
+            client.oauth().restore_registered_client(
+                matrix_sdk::authentication::oauth::ClientId::new(OIDC_CLIENT_ID.to_string()),
+            );
+            client
+                .oauth()
+                .restore_session(
+                    matrix_sdk::authentication::oauth::OAuthSession {
+                        client_id: matrix_sdk::authentication::oauth::ClientId::new(
+                            OIDC_CLIENT_ID.to_string(),
+                        ),
+                        user: matrix_sdk::authentication::oauth::UserSession {
+                            meta: matrix_sdk::SessionMeta {
+                                user_id: UserId::parse(session_data.user_id.clone())?,
+                                device_id: OwnedDeviceId::from(session_data.device_id),
+                            },
+                            tokens: SessionTokens {
+                                access_token: session_data.access_token,
+                                refresh_token: session_data.refresh_token,
+                            },
+                        },
+                    },
+                    matrix_sdk::store::RoomLoadSettings::default(),
+                )
+                .await?;
+        } else {
+            let matrix_session = MatrixSession {
+                meta: matrix_sdk::SessionMeta {
+                    user_id: UserId::parse(session_data.user_id.clone())?,
+                    device_id: OwnedDeviceId::from(session_data.device_id),
+                },
+                tokens: SessionTokens {
+                    access_token: session_data.access_token,
+                    refresh_token: session_data.refresh_token,
+                },
+            };
+            client
+                .matrix_auth()
+                .restore_session(
+                    matrix_session,
+                    matrix_sdk::store::RoomLoadSettings::default(),
+                )
+                .await?;
         }
 
-        Ok(false)
+        let sync_service: Arc<SyncService> =
+            Arc::new(SyncService::builder(client.clone()).build().await?);
+        let room_list_service = sync_service.room_list_service();
+
+        self.setup_event_handlers(&client);
+
+        let mut inner = self.inner.write().await;
+        inner.client = client.clone();
+        inner.sync_service = Some(sync_service);
+        inner.room_list_service = Some(room_list_service);
+
+        drop(inner);
+        self.spawn_session_change_handler(client).await;
+
+        Ok(true)
     }
 
     pub async fn logout(&self) -> Result<()> {
-        let keyring = Keyring::new().await?;
+        // Delete fallback session file
+        let session_path = Self::get_fallback_path("matrix-session");
+        if session_path.exists() {
+            let _ = std::fs::remove_file(session_path);
+        }
+
+        // Delete fallback passphrase file
+        let pass_path = Self::get_fallback_path("store-passphrase");
+        if pass_path.exists() {
+            let _ = std::fs::remove_file(pass_path);
+        }
+
+        let keyring = match if Self::should_bypass_keyring() {
+            Err(anyhow::anyhow!("Bypassing keyring in test"))
+        } else {
+            Keyring::new().await.map_err(|e| e.into())
+        } {
+            Ok(k) => k,
+            Err(e) => {
+                tracing::warn!("Failed to initialize Keyring for logout: {}. Local fallback files have been deleted.", e);
+                return Ok(());
+            }
+        };
 
         let mut session_attributes = HashMap::new();
         session_attributes.insert("app_id", "fi.joonastuomi.CosmicExtConstellations");
@@ -2107,16 +2205,74 @@ impl MatrixEngine {
     }
 
     pub(crate) async fn get_or_create_store_passphrase() -> Result<String> {
-        let keyring = Keyring::new().await?;
+        let use_fallback = || {
+            let path = Self::get_fallback_path("store-passphrase");
+            if path.exists() {
+                if let Ok(passphrase) = std::fs::read_to_string(&path) {
+                    return Ok(passphrase);
+                }
+            }
+            let mut buf = [0u8; 32];
+            SysRng
+                .try_fill_bytes(&mut buf)
+                .context("Failed to generate secure random bytes for store passphrase")?;
+            let passphrase: String = buf.iter().map(|b| format!("{:02x}", b)).collect();
+            let _ = std::fs::write(&path, &passphrase);
+            Ok(passphrase)
+        };
+
+        let keyring = match if Self::should_bypass_keyring() {
+            Err(anyhow::anyhow!("Bypassing keyring in test"))
+        } else {
+            Keyring::new().await.map_err(|e| e.into())
+        } {
+            Ok(k) => k,
+            Err(e) => {
+                if std::env::var("CONSTELLATIONS_DISABLE_FALLBACK").is_ok() {
+                    return Err(e.into());
+                }
+                tracing::warn!("Failed to initialize Keyring: {}. Falling back to file-based passphrase storage.", e);
+                return use_fallback();
+            }
+        };
+
         let mut attributes = HashMap::new();
         attributes.insert("app_id", "fi.joonastuomi.CosmicExtConstellations");
         attributes.insert("type", "store-passphrase");
 
-        let items = keyring.search_items(&attributes).await?;
+        match keyring.search_items(&attributes).await {
+            Ok(items) => {
+                if let Some(item) = items.first() {
+                    if let Ok(secret) = item.secret().await {
+                        if let Ok(passphrase) = String::from_utf8(secret.to_vec()) {
+                            return Ok(passphrase);
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                if std::env::var("CONSTELLATIONS_DISABLE_FALLBACK").is_ok() {
+                    return Err(e.into());
+                }
+                tracing::warn!("Failed to search items in Keyring: {}. Falling back to file-based passphrase storage.", e);
+                return use_fallback();
+            }
+        }
 
-        if let Some(item) = items.first() {
-            let secret = item.secret().await?;
-            if let Ok(passphrase) = String::from_utf8(secret.to_vec()) {
+        // Before generating a new passphrase, check if a fallback file already exists
+        // to keep it stable across calls in environments where keyring is broken/partially functional.
+        let path = Self::get_fallback_path("store-passphrase");
+        if path.exists() {
+            if let Ok(passphrase) = std::fs::read_to_string(&path) {
+                // Try to write it to keyring in case it is now writable
+                let _ = keyring
+                    .create_item(
+                        "Constellations Store Passphrase",
+                        &attributes,
+                        passphrase.as_bytes(),
+                        true,
+                    )
+                    .await;
                 return Ok(passphrase);
             }
         }
@@ -2128,16 +2284,25 @@ impl MatrixEngine {
 
         let passphrase: String = buf.iter().map(|b| format!("{:02x}", b)).collect();
 
-        keyring
+        match keyring
             .create_item(
                 "Constellations Store Passphrase",
                 &attributes,
                 passphrase.as_bytes(),
                 true,
             )
-            .await?;
-
-        Ok(passphrase)
+            .await
+        {
+            Ok(_) => Ok(passphrase),
+            Err(e) => {
+                if std::env::var("CONSTELLATIONS_DISABLE_FALLBACK").is_ok() {
+                    return Err(e.into());
+                }
+                tracing::warn!("Failed to create item in Keyring: {}. Falling back to file-based passphrase storage.", e);
+                let _ = std::fs::write(&path, &passphrase);
+                Ok(passphrase)
+            }
+        }
     }
 
     pub async fn search_in_room(

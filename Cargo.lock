@@ -352,6 +352,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ashpd"
+version = "0.13.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "340e0f6bf7f9ee78549c61454f1460a3ed97c011902ee76b58301bbc6d502a32"
+dependencies = [
+ "enumflags2",
+ "futures-util",
+ "getrandom 0.4.2",
+ "serde",
+ "tokio",
+ "zbus 5.15.0",
+]
+
+[[package]]
 name = "askama"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -509,17 +523,6 @@ dependencies = [
  "event-listener",
  "event-listener-strategy",
  "pin-project-lite",
-]
-
-[[package]]
-name = "async-net"
-version = "2.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b948000fad4873c1c9339d60f2623323a0cfd3816e5181033c6a5cb68b2accf7"
-dependencies = [
- "async-io",
- "blocking",
- "futures-lite",
 ]
 
 [[package]]
@@ -1625,9 +1628,9 @@ dependencies = [
  "emojis",
  "eyeball-im",
  "futures",
- "i18n-embed 0.15.4",
- "i18n-embed-fl 0.9.4",
- "imbl",
+ "i18n-embed",
+ "i18n-embed-fl",
+ "imbl 7.0.0",
  "libcosmic",
  "livekit",
  "matrix-sdk",
@@ -1645,7 +1648,7 @@ dependencies = [
  "rand 0.10.1",
  "reqwest 0.12.28",
  "rfd 0.17.2",
- "ruma-events 0.32.1",
+ "ruma-events 0.33.0",
  "rusqlite",
  "rust-embed",
  "serde",
@@ -1724,7 +1727,7 @@ dependencies = [
  "log",
  "rangemap",
  "rustc-hash 2.1.2",
- "self_cell 1.2.2",
+ "self_cell",
  "skrifa",
  "smol_str",
  "swash",
@@ -2658,7 +2661,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4790c03df183c2b46665c1a58118c04fd3e3976ec2fe16a0aa00e00c9eea7754"
 dependencies = [
  "futures-core",
- "imbl",
+ "imbl 6.1.0",
  "tokio",
  "tracing",
 ]
@@ -2672,7 +2675,7 @@ dependencies = [
  "arrayvec",
  "eyeball-im",
  "futures-core",
- "imbl",
+ "imbl 6.1.0",
  "pin-project-lite",
  "smallvec",
 ]
@@ -2798,37 +2801,11 @@ checksum = "8bf7cc16383c4b8d58b9905a8509f02926ce3058053c056376248d958c9df1e8"
 
 [[package]]
 name = "fluent"
-version = "0.16.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bb74634707bebd0ce645a981148e8fb8c7bccd4c33c652aeffd28bf2f96d555a"
-dependencies = [
- "fluent-bundle 0.15.3",
- "unic-langid",
-]
-
-[[package]]
-name = "fluent"
 version = "0.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8137a6d5a2c50d6b0ebfcb9aaa91a28154e0a70605f112d30cb0cd4a78670477"
 dependencies = [
- "fluent-bundle 0.16.0",
- "unic-langid",
-]
-
-[[package]]
-name = "fluent-bundle"
-version = "0.15.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7fe0a21ee80050c678013f82edf4b705fe2f26f1f9877593d13198612503f493"
-dependencies = [
- "fluent-langneg",
- "fluent-syntax 0.11.1",
- "intl-memoizer",
- "intl_pluralrules",
- "rustc-hash 1.1.0",
- "self_cell 0.10.3",
- "smallvec",
+ "fluent-bundle",
  "unic-langid",
 ]
 
@@ -2839,11 +2816,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "01203cb8918f5711e73891b347816d932046f95f54207710bda99beaeb423bf4"
 dependencies = [
  "fluent-langneg",
- "fluent-syntax 0.12.0",
+ "fluent-syntax",
  "intl-memoizer",
  "intl_pluralrules",
  "rustc-hash 2.1.2",
- "self_cell 1.2.2",
+ "self_cell",
  "smallvec",
  "unic-langid",
 ]
@@ -2855,15 +2832,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7eebbe59450baee8282d71676f3bfed5689aeab00b27545e83e5f14b1195e8b0"
 dependencies = [
  "unic-langid",
-]
-
-[[package]]
-name = "fluent-syntax"
-version = "0.11.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a530c4694a6a8d528794ee9bbd8ba0122e779629ac908d15ad5a7ae7763a33d"
-dependencies = [
- "thiserror 1.0.69",
 ]
 
 [[package]]
@@ -3827,35 +3795,14 @@ dependencies = [
 
 [[package]]
 name = "i18n-embed"
-version = "0.15.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "669ffc2c93f97e6ddf06ddbe999fcd6782e3342978bb85f7d3c087c7978404c4"
-dependencies = [
- "arc-swap",
- "fluent 0.16.1",
- "fluent-langneg",
- "fluent-syntax 0.11.1",
- "i18n-embed-impl",
- "intl-memoizer",
- "locale_config",
- "log",
- "parking_lot",
- "rust-embed",
- "thiserror 1.0.69",
- "unic-langid",
- "walkdir",
-]
-
-[[package]]
-name = "i18n-embed"
 version = "0.16.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a217bbb075dcaefb292efa78897fc0678245ca67f265d12c351e42268fcb0305"
 dependencies = [
  "arc-swap",
- "fluent 0.17.0",
+ "fluent",
  "fluent-langneg",
- "fluent-syntax 0.12.0",
+ "fluent-syntax",
  "i18n-embed-impl",
  "intl-memoizer",
  "log",
@@ -3869,34 +3816,15 @@ dependencies = [
 
 [[package]]
 name = "i18n-embed-fl"
-version = "0.9.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04b2969d0b3fc6143776c535184c19722032b43e6a642d710fa3f88faec53c2d"
-dependencies = [
- "find-crate",
- "fluent 0.16.1",
- "fluent-syntax 0.11.1",
- "i18n-config",
- "i18n-embed 0.15.4",
- "proc-macro-error2",
- "proc-macro2",
- "quote",
- "strsim 0.11.1",
- "syn 2.0.117",
- "unic-langid",
-]
-
-[[package]]
-name = "i18n-embed-fl"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e598ed73b67db92f61e04672e599eef2991a262a40e1666735b8a86d2e7e9f30"
 dependencies = [
  "find-crate",
- "fluent 0.17.0",
- "fluent-syntax 0.12.0",
+ "fluent",
+ "fluent-syntax",
  "i18n-config",
- "i18n-embed 0.16.0",
+ "i18n-embed",
  "proc-macro-error2",
  "proc-macro2",
  "quote",
@@ -4384,6 +4312,21 @@ dependencies = [
  "rand_xoshiro",
  "serde",
  "version_check",
+]
+
+[[package]]
+name = "imbl"
+version = "7.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e525189e5f603908d0c6e0d402cb5de9c4b2c8866151fabc4ebd771ed2630a2e"
+dependencies = [
+ "archery",
+ "bitmaps",
+ "imbl-sized-chunks",
+ "rand_core 0.9.5",
+ "rand_xoshiro",
+ "version_check",
+ "wide",
 ]
 
 [[package]]
@@ -4924,8 +4867,8 @@ dependencies = [
  "float-cmp 0.10.0",
  "freedesktop-desktop-entry",
  "futures",
- "i18n-embed 0.16.0",
- "i18n-embed-fl 0.10.0",
+ "i18n-embed",
+ "i18n-embed-fl",
  "iced",
  "iced_accessibility",
  "iced_core 0.14.0 (git+https://github.com/pop-os/libcosmic?branch=master)",
@@ -5486,7 +5429,7 @@ dependencies = [
  "futures-util",
  "gloo-timers",
  "http",
- "imbl",
+ "imbl 6.1.0",
  "indexmap 2.14.0",
  "itertools 0.14.0",
  "js_int",
@@ -5574,7 +5517,7 @@ dependencies = [
  "futures-executor",
  "futures-util",
  "gloo-timers",
- "imbl",
+ "imbl 6.1.0",
  "ruma 0.14.1",
  "serde",
  "serde_json",
@@ -5597,7 +5540,7 @@ dependencies = [
  "futures-executor",
  "futures-util",
  "gloo-timers",
- "imbl",
+ "imbl 6.1.0",
  "ruma 0.15.1",
  "serde",
  "serde_json",
@@ -5856,7 +5799,7 @@ dependencies = [
  "futures-util",
  "fuzzy-matcher",
  "growable-bloom-filter",
- "imbl",
+ "imbl 6.1.0",
  "indexmap 2.14.0",
  "itertools 0.14.0",
  "matrix-sdk",
@@ -6286,6 +6229,22 @@ dependencies = [
  "num-iter",
  "num-traits",
  "rand 0.8.6",
+ "smallvec",
+ "zeroize",
+]
+
+[[package]]
+name = "num-bigint-dig"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a7f9a86e097b0d187ad0e65667c2f58b9254671e86e7dbb78036b16692eae099"
+dependencies = [
+ "libm",
+ "num-integer",
+ "num-iter",
+ "num-traits",
+ "once_cell",
+ "rand 0.9.4",
  "serde",
  "smallvec",
  "zeroize",
@@ -6729,35 +6688,33 @@ checksum = "269bca4c2591a28585d6bf10d9ed0332b7d76900a1b02bec41bdc3a2cdcda107"
 
 [[package]]
 name = "oo7"
-version = "0.3.3"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fc6ce4692fbfd044ce22ca07dcab1a30fa12432ca2aa5b1294eca50d3332a24"
+checksum = "78f2bfed90f1618b4b48dcad9307f25e14ae894e2949642c87c351601d62cebd"
 dependencies = [
  "aes",
- "async-fs",
- "async-io",
- "async-lock",
- "async-net",
- "blocking",
+ "ashpd 0.13.11",
  "cbc",
  "cipher",
  "digest",
  "endi",
- "futures-lite",
  "futures-util",
+ "getrandom 0.4.2",
  "hkdf",
  "hmac",
  "md-5",
  "num",
- "num-bigint-dig",
+ "num-bigint-dig 0.9.1",
  "pbkdf2 0.12.2",
- "rand 0.8.6",
  "serde",
+ "serde_bytes",
  "sha2",
  "subtle",
- "zbus 4.4.0",
+ "tokio",
+ "zbus 5.15.0",
+ "zbus_macros 5.15.0",
  "zeroize",
- "zvariant 4.2.0",
+ "zvariant 5.11.0",
 ]
 
 [[package]]
@@ -7623,9 +7580,9 @@ dependencies = [
 
 [[package]]
 name = "pulldown-cmark"
-version = "0.10.3"
+version = "0.13.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76979bea66e7875e7509c4ec5300112b316af87fa7a252ca91c448b32dfe3993"
+checksum = "e9f068eba8e7071c5f9511831b44f32c740d5adf574e990f946ddb53db2f314e"
 dependencies = [
  "bitflags 2.11.1",
  "getopts",
@@ -7636,9 +7593,9 @@ dependencies = [
 
 [[package]]
 name = "pulldown-cmark-escape"
-version = "0.10.1"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bd348ff538bc9caeda7ee8cad2d1d48236a1f443c1fa3913c6a02fe0043b1dd3"
+checksum = "007d8adb5ddab6f8e3f491ac63566a7d5002cc7ed73901f72057943fa71ae1ae"
 
 [[package]]
 name = "pxfm"
@@ -8237,7 +8194,7 @@ checksum = "b8573f03f5883dcaebdfcf4725caa1ecb9c15b2ef50c43a07b816e06799bb12d"
 dependencies = [
  "const-oid",
  "digest",
- "num-bigint-dig",
+ "num-bigint-dig 0.8.6",
  "num-integer",
  "num-traits",
  "pkcs1",
@@ -8729,6 +8686,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
+name = "safe_arch"
+version = "0.7.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "96b02de82ddbe1b636e6170c21be622223aea188ef2e139be0a5b219ec215323"
+dependencies = [
+ "bytemuck",
+]
+
+[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8882,15 +8848,6 @@ checksum = "6ce2691df843ecc5d231c0b14ece2acc3efb62c0a398c7e1d875f3983ce020e3"
 dependencies = [
  "core-foundation-sys",
  "libc",
-]
-
-[[package]]
-name = "self_cell"
-version = "0.10.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e14e4d63b804dc0c7ec4a1e52bcb63f02c7ac94476755aa579edac21e01f915d"
-dependencies = [
- "self_cell 1.2.2",
 ]
 
 [[package]]
@@ -11352,6 +11309,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "wide"
+version = "0.7.33"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ce5da8ecb62bcd8ec8b7ea19f69a51275e91299be594ea5cc6ef7819e16cd03"
+dependencies = [
+ "bytemuck",
+ "safe_arch",
+]
+
+[[package]]
 name = "wildmatch"
 version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12836,6 +12803,7 @@ dependencies = [
  "endi",
  "enumflags2",
  "serde",
+ "serde_bytes",
  "url",
  "winnow 1.0.3",
  "zvariant_derive 5.11.0",

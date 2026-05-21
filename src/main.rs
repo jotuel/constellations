@@ -62,10 +62,10 @@ pub fn parse_markdown(text: &str, skip_first_blockquote: bool) -> Vec<PreviewEve
 
     for event in parser {
         match event {
-            pulldown_cmark::Event::Start(pulldown_cmark::Tag::BlockQuote) => {
+            pulldown_cmark::Event::Start(pulldown_cmark::Tag::BlockQuote(_)) => {
                 in_blockquote += 1;
             }
-            pulldown_cmark::Event::End(pulldown_cmark::TagEnd::BlockQuote) => {
+            pulldown_cmark::Event::End(pulldown_cmark::TagEnd::BlockQuote(_)) => {
                 if in_blockquote > 0 {
                     in_blockquote -= 1;
                     if in_blockquote == 0 {
@@ -1985,8 +1985,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(test)]
 mod tests {
-    use imbl::GenericVector;
-
     use super::*;
 
     fn create_test_app() -> Constellations {
@@ -2030,7 +2028,7 @@ mod tests {
             space_settings: settings::space::State::default(),
             app_settings: settings::app::State::default(),
             active_thread_root: None,
-            threaded_timeline_items: GenericVector::new(),
+            threaded_timeline_items: eyeball_im::Vector::new(),
             is_loading_more: false,
             replying_to: None,
             editing_item: None,
