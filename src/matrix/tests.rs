@@ -1015,13 +1015,8 @@ async fn test_create_room() {
 #[tokio::test]
 #[serial_test::serial]
 async fn test_get_or_create_store_passphrase_success() {
-    unsafe {
-        std::env::set_var("CONSTELLATIONS_TEST_KEYRING", "1");
-    }
+    let _guard = EnvVarGuard::new("CONSTELLATIONS_TEST_KEYRING", "1");
     let result = MatrixEngine::get_or_create_store_passphrase().await;
-    unsafe {
-        std::env::remove_var("CONSTELLATIONS_TEST_KEYRING");
-    }
 
     match result {
         Ok(passphrase) => {
@@ -1045,29 +1040,27 @@ async fn test_get_or_create_store_passphrase_success() {
     }
 }
 
-struct DbusEnvGuard {
+struct EnvVarGuard {
+    key: &'static str,
     original_value: Result<String, std::env::VarError>,
 }
 
-impl DbusEnvGuard {
-    fn new() -> Self {
-        let original_value = std::env::var("DBUS_SESSION_BUS_ADDRESS");
+impl EnvVarGuard {
+    fn new(key: &'static str, value: &str) -> Self {
+        let original_value = std::env::var(key);
         unsafe {
-            std::env::set_var(
-                "DBUS_SESSION_BUS_ADDRESS",
-                "unix:path=/nonexistent/dbus/socket",
-            );
+            std::env::set_var(key, value);
         }
-        Self { original_value }
+        Self { key, original_value }
     }
 }
 
-impl Drop for DbusEnvGuard {
+impl Drop for EnvVarGuard {
     fn drop(&mut self) {
         unsafe {
             match &self.original_value {
-                Ok(val) => std::env::set_var("DBUS_SESSION_BUS_ADDRESS", val),
-                Err(_) => std::env::remove_var("DBUS_SESSION_BUS_ADDRESS"),
+                Ok(val) => std::env::set_var(self.key, val),
+                Err(_) => std::env::remove_var(self.key),
             }
         }
     }
@@ -1177,21 +1170,11 @@ async fn test_logout_error_path() {
     let _client = logged_in_client(Some(mock_server.uri())).await;
 
     // Set invalid DBus so keyring doesn't hang/fail test due to DBus
-    let orig_dbus = std::env::var("DBUS_SESSION_BUS_ADDRESS").ok();
-    unsafe {
-        std::env::set_var("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent");
+    let _dbus_guard = EnvVarGuard::new("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent");
 
-        // Call logout and ensure it completes successfully despite the 500 error from the mock server
-        let result = engine.logout().await;
-
-        // Restore DBus
-        if let Some(dbus) = orig_dbus {
-            std::env::set_var("DBUS_SESSION_BUS_ADDRESS", dbus);
-        } else {
-            std::env::remove_var("DBUS_SESSION_BUS_ADDRESS");
-        }
-        assert!(result.is_ok(), "Logout failed: {:?}", result.err());
-    }
+    // Call logout and ensure it completes successfully despite the 500 error from the mock server
+    let result = engine.logout().await;
+    assert!(result.is_ok(), "Logout failed: {:?}", result.err());
 }
 
 #[tokio::test]
@@ -1212,18 +1195,11 @@ async fn test_join_room_success() {
 #[tokio::test]
 #[serial_test::serial]
 async fn test_get_or_create_store_passphrase_dbus_failure() {
-    let _guard = DbusEnvGuard::new();
-    unsafe {
-        std::env::set_var("CONSTELLATIONS_DISABLE_FALLBACK", "1");
-        std::env::set_var("CONSTELLATIONS_TEST_KEYRING", "1");
-    }
+    let _dbus_guard = EnvVarGuard::new("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/dbus/socket");
+    let _fallback_guard = EnvVarGuard::new("CONSTELLATIONS_DISABLE_FALLBACK", "1");
+    let _keyring_guard = EnvVarGuard::new("CONSTELLATIONS_TEST_KEYRING", "1");
 
     let result = MatrixEngine::get_or_create_store_passphrase().await;
-
-    unsafe {
-        std::env::remove_var("CONSTELLATIONS_DISABLE_FALLBACK");
-        std::env::remove_var("CONSTELLATIONS_TEST_KEYRING");
-    }
 
     // We expect this to fail due to the invalid D-Bus address
     assert!(
