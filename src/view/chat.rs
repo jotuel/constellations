@@ -199,13 +199,17 @@ impl<'chat> Constellations {
                 }
             }
         } else {
-            let query = self.emoji_search_query.to_lowercase();
+            let filter_is_ascii = self.emoji_search_query.is_ascii();
+            let filter_lower_fallback = (!filter_is_ascii).then(|| self.emoji_search_query.to_lowercase());
             let mut count = 0;
             for emoji in emojis::iter() {
-                if emoji.name().to_lowercase().contains(&query)
-                    || emoji
-                        .shortcodes()
-                        .any(|s| s.to_lowercase().contains(&query))
+                if crate::contains_ignore_ascii_case(
+                    emoji.name(),
+                    &self.emoji_search_query,
+                    filter_lower_fallback.as_deref(),
+                ) || emoji.shortcodes().any(|s| {
+                    crate::contains_ignore_ascii_case(s, &self.emoji_search_query, filter_lower_fallback.as_deref())
+                })
                 {
                     let emoji_str = emoji.as_str().to_string();
                     let btn = button::custom(

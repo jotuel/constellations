@@ -53,3 +53,7 @@
 ## 2024-08-15 - [Pass UserIds by reference in view loop]
 **Learning:** `view_sender_info` previously accepted `Option<matrix_sdk::ruma::OwnedUserId>`, causing a `.clone()` allocation on `item.sender_id` for every message on every render frame.
 **Action:** In Rust UI render methods (`iced`/`libcosmic`), when passing identifiers like `matrix_sdk::ruma::OwnedUserId` to helper functions, pass them as references (e.g., `Option<&UserId>`) rather than owned copies. If an owned copy is needed for a `Message` variant inside an `on_press` handler, call `.to_owned()` at the exact site of variant construction to defer allocation until interaction.
+
+## 2024-05-18 - [Optimization] Avoid `to_lowercase` inside emoji filtering loop
+**Learning:** `view/chat.rs` was calling `emoji.name().to_lowercase()` and `s.to_lowercase()` continuously inside a loop when searching for emojis. Since this UI rendering method is called often, this leads to heavy heap allocation overhead when filtering emojis via search.
+**Action:** Replaced `.to_lowercase().contains(&query)` with `crate::contains_ignore_ascii_case()` helper for both emoji names and shortcodes. This drastically reduces heap allocations and provides a fast ASCII path without sacrificing user experience.
