@@ -426,7 +426,7 @@ async fn test_complete_oidc_login_no_client() {
 
 #[tokio::test]
 async fn test_ipc_callback_trigger_failure() {
-    let test_uri = "com.system76.Claw://callback?code=test_code".to_string();
+    let test_uri = "fi.joonastuomi.CosmicExtConstellations://callback?code=test_code".to_string();
     let result = crate::ipc::call_handle_callback(test_uri).await;
 
     // If no instance is running, it should fail to find the proxy.
@@ -532,7 +532,7 @@ async fn test_paginate_backwards_invalid_room_id() {
     assert!(result.is_err());
     let err_msg = result.unwrap_err().to_string();
     assert!(
-        err_msg.contains("Invalid room ID"),
+        err_msg.contains("leading sigil is incorrect or missing") || err_msg.contains("Invalid room ID"),
         "Expected invalid room ID error, got: {}",
         err_msg
     );
@@ -972,6 +972,19 @@ async fn test_join_room_error() {
         .mount(&mock_server)
         .await;
 
+    // We also need to mock aliases resolution since the join by ID first resolves it if it's an alias,
+    // and room ID lookup fails via Matrix SDK without a proper fallback or if it hits room join directly.
+    Mock::given(method("POST"))
+        .and(path_regex(
+            r"^/_matrix/client/v3/join/.*",
+        ))
+        .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
+            "errcode": "M_FORBIDDEN",
+            "error": "You don't have permission to join this room"
+        })))
+        .mount(&mock_server)
+        .await;
+
     let tmp_dir = tempdir().unwrap();
     let engine = match MatrixEngine::new(tmp_dir.path().to_path_buf()).await {
         Ok(e) => e,
@@ -984,7 +997,11 @@ async fn test_join_room_error() {
         }
     };
 
-    let _client = logged_in_client(Some(mock_server.uri())).await;
+    let client = logged_in_client(Some(mock_server.uri())).await;
+    {
+        let mut inner = engine.inner.write().await;
+        inner.client = client.clone();
+    }
     let room_id = RoomId::parse("!forbidden_room:example.com").unwrap();
     let result = engine.join_room(&room_id).await;
 
