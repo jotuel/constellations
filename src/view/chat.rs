@@ -197,7 +197,8 @@ impl<'chat> Constellations {
             }
         } else {
             let filter_is_ascii = self.emoji_search_query.is_ascii();
-            let filter_lower_fallback = (!filter_is_ascii).then(|| self.emoji_search_query.to_lowercase());
+            let filter_lower_fallback =
+                (!filter_is_ascii).then(|| self.emoji_search_query.to_lowercase());
             let mut count = 0;
             for emoji in emojis::iter() {
                 if crate::contains_ignore_ascii_case(
@@ -532,7 +533,8 @@ impl<'chat> Constellations {
                 } else {
                     let mut char_indices = reply_body.char_indices();
                     if let Some((idx_47, _)) = char_indices.nth(47) {
-                        if char_indices.nth(2).is_some() { // 50th char
+                        if char_indices.nth(2).is_some() {
+                            // 50th char
                             reply_snippet.push_str(&reply_body[..idx_47]);
                             reply_snippet.push_str("...");
                         } else {
@@ -543,9 +545,10 @@ impl<'chat> Constellations {
                     }
                 }
 
-                let reply_indicator = Row::new().spacing(5).push(text::body("⤴").size(10)).push(
-                    text::body(reply_snippet).size(10),
-                );
+                let reply_indicator = Row::new()
+                    .spacing(5)
+                    .push(text::body("⤴").size(10))
+                    .push(text::body(reply_snippet).size(10));
 
                 bubble_col = bubble_col.push(container(reply_indicator).padding([0, 0, 5, 10]));
             }
@@ -694,49 +697,53 @@ impl<'chat> Constellations {
             if let Some(summary) = event.content().thread_summary()
                 && let matrix_sdk_ui::timeline::TimelineDetails::Ready(latest_ev) =
                     &summary.latest_event
-                {
-                    // Try to find in timeline_items for better profile info
-                    if let Some(item) = self.timeline_items.iter().rfind(|i| {
-                        i.item
-                            .as_event()
-                            .and_then(|e| e.event_id())
-                            .map(|id| match &latest_ev.identifier {
-                                matrix::TimelineEventItemId::EventId(eid) => id == eid,
-                                _ => false,
-                            })
-                            .unwrap_or(false)
-                    }) {
-                        latest_sender = Some(item.sender_name.as_str());
-                        if let Some(ev) = item.item.as_event()
-                            && let Some(msg) = ev.content().as_message() {
-                                latest_body = Some(msg.body());
-                            }
-                    } else {
-                        // Use info from embedded event
-                        fallback_sender_buf.push_str(latest_ev.sender.as_str());
-                        if let Some(msg) = latest_ev.content.as_message() {
-                            fallback_body_buf.push_str(msg.body());
-                        }
+            {
+                // Try to find in timeline_items for better profile info
+                if let Some(item) = self.timeline_items.iter().rfind(|i| {
+                    i.item
+                        .as_event()
+                        .and_then(|e| e.event_id())
+                        .map(|id| match &latest_ev.identifier {
+                            matrix::TimelineEventItemId::EventId(eid) => id == eid,
+                            _ => false,
+                        })
+                        .unwrap_or(false)
+                }) {
+                    latest_sender = Some(item.sender_name.as_str());
+                    if let Some(ev) = item.item.as_event()
+                        && let Some(msg) = ev.content().as_message()
+                    {
+                        latest_body = Some(msg.body());
+                    }
+                } else {
+                    // Use info from embedded event
+                    fallback_sender_buf.push_str(latest_ev.sender.as_str());
+                    if let Some(msg) = latest_ev.content.as_message() {
+                        fallback_body_buf.push_str(msg.body());
                     }
                 }
+            }
 
             // If we still don't have it (e.g. summary was missing or not ready),
             // try manual search by thread root
-            if latest_body.is_none() && fallback_body_buf.is_empty()
+            if latest_body.is_none()
+                && fallback_body_buf.is_empty()
                 && let Some(event_id) = event.event_id()
-                    && let Some(item) = self.timeline_items.iter().rfind(|i| {
-                        i.item
-                            .as_event()
-                            .and_then(|e| e.content().thread_root())
-                            .map(|r| r == event_id)
-                            .unwrap_or(false)
-                    }) {
-                        latest_sender = Some(item.sender_name.as_str());
-                        if let Some(ev) = item.item.as_event()
-                            && let Some(msg) = ev.content().as_message() {
-                                latest_body = Some(msg.body());
-                            }
-                    }
+                && let Some(item) = self.timeline_items.iter().rfind(|i| {
+                    i.item
+                        .as_event()
+                        .and_then(|e| e.content().thread_root())
+                        .map(|r| r == event_id)
+                        .unwrap_or(false)
+                })
+            {
+                latest_sender = Some(item.sender_name.as_str());
+                if let Some(ev) = item.item.as_event()
+                    && let Some(msg) = ev.content().as_message()
+                {
+                    latest_body = Some(msg.body());
+                }
+            }
 
             let mut summary_row = Row::new()
                 .spacing(5)
@@ -780,7 +787,8 @@ impl<'chat> Constellations {
                 } else {
                     let mut char_indices = final_body.char_indices();
                     if let Some((idx_27, _)) = char_indices.nth(27) {
-                        if char_indices.nth(2).is_some() { // 30th char
+                        if char_indices.nth(2).is_some() {
+                            // 30th char
                             text_str.push_str(&final_body[..idx_27]);
                             text_str.push_str("...");
                         } else {
@@ -1026,7 +1034,7 @@ impl<'chat> Constellations {
                     .tooltip(crate::fl!("tooltip-attach")),
             )
             .push(
-                button::text("😀")
+                button::icon(Named::new("face-smile-symbolic"))
                     .on_press(Message::ToggleComposerEmojiPicker)
                     .tooltip(crate::fl!("tooltip-emojis")),
             )
