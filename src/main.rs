@@ -157,7 +157,7 @@ struct Constellations {
     filtered_other_rooms: Vec<usize>,
     selected_room: Option<std::sync::Arc<str>>,
     timeline_items: Vector<ConstellationsItem>,
-    composer_text: String,
+    composer_content: cosmic::widget::text_editor::Content,
     composer_preview_events: Vec<PreviewEvent>,
     composer_is_preview: bool,
     composer_attachments: Vec<std::path::PathBuf>,
@@ -206,6 +206,7 @@ pub enum Message {
     RoomSelected(std::sync::Arc<str>),
     EngineReady(Result<matrix::MatrixEngine, matrix::SyncError>),
     ComposerChanged(String),
+    ComposerAction(cosmic::widget::text_editor::Action),
     TogglePreview,
     SendMessage,
     ShareLocation,
@@ -1134,7 +1135,7 @@ impl Application for Constellations {
             filtered_other_rooms: Vec::new(),
             selected_room: None,
             timeline_items: Vector::new(),
-            composer_text: String::new(),
+            composer_content: cosmic::widget::text_editor::Content::new(),
             composer_preview_events: Vec::new(),
             composer_is_preview: false,
             composer_attachments: Vec::new(),
@@ -1307,7 +1308,7 @@ impl Application for Constellations {
             }
             Message::ComposerChanged(text) => {
                 self.composer_preview_events = parse_markdown(&text, false);
-                self.composer_text = text;
+                self.composer_content = cosmic::widget::text_editor::Content::with_text(&text);
 
                 if self.app_settings.send_typing_notifications
                     && let Some(matrix) = &self.matrix
@@ -1315,7 +1316,29 @@ impl Application for Constellations {
                 {
                     let matrix = matrix.clone();
                     let room_id = room_id.clone();
-                    let typing = !self.composer_text.is_empty();
+                    let typing = !self.composer_content.is_empty();
+                    return Task::perform(
+                        async move {
+                            let _ = matrix.typing_notice(&room_id, typing).await;
+                        },
+                        |_| Action::from(Message::NoOp),
+                    );
+                }
+
+                Task::none()
+            }
+            Message::ComposerAction(action) => {
+                self.composer_content.perform(action);
+                let text = self.composer_content.text();
+                self.composer_preview_events = parse_markdown(&text, false);
+
+                if self.app_settings.send_typing_notifications
+                    && let Some(matrix) = &self.matrix
+                    && let Some(room_id) = &self.selected_room
+                {
+                    let matrix = matrix.clone();
+                    let room_id = room_id.clone();
+                    let typing = !self.composer_content.is_empty();
                     return Task::perform(
                         async move {
                             let _ = matrix.typing_notice(&room_id, typing).await;
@@ -1336,7 +1359,7 @@ impl Application for Constellations {
             Message::MessageSent(res) => {
                 match res {
                     Ok(_) => {
-                        self.composer_text.clear();
+                        self.composer_content = cosmic::widget::text_editor::Content::new();
                         self.composer_preview_events.clear();
                         self.composer_is_preview = false;
                         self.replying_to = None;
@@ -1351,7 +1374,7 @@ impl Application for Constellations {
             Message::MessageEdited(res) => {
                 match res {
                     Ok(_) => {
-                        self.composer_text.clear();
+                        self.composer_content = cosmic::widget::text_editor::Content::new();
                         self.composer_preview_events.clear();
                         self.composer_is_preview = false;
                         self.editing_item = None;
@@ -1386,8 +1409,8 @@ impl Application for Constellations {
                     && let Some(event) = item.item.as_event()
                     && let Some(msg) = event.content().as_message()
                 {
-                    self.composer_text = msg.body().to_string();
-                    self.composer_preview_events = parse_markdown(&self.composer_text, false);
+                    self.composer_content = cosmic::widget::text_editor::Content::with_text(msg.body());
+                    self.composer_preview_events = parse_markdown(&self.composer_content.text(), false);
                     self.editing_item = Some(item);
                     self.replying_to = None;
                 }
@@ -1395,7 +1418,7 @@ impl Application for Constellations {
             }
             Message::CancelEdit => {
                 self.editing_item = None;
-                self.composer_text.clear();
+                self.composer_content = cosmic::widget::text_editor::Content::new();
                 self.composer_preview_events.clear();
                 Task::none()
             }
@@ -1464,7 +1487,26 @@ impl Application for Constellations {
                 }
             }
             Message::InsertEmoji(emoji) => {
-                self.composer_text.push_str(&emoji);
+                let mut text = self.composer_content.text();
+                text.push_str(&emoji);
+                self.composer_content = cosmic::widget::text_editor::Content::with_text(&text);
+                self.composer_preview_events = parse_markdown(&text, false);
+
+                if self.app_settings.send_typing_notifications
+                    && let Some(matrix) = &self.matrix
+                    && let Some(room_id) = &self.selected_room
+                {
+                    let matrix = matrix.clone();
+                    let room_id = room_id.clone();
+                    let typing = !self.composer_content.is_empty();
+                    return Task::perform(
+                        async move {
+                            let _ = matrix.typing_notice(&room_id, typing).await;
+                        },
+                        |_| Action::from(Message::NoOp),
+                    );
+                }
+
                 Task::none()
             }
             Message::ToggleReaction(item_id, key) => {
@@ -1989,7 +2031,7 @@ mod tests {
             filtered_other_rooms: Vec::new(),
             selected_room: None,
             timeline_items: eyeball_im::Vector::new(),
-            composer_text: String::new(),
+            composer_content: cosmic::widget::text_editor::Content::new(),
             composer_preview_events: Vec::new(),
             composer_is_preview: false,
             composer_attachments: Vec::new(),

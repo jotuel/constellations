@@ -6,7 +6,7 @@ use cosmic::{
         widget::{scrollable, tooltip},
     },
     widget::{
-        Column, Row, button, container, divider, icon::Named, text, text_input, tooltip::Position,
+        Column, Row, button, container, divider, icon::Named, text, text_editor, text_input, tooltip::Position,
     },
 };
 use matrix_sdk::ruma::events::room::{MediaSource, message::MessageType};
@@ -977,9 +977,22 @@ impl<'chat> Constellations {
             self.view_preview()
         } else {
             container(
-                text_input(crate::fl!("type-message"), &self.composer_text)
-                    .on_input(Message::ComposerChanged)
-                    .on_submit(|_| Message::SendMessage),
+                text_editor(&self.composer_content)
+                    .placeholder(crate::fl!("type-message"))
+                    .on_action(Message::ComposerAction)
+                    .key_binding(|keypress| {
+                        match keypress.key.as_ref() {
+                            cosmic::iced::keyboard::Key::Named(cosmic::iced::keyboard::key::Named::Enter) => {
+                                if keypress.modifiers.shift() {
+                                    Some(cosmic::widget::text_editor::Binding::Enter)
+                                } else {
+                                    Some(cosmic::widget::text_editor::Binding::Custom(Message::SendMessage))
+                                }
+                            }
+                            _ => cosmic::widget::text_editor::Binding::from_key_press(keypress),
+                        }
+                    })
+                    .height(80),
             )
             .padding(10)
             .into()
@@ -1003,7 +1016,7 @@ impl<'chat> Constellations {
             }
         }
 
-        let is_empty = self.composer_text.trim().is_empty() && self.composer_attachments.is_empty();
+        let is_empty = self.composer_content.text().trim().is_empty() && self.composer_attachments.is_empty();
 
         let mut send_btn = button::text(if self.editing_item.is_some() {
             crate::fl!("save")

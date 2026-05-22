@@ -605,7 +605,7 @@ impl Constellations {
         &mut self,
     ) -> Task<Action<<Constellations as Application>::Message>> {
         if let (Some(matrix), Some(room_id)) = (&self.matrix, &self.selected_room) {
-            let body = self.composer_text.clone();
+            let body = self.composer_content.text();
 
             if let Some(editing_item) = self.editing_item.clone() {
                 if body.is_empty() {
@@ -695,7 +695,7 @@ impl Constellations {
             } else {
                 // If only sending attachments, we clear the composer text state manually
                 // because MessageSent clears it but might not run for empty body
-                self.composer_text.clear();
+                self.composer_content = cosmic::widget::text_editor::Content::new();
                 self.composer_preview_events.clear();
                 self.composer_is_preview = false;
                 self.replying_to = None;
@@ -1225,7 +1225,7 @@ mod tests {
             filtered_other_rooms: Vec::new(),
             selected_room: None,
             timeline_items: eyeball_im::Vector::new(),
-            composer_text: String::new(),
+            composer_content: cosmic::widget::text_editor::Content::new(),
             composer_preview_events: Vec::new(),
             composer_is_preview: false,
             user_id: None,
