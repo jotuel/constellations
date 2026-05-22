@@ -1047,6 +1047,11 @@ impl<'chat> Constellations {
                     .on_press(Message::ToggleComposerEmojiPicker)
                     .tooltip(crate::fl!("tooltip-emojis")),
             )
+            .push(
+                button::icon(Named::new("mark-location-symbolic"))
+                    .on_press(Message::ShareLocation)
+                    .tooltip(crate::fl!("tooltip-share-location")),
+            )
             .push(if self.composer_is_preview {
                 button::text(crate::fl!("edit"))
                     .on_press(Message::TogglePreview)

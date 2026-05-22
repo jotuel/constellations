@@ -208,6 +208,8 @@ pub enum Message {
     ComposerChanged(String),
     TogglePreview,
     SendMessage,
+    ShareLocation,
+    LocationRetrieved(Result<(f64, f64), String>),
     MessageSent(Result<(), String>),
     MessageEdited(Result<(), String>),
     MessageRedacted(Result<(), String>),
@@ -1328,6 +1330,8 @@ impl Application for Constellations {
                 Task::none()
             }
             Message::SendMessage => self.handle_send_message(),
+            Message::ShareLocation => self.handle_share_location(),
+            Message::LocationRetrieved(res) => self.handle_location_retrieved(res),
             Message::MessageSent(res) => {
                 match res {
                     Ok(_) => {

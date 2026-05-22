@@ -236,6 +236,7 @@ tooltip-delete = Delete
 tooltip-thread = Start a new Thread
 tooltip-reply = Reply to this message
 tooltip-preview = Preview
+tooltip-share-location = Share Location
 download-image = Download Image
 download-file = Download File
 dismiss = Dismiss

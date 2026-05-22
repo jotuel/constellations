@@ -34,6 +34,8 @@
 
 [ ] Location sharing in chat editor
 
+[ ] Multi-line editing
+
 [ ] One unified error info display mechanism
 
 # ***Search***

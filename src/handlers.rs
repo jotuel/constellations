@@ -533,6 +533,70 @@ impl Constellations {
         )
     }
 
+    pub fn handle_share_location(
+        &mut self,
+    ) -> Task<Action<<Constellations as Application>::Message>> {
+        Task::perform(
+            async move {
+                let proxy = ashpd::desktop::location::LocationProxy::new()
+                    .await
+                    .map_err(|e| e.to_string())?;
+
+                let session = proxy
+                    .create_session(None, None, Some(ashpd::desktop::location::Accuracy::Exact))
+                    .await
+                    .map_err(|e| e.to_string())?;
+
+                let mut stream = proxy
+                    .receive_location_updated()
+                    .await
+                    .map_err(|e| e.to_string())?;
+
+                let (_, location_res) = futures::join!(
+                    proxy.start(&session, None).map(|e| e.map_err(|err| err.to_string())),
+                    stream.next().map(|opt| opt.ok_or_else(|| "Stream is exhausted".to_string()))
+                );
+
+                let _ = session.close().await;
+
+                let location = location_res?;
+                Ok((location.latitude(), location.longitude()))
+            },
+            |res| Action::from(Message::LocationRetrieved(res)),
+        )
+    }
+
+    pub fn handle_location_retrieved(
+        &mut self,
+        res: Result<(f64, f64), String>,
+    ) -> Task<Action<<Constellations as Application>::Message>> {
+        match res {
+            Ok((lat, lon)) => {
+                if let (Some(matrix), Some(room_id)) = (&self.matrix, &self.selected_room) {
+                    let matrix_clone = matrix.clone();
+                    let room_id_clone = room_id.clone();
+                    let body = format!("Location: geo:{lat},{lon}");
+                    let geo_uri = format!("geo:{lat},{lon}");
+                    Task::perform(
+                        async move {
+                            matrix_clone
+                                .send_location(&room_id_clone, body, geo_uri)
+                                .await
+                                .map_err(|e| e.to_string())
+                        },
+                        |res| Action::from(Message::MessageSent(res)),
+                    )
+                } else {
+                    Task::none()
+                }
+            }
+            Err(e) => {
+                self.error = Some(format!("Failed to retrieve location: {}", e));
+                Task::none()
+            }
+        }
+    }
+
     pub fn handle_send_message(
         &mut self,
     ) -> Task<Action<<Constellations as Application>::Message>> {
