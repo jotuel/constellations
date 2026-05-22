@@ -183,17 +183,14 @@ impl<'chat> Constellations {
         if self.emoji_search_query.is_empty() {
             if let Some(group) = self.selected_emoji_group {
                 for emoji in group.emojis() {
-                    let emoji_str = emoji.as_str().to_string();
+                    let emoji_str = emoji.as_str();
                     let btn = button::custom(
                         container(text::body(emoji.as_str()).size(18))
                             .padding(4)
                             .align_x(Alignment::Center)
                             .align_y(Alignment::Center),
                     )
-                    .on_press(match &item_id {
-                        Some(id) => Message::ToggleReaction(id.clone(), emoji_str),
-                        None => Message::InsertEmoji(emoji_str),
-                    });
+                    .on_press(Message::EmojiPickerSelected(emoji_str));
                     emoji_grid = emoji_grid.push(btn);
                     has_elements = true;
                 }
@@ -209,23 +206,17 @@ impl<'chat> Constellations {
                     &self.emoji_search_query,
                     filter_lower_fallback.as_deref(),
                 ) || emoji.shortcodes().any(|s| {
-                    crate::contains_ignore_ascii_case(
-                        s,
-                        &self.emoji_search_query,
-                        filter_lower_fallback.as_deref(),
-                    )
-                }) {
-                    let emoji_str = emoji.as_str().to_string();
+                    crate::contains_ignore_ascii_case(s, &self.emoji_search_query, filter_lower_fallback.as_deref())
+                })
+                {
+                    let emoji_str = emoji.as_str();
                     let btn = button::custom(
                         container(text::body(emoji.as_str()).size(18))
                             .padding(4)
                             .align_x(Alignment::Center)
                             .align_y(Alignment::Center),
                     )
-                    .on_press(match &item_id {
-                        Some(id) => Message::ToggleReaction(id.clone(), emoji_str),
-                        None => Message::InsertEmoji(emoji_str),
-                    });
+                    .on_press(Message::EmojiPickerSelected(emoji_str));
                     emoji_grid = emoji_grid.push(btn);
                     count += 1;
                     has_elements = true;

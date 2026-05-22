@@ -222,6 +222,7 @@ pub enum Message {
     SelectEmojiGroup(Option<emojis::Group>),
     ToggleComposerEmojiPicker,
     InsertEmoji(String),
+    EmojiPickerSelected(&'static str),
 
     LoadMoreFinished(Result<(), String>),
     TimelineScrolled(cosmic::iced::widget::scrollable::Viewport, bool),
@@ -1450,6 +1451,13 @@ impl Application for Constellations {
                     self.active_reaction_picker = None;
                 }
                 Task::none()
+            }
+            Message::EmojiPickerSelected(emoji) => {
+                if let Some(item_id) = self.active_reaction_picker.clone() {
+                    self.update(Message::ToggleReaction(item_id, emoji.to_string()))
+                } else {
+                    self.update(Message::InsertEmoji(emoji.to_string()))
+                }
             }
             Message::InsertEmoji(emoji) => {
                 self.composer_text.push_str(&emoji);
