@@ -20,9 +20,9 @@
 
 [x] Fluent for localization
 
-[ ] Implement real time audio connections (currently delegates to Element Call via browser)
+[x] Implement real time audio connections (currently delegates to Element Call via browser)
 
-[ ] Video connections using MatrixRTC (currently delegates to Element Call via browser)
+[x] Video connections using MatrixRTC (currently delegates to Element Call via browser)
 
 [x] Way to enlarge images
 
@@ -32,13 +32,13 @@
 
 [ ] Refactor code into smaller functions moved into smaller files
 
-[ ] Location sharing in chat editor
+[x] Location sharing in chat editor
 
 [ ] Multi-line editing
 
 [ ] One unified error info display mechanism
 
-[ ] Room with only two users (DM) should show other participants avatar
+[x] Room with only two users (DM) should show other participants avatar
 
 # ***Search***
 
@@ -81,7 +81,7 @@
 # ***Settings***
 ## **Application**
 
-[ ] Set up Config
+[x] Set up Config
 
 [x] Global Notification Rules: The NotificationSettings API in the SDK allows you to
  configure whether the user is notified for specific events (e.g., mentions, direct
