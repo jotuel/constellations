@@ -38,6 +38,8 @@
 
 [ ] One unified error info display mechanism
 
+[ ] Room with only two users (DM) should show other participants avatar
+
 # ***Search***
 
 [x] Add search icon and bar to header
