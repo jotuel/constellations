@@ -1,7 +1,7 @@
 use crate::matrix::TimelineItem;
 use crate::{
     ApplyVectorDiffExt, Constellations, ConstellationsItem, MediaSource, Message, OwnedRoomId, Url,
-    matrix, redact_url,
+    QrLoginStep, matrix, redact_url,
 };
 use cosmic::{Action, Application, Task};
 use futures::FutureExt;
@@ -1203,6 +1203,89 @@ impl Constellations {
         self.joined_room_ids.clear();
         Task::none()
     }
+
+    pub fn handle_start_qr_login(
+        &mut self,
+    ) -> Task<Action<<Constellations as Application>::Message>> {
+        self.is_qr_logging_in = true;
+        self.qr_login_step = QrLoginStep::Initiating;
+        self.error = None;
+
+        // Generate a high-fidelity random rendezvous URL
+        let random_id: u64 = rand::random();
+        let rendezvous_url = format!(
+            "https://matrix.to/#/login?rendezvous=constellations-{:x}",
+            random_id
+        );
+        self.qr_rendezvous_url = Some(rendezvous_url);
+
+        // Transition to ShowingQr step after a small simulated initiation delay (500ms)
+        Task::perform(
+            async {
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            },
+            |_| Action::from(Message::QrLoginStepChanged(QrLoginStep::ShowingQr))
+        )
+    }
+
+    pub fn handle_cancel_qr_login(
+        &mut self,
+    ) -> Task<Action<<Constellations as Application>::Message>> {
+        self.is_qr_logging_in = false;
+        self.qr_login_step = QrLoginStep::NotStarted;
+        self.qr_rendezvous_url = None;
+        Task::none()
+    }
+
+    pub fn handle_simulate_qr_scan(
+        &mut self,
+    ) -> Task<Action<<Constellations as Application>::Message>> {
+        if self.qr_login_step == QrLoginStep::ShowingQr {
+            // Step 1: Transition to RendezvousEstablished
+            self.qr_login_step = QrLoginStep::RendezvousEstablished;
+
+            // Step 2: Queue up the transition to Authenticating after 1.5s
+            Task::perform(
+                async {
+                    tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+                },
+                |_| Action::from(Message::QrLoginStepChanged(QrLoginStep::Authenticating))
+            )
+        } else {
+            Task::none()
+        }
+    }
+
+    pub fn handle_qr_login_step_changed(
+        &mut self,
+        step: QrLoginStep,
+    ) -> Task<Action<<Constellations as Application>::Message>> {
+        self.qr_login_step = step;
+        match step {
+            QrLoginStep::ShowingQr => {
+                Task::none()
+            }
+            QrLoginStep::Authenticating => {
+                // Step 3: Transition to Success after 1.5s
+                Task::perform(
+                    async {
+                        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+                    },
+                    |_| Action::from(Message::QrLoginStepChanged(QrLoginStep::Success))
+                )
+            }
+            QrLoginStep::Success => {
+                // Step 4: Login complete!
+                self.is_qr_logging_in = false;
+                self.qr_login_step = QrLoginStep::NotStarted;
+                self.qr_rendezvous_url = None;
+
+                // Complete login with simulated user session
+                self.handle_login_finished(Ok("@simulated_user:matrix.org".to_string()))
+            }
+            _ => Task::none(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1266,6 +1349,9 @@ mod tests {
             emoji_search_query: String::new(),
             selected_emoji_group: None,
             is_composer_emoji_picker_active: false,
+            is_qr_logging_in: false,
+            qr_login_step: QrLoginStep::NotStarted,
+            qr_rendezvous_url: None,
         }
     }
 
@@ -1528,5 +1614,56 @@ mod tests {
         // It shouldn't crash, and shouldn't apply to the active thread (though both are empty here,
         // the core goal is ensuring the condition works).
         assert_eq!(app.threaded_timeline_items.len(), 0);
+    }
+
+    #[test]
+    fn test_qr_login_handlers() {
+        let mut app = create_dummy_constellations();
+
+        // 1. Initial State
+        assert_eq!(app.is_qr_logging_in, false);
+        assert_eq!(app.qr_login_step, QrLoginStep::NotStarted);
+        assert!(app.qr_rendezvous_url.is_none());
+
+        // 2. Start QR Login
+        let _task = app.handle_start_qr_login();
+        assert_eq!(app.is_qr_logging_in, true);
+        assert_eq!(app.qr_login_step, QrLoginStep::Initiating);
+        assert!(app.qr_rendezvous_url.is_some());
+        
+        let url = app.qr_rendezvous_url.clone().unwrap();
+        assert!(url.starts_with("https://matrix.to/#/login?rendezvous="));
+
+        // 3. Step Changed to ShowingQr
+        let _task = app.handle_qr_login_step_changed(QrLoginStep::ShowingQr);
+        assert_eq!(app.qr_login_step, QrLoginStep::ShowingQr);
+
+        // 4. Simulate QR Scan
+        let _task = app.handle_simulate_qr_scan();
+        assert_eq!(app.qr_login_step, QrLoginStep::RendezvousEstablished);
+
+        // 5. Step Changed to Authenticating
+        let _task = app.handle_qr_login_step_changed(QrLoginStep::Authenticating);
+        assert_eq!(app.qr_login_step, QrLoginStep::Authenticating);
+
+        // 6. Step Changed to Success
+        // Calling handle_qr_login_step_changed(Success) will trigger handle_login_finished,
+        // which cleans up QR state and sets the user session.
+        let _task = app.handle_qr_login_step_changed(QrLoginStep::Success);
+        assert_eq!(app.is_qr_logging_in, false);
+        assert_eq!(app.qr_login_step, QrLoginStep::NotStarted);
+        assert!(app.qr_rendezvous_url.is_none());
+        assert_eq!(app.user_id, Some("@simulated_user:matrix.org".to_string()));
+
+        // 7. Cancel QR Login
+        let mut app = create_dummy_constellations();
+        let _task = app.handle_start_qr_login();
+        assert_eq!(app.is_qr_logging_in, true);
+        assert!(app.qr_rendezvous_url.is_some());
+
+        let _task = app.handle_cancel_qr_login();
+        assert_eq!(app.is_qr_logging_in, false);
+        assert_eq!(app.qr_login_step, QrLoginStep::NotStarted);
+        assert!(app.qr_rendezvous_url.is_none());
     }
 }

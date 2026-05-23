@@ -1,4 +1,4 @@
-use crate::{Constellations, Message, matrix};
+use crate::{Constellations, Message, QrLoginStep, matrix};
 use cosmic::{
     Element,
     iced::Alignment,
@@ -7,6 +7,9 @@ use cosmic::{
 
 impl Constellations {
     pub fn view_login(&self) -> Element<'_, Message> {
+        if self.is_qr_logging_in {
+            return self.view_qr_login();
+        }
         let title = if self.is_registering_mode {
             crate::fl!("register-title")
         } else {
@@ -110,6 +113,14 @@ impl Constellations {
             btn
         };
 
+        let qr_login_button = {
+            let mut btn = button::text(crate::fl!("login-qr-button"));
+            if !self.is_logging_in && !self.is_registering_mode && !self.is_oidc_logging_in {
+                btn = btn.on_press(Message::StartQrLogin);
+            }
+            btn
+        };
+
         let toggle_mode_button = if self.is_registering_mode {
             button::text(crate::fl!("already-have-account"))
         } else {
@@ -127,9 +138,91 @@ impl Constellations {
 
         if !self.is_registering_mode {
             content = content.push(oidc_button);
+            content = content.push(qr_login_button);
         }
 
         content = content.push(toggle_mode_button);
+
+        container(content)
+            .width(cosmic::iced::Length::Fill)
+            .height(cosmic::iced::Length::Fill)
+            .align_x(Alignment::Center)
+            .align_y(Alignment::Center)
+            .into()
+    }
+
+    pub fn view_qr_login(&self) -> Element<'_, Message> {
+        let title = crate::fl!("login-qr-title");
+        let mut content = Column::new()
+            .spacing(15)
+            .padding(20)
+            .max_width(450)
+            .align_x(Alignment::Center)
+            .push(text::title1(title));
+
+        match self.qr_login_step {
+            QrLoginStep::Initiating => {
+                content = content
+                    .push(container(cosmic::widget::progress_bar::indeterminate_circular().size(32.0)))
+                    .push(text::body(crate::fl!("login-qr-initiating")));
+            }
+            QrLoginStep::ShowingQr => {
+                content = content
+                    .push(text::body(crate::fl!("login-qr-scanning")));
+
+                if let Some(ref url) = self.qr_rendezvous_url {
+                    if let Ok(code) = qrcode::QrCode::new(url.as_bytes()) {
+                        let width = code.width();
+                        let mut qr_text = String::new();
+                        for y in 0..width {
+                            for x in 0..width {
+                                if code[(x, y)] == qrcode::Color::Dark {
+                                    qr_text.push_str("██");
+                                } else {
+                                    qr_text.push_str("  ");
+                                }
+                            }
+                            qr_text.push('\n');
+                        }
+
+                        content = content.push(
+                            container(
+                                text::body(qr_text)
+                                    .font(cosmic::iced::Font::MONOSPACE)
+                                    .size(8)
+                            )
+                            .padding(15)
+                        );
+                    }
+                }
+
+                let simulate_btn = button::text(crate::fl!("login-qr-simulate"))
+                    .on_press(Message::SimulateQrScan);
+                content = content.push(simulate_btn);
+            }
+            QrLoginStep::RendezvousEstablished => {
+                content = content
+                    .push(container(cosmic::widget::progress_bar::indeterminate_circular().size(32.0)))
+                    .push(text::body(crate::fl!("login-qr-established")));
+            }
+            QrLoginStep::Authenticating => {
+                content = content
+                    .push(container(cosmic::widget::progress_bar::indeterminate_circular().size(32.0)))
+                    .push(text::body(crate::fl!("login-qr-authenticating")));
+            }
+            QrLoginStep::Success => {
+                content = content
+                    .push(text::body(crate::fl!("login-qr-success")));
+            }
+            _ => {
+                content = content
+                    .push(text::body("An error occurred."));
+            }
+        }
+
+        let cancel_btn = button::text(crate::fl!("login-qr-cancel"))
+            .on_press(Message::CancelQrLogin);
+        content = content.push(cancel_btn);
 
         container(content)
             .width(cosmic::iced::Length::Fill)

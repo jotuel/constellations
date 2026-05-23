@@ -36,6 +36,17 @@ static TIMELINE_ID: LazyLock<cosmic::iced::widget::Id> =
 static THREADED_TIMELINE_ID: LazyLock<cosmic::iced::widget::Id> =
     LazyLock::new(cosmic::iced::widget::Id::unique);
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum QrLoginStep {
+    NotStarted,
+    Initiating,
+    ShowingQr,
+    RendezvousEstablished,
+    Authenticating,
+    Success,
+    Error,
+}
+
 // ⚡ Bolt Optimization:
 // We cache the parsed Markdown structure in `PreviewEvent`s to avoid running
 // `pulldown_cmark::Parser` on every single render frame inside `view_preview()`.
@@ -172,6 +183,9 @@ struct Constellations {
     login_password: String,
     is_logging_in: bool,
     is_oidc_logging_in: bool,
+    is_qr_logging_in: bool,
+    qr_login_step: QrLoginStep,
+    qr_rendezvous_url: Option<String>,
     is_registering_mode: bool,
     is_registering: bool,
     is_initializing: bool,
@@ -268,6 +282,10 @@ pub enum Message {
     SubmitOidcLogin,
     OidcLoginStarted(Result<Url, String>),
     OidcCallback(Url),
+    StartQrLogin,
+    CancelQrLogin,
+    SimulateQrScan,
+    QrLoginStepChanged(QrLoginStep),
     JoinRoom(std::sync::Arc<str>),
     RoomJoined(Result<OwnedRoomId, String>),
     Logout,
@@ -1150,6 +1168,9 @@ impl Application for Constellations {
             login_password: String::new(),
             is_logging_in: false,
             is_oidc_logging_in: false,
+            is_qr_logging_in: false,
+            qr_login_step: QrLoginStep::NotStarted,
+            qr_rendezvous_url: None,
             is_registering_mode: false,
             is_registering: false,
             is_initializing: true,
@@ -1617,6 +1638,10 @@ impl Application for Constellations {
             Message::SubmitOidcLogin => self.handle_submit_oidc_login(),
             Message::OidcLoginStarted(res) => self.handle_oidc_login_started(res),
             Message::OidcCallback(url) => self.handle_oidc_callback(url),
+            Message::StartQrLogin => self.handle_start_qr_login(),
+            Message::CancelQrLogin => self.handle_cancel_qr_login(),
+            Message::SimulateQrScan => self.handle_simulate_qr_scan(),
+            Message::QrLoginStepChanged(step) => self.handle_qr_login_step_changed(step),
             Message::JoinRoom(room_id) => {
                 if let Some(matrix) = &self.matrix {
                     let matrix = matrix.clone();
@@ -2046,6 +2071,9 @@ mod tests {
             login_password: String::new(),
             is_logging_in: false,
             is_oidc_logging_in: false,
+            is_qr_logging_in: false,
+            qr_login_step: QrLoginStep::NotStarted,
+            qr_rendezvous_url: None,
             is_registering_mode: false,
             is_registering: false,
             is_initializing: false,
