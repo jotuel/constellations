@@ -44,7 +44,9 @@ impl<'switcher> Constellations {
             let is_selected =
                 self.selected_space.as_ref().map(|s| s.as_str()) == Some(&*space_id_str);
 
-            let has_avatar = space.avatar_url.as_ref()
+            let has_avatar = space
+                .avatar_url
+                .as_ref()
                 .map(|url| self.media_cache.contains_key(url))
                 .unwrap_or(false);
 

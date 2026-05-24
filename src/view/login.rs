@@ -161,30 +161,30 @@ impl Constellations {
             QrLoginStep::ShowingQr => {
                 content = content.push(text::body(crate::fl!("login-qr-scanning")));
 
-                if let Some(ref url) = self.qr_rendezvous_url {
-                    if let Ok(code) = qrcode::QrCode::new(url.as_bytes()) {
-                        let width = code.width();
-                        let mut qr_text = String::new();
-                        for y in 0..width {
-                            for x in 0..width {
-                                if code[(x, y)] == qrcode::Color::Dark {
-                                    qr_text.push_str("██");
-                                } else {
-                                    qr_text.push_str("  ");
-                                }
+                if let Some(ref url) = self.qr_rendezvous_url
+                    && let Ok(code) = qrcode::QrCode::new(url.as_bytes())
+                {
+                    let width = code.width();
+                    let mut qr_text = String::new();
+                    for y in 0..width {
+                        for x in 0..width {
+                            if code[(x, y)] == qrcode::Color::Dark {
+                                qr_text.push_str("██");
+                            } else {
+                                qr_text.push_str("  ");
                             }
-                            qr_text.push('\n');
                         }
-
-                        content = content.push(
-                            container(
-                                text::body(qr_text)
-                                    .font(cosmic::iced::Font::MONOSPACE)
-                                    .size(8),
-                            )
-                            .padding(15),
-                        );
+                        qr_text.push('\n');
                     }
+
+                    content = content.push(
+                        container(
+                            text::body(qr_text)
+                                .font(cosmic::iced::Font::MONOSPACE)
+                                .size(8),
+                        )
+                        .padding(15),
+                    );
                 }
 
                 let simulate_btn =

@@ -1077,14 +1077,16 @@ impl MatrixEngine {
         let mut avatar_url = room.avatar_url().map(|u| u.to_string());
         if room.joined_members_count() == 2 || room.active_members_count() == 2 {
             let client = room.client();
-            if let Some(my_user_id) = client.user_id() {
-                if let Ok(members) = room.members_no_sync(matrix_sdk::RoomMemberships::ACTIVE).await {
-                    let other_member = members.iter().find(|m| m.user_id() != my_user_id);
-                    if let Some(other_member) = other_member {
-                        if let Some(other_avatar) = other_member.avatar_url() {
-                            avatar_url = Some(other_avatar.to_string());
-                        }
-                    }
+            if let Some(my_user_id) = client.user_id()
+                && let Ok(members) = room
+                    .members_no_sync(matrix_sdk::RoomMemberships::ACTIVE)
+                    .await
+            {
+                let other_member = members.iter().find(|m| m.user_id() != my_user_id);
+                if let Some(other_member) = other_member
+                    && let Some(other_avatar) = other_member.avatar_url()
+                {
+                    avatar_url = Some(other_avatar.to_string());
                 }
             }
         }

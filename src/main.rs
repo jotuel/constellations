@@ -1938,7 +1938,7 @@ impl Application for Constellations {
             .into();
         }
 
-        let active_error = self.error.as_deref().or_else(|| match &self.sync_status {
+        let active_error = self.error.as_deref().or(match &self.sync_status {
             matrix::SyncStatus::Error(e) => Some(e.as_str()),
             matrix::SyncStatus::MissingSlidingSyncSupport => Some("Error: Your homeserver does not support Sliding Sync (MSC4186), which is required by Constellations."),
             _ => None,

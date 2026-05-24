@@ -1,7 +1,7 @@
 use crate::matrix::TimelineItem;
 use crate::{
-    ApplyVectorDiffExt, Constellations, ConstellationsItem, MediaSource, Message, OwnedRoomId, Url,
-    QrLoginStep, matrix, redact_url,
+    ApplyVectorDiffExt, Constellations, ConstellationsItem, MediaSource, Message, OwnedRoomId,
+    QrLoginStep, Url, matrix, redact_url,
 };
 use cosmic::{Action, Application, Task};
 use futures::FutureExt;
@@ -1224,7 +1224,7 @@ impl Constellations {
             async {
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             },
-            |_| Action::from(Message::QrLoginStepChanged(QrLoginStep::ShowingQr))
+            |_| Action::from(Message::QrLoginStepChanged(QrLoginStep::ShowingQr)),
         )
     }
 
@@ -1249,7 +1249,7 @@ impl Constellations {
                 async {
                     tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
                 },
-                |_| Action::from(Message::QrLoginStepChanged(QrLoginStep::Authenticating))
+                |_| Action::from(Message::QrLoginStepChanged(QrLoginStep::Authenticating)),
             )
         } else {
             Task::none()
@@ -1262,16 +1262,14 @@ impl Constellations {
     ) -> Task<Action<<Constellations as Application>::Message>> {
         self.qr_login_step = step;
         match step {
-            QrLoginStep::ShowingQr => {
-                Task::none()
-            }
+            QrLoginStep::ShowingQr => Task::none(),
             QrLoginStep::Authenticating => {
                 // Step 3: Transition to Success after 1.5s
                 Task::perform(
                     async {
                         tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
                     },
-                    |_| Action::from(Message::QrLoginStepChanged(QrLoginStep::Success))
+                    |_| Action::from(Message::QrLoginStepChanged(QrLoginStep::Success)),
                 )
             }
             QrLoginStep::Success => {
@@ -1630,7 +1628,7 @@ mod tests {
         assert_eq!(app.is_qr_logging_in, true);
         assert_eq!(app.qr_login_step, QrLoginStep::Initiating);
         assert!(app.qr_rendezvous_url.is_some());
-        
+
         let url = app.qr_rendezvous_url.clone().unwrap();
         assert!(url.starts_with("https://matrix.to/#/login?rendezvous="));
 
