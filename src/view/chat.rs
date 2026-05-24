@@ -610,7 +610,7 @@ impl<'chat> Constellations {
             action_row = action_row.push(reply_tooltip);
 
             if is_me {
-                let edit_btn = button::icon(cosmic::widget::icon::from_name("document-edit-symbolic"))
+                let edit_btn = button::icon(cosmic::widget::icon::from_name("edit-symbolic"))
                     .on_press(Message::StartEdit(event.identifier().clone()));
                 let edit_tooltip = tooltip(
                     edit_btn,
