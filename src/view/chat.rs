@@ -1023,17 +1023,17 @@ impl<'chat> Constellations {
         let is_empty =
             self.composer_content.text().trim().is_empty() && self.composer_attachments.is_empty();
 
-        let mut send_btn = button::text(if self.editing_item.is_some() {
-            crate::fl!("save")
+        let mut send_btn = button::icon(if self.editing_item.is_some() {
+            Named::new("mail-send-symbolic")
         } else if self.active_thread_root.is_some() {
-            crate::fl!("reply")
+            Named::new("mail-reply-all-symbolic")
         } else {
-            crate::fl!("send")
+            Named::new("mail-send-symbolic")
         });
         if !is_empty {
             send_btn = send_btn
                 .on_press(Message::SendMessage)
-                .tooltip(crate::fl!("tooltip-send"));
+                .tooltip(crate::fl!("tooltip-send"))
         }
 
         let send_btn_widget: Element<'_, Message> = if is_empty {
@@ -1050,7 +1050,7 @@ impl<'chat> Constellations {
         let controls = Row::new()
             .spacing(10)
             .push(
-                button::text(crate::fl!("attach"))
+                button::icon(Named::new("mail-attachment-symbolic"))
                     .on_press(Message::AddAttachment)
                     .tooltip(crate::fl!("tooltip-attach")),
             )
@@ -1065,11 +1065,11 @@ impl<'chat> Constellations {
                     .tooltip(crate::fl!("tooltip-share-location")),
             )
             .push(if self.composer_is_preview {
-                button::text(crate::fl!("edit"))
+                button::icon(Named::new("edit-symbolic"))
                     .on_press(Message::TogglePreview)
                     .tooltip(crate::fl!("tooltip-edit"))
             } else {
-                button::text(crate::fl!("preview"))
+                button::icon(Named::new("edit-find-symbolic"))
                     .on_press(Message::TogglePreview)
                     .tooltip(crate::fl!("tooltip-preview"))
             })
