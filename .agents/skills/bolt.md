@@ -80,3 +80,11 @@
 ## 2024-05-24 - [Optimization] Avoid `.to_string()` for HashMap lookups in view loop
 **Learning:** `view/chat.rs` was calling `.to_string()` on `MediaSource::Plain`/`Encrypted` inner strings solely to pass an owned string into `media_cache.get()` and `.contains_key()` on every frame for media rendering. Because `String` implements `Borrow<str>`, `HashMap` accepts `&str`. Thus, allocating a new `String` object was entirely redundant and caused severe per-frame allocations.
 **Action:** When extracting data to query against a cache (like `HashMap<String, V>`) within hot `view()` loops, always utilize `.as_str()` or return a `&str` reference. Do not call `.to_string()` just to appease the compiler before attempting to pass a reference, as standard library map queries accept borrowed keys inherently.
+
+## 2024-10-24 - [Avoid O(N^2) timeline rendering traversal in `view_thread_summary`]
+**Learning:** `src/view/chat.rs` was calling `.count()` on the entire timeline for every single message when displaying its thread summary inside the view loop. This caused an `O(N^2)` rendering bottleneck when displaying a large number of messages.
+**Action:** Extract the summary computation out of the per-item loop. Precompute thread counts via a HashMap (`O(N)` pass) before iterating over items to generate elements, then pass the precomputed counts mapping down into `view_item` and `view_thread_summary` to retrieve the manual counts efficiently (`O(1)` per item).
+
+## 2024-10-24 - [Avoid parsing `UserId` on every render frame for call participants]
+**Learning:** `src/view/chat.rs` parsed `self.user_id` string into a `UserId` on every render frame for every room to check if the current user is active in a call.
+**Action:** Instead of parsing the string into a domain object (`UserId`) just to use standard collection inclusion checks (`.contains`), iterate over the collection elements and extract the string slice (`.as_str()`) for a direct `&str` comparison, avoiding per-frame parsing and allocations.

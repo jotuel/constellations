@@ -26,6 +26,18 @@ impl<'chat> Constellations {
         let filter_lower_fallback =
             (is_filtering && !filter_is_ascii).then(|| self.search_query.to_lowercase());
 
+        // ⚡ Bolt Optimization: Precompute thread counts in O(N) to avoid O(N^2) bottleneck
+        // inside view_thread_summary which previously iterated over the whole timeline per message.
+        let mut thread_counts: std::collections::HashMap<matrix_sdk::ruma::OwnedEventId, u32> =
+            std::collections::HashMap::new();
+        for item in &self.timeline_items {
+            if let Some(event) = item.item.as_event() {
+                if let Some(root_id) = event.content().thread_root() {
+                    *thread_counts.entry(root_id).or_insert(0) += 1;
+                }
+            }
+        }
+
         for item in &self.timeline_items {
             if let Some(event) = item.item.as_event() {
                 // View-side thread filtering
@@ -49,7 +61,7 @@ impl<'chat> Constellations {
                         continue;
                     }
                 }
-                timeline = timeline.push(self.view_item(item));
+                timeline = timeline.push(self.view_item(item, &thread_counts));
             } else if let Some(matrix::VirtualTimelineItem::DateDivider(date)) =
                 item.item.as_virtual()
             {
@@ -443,6 +455,18 @@ impl<'chat> Constellations {
         // In a real application, you might want to find and show the root message first.
         // For simplicity, we assume it's part of the threaded timeline from the SDK.
 
+        // ⚡ Bolt Optimization: Reuse precomputed thread_counts from main timeline
+        // to maintain O(N) rendering for the thread summary fallback checks.
+        let mut thread_counts: std::collections::HashMap<matrix_sdk::ruma::OwnedEventId, u32> =
+            std::collections::HashMap::new();
+        for item in &self.timeline_items {
+            if let Some(event) = item.item.as_event() {
+                if let Some(root_id) = event.content().thread_root() {
+                    *thread_counts.entry(root_id.clone()).or_insert(0) += 1;
+                }
+            }
+        }
+
         for item in &self.threaded_timeline_items {
             if let Some(event) = item.item.as_event() {
                 if is_filtering {
@@ -459,7 +483,7 @@ impl<'chat> Constellations {
                         continue;
                     }
                 }
-                timeline_col = timeline_col.push(self.view_item(item));
+                timeline_col = timeline_col.push(self.view_item(item, &thread_counts));
             }
         }
 
@@ -491,7 +515,11 @@ impl<'chat> Constellations {
         .into()
     }
 
-    fn view_item<'a>(&'a self, item: &'a crate::ConstellationsItem) -> Element<'a, Message> {
+    fn view_item<'a>(
+        &'a self,
+        item: &'a crate::ConstellationsItem,
+        thread_counts: &std::collections::HashMap<matrix_sdk::ruma::OwnedEventId, u32>,
+    ) -> Element<'a, Message> {
         if let Some(event) = item.item.as_event()
             && let Some(message) = event.content().as_message()
         {
@@ -644,7 +672,7 @@ impl<'chat> Constellations {
                     bubble_col.push(self.view_emoji_picker(Some(event.identifier().clone())));
             }
 
-            action_row = action_row.push(self.view_thread_summary(event));
+            action_row = action_row.push(self.view_thread_summary(event, thread_counts));
             bubble_col = bubble_col.push(action_row);
 
             let bubble = container(bubble_col)
@@ -672,6 +700,7 @@ impl<'chat> Constellations {
     fn view_thread_summary(
         &'chat self,
         event: &matrix_sdk_ui::timeline::EventTimelineItem,
+        thread_counts: &std::collections::HashMap<matrix_sdk::ruma::OwnedEventId, u32>,
     ) -> cosmic::widget::Container<'chat, Message, cosmic::Theme> {
         let has_thread_root = event.content().thread_root().is_some();
 
@@ -683,17 +712,7 @@ impl<'chat> Constellations {
 
         // Manual count if summary is missing or incomplete (due to view-side filtering)
         if let Some(event_id) = event.event_id() {
-            let manual_count = self
-                .timeline_items
-                .iter()
-                .filter(|i| {
-                    i.item
-                        .as_event()
-                        .and_then(|e| e.content().thread_root())
-                        .map(|r| r == event_id)
-                        .unwrap_or(false)
-                })
-                .count() as u32;
+            let manual_count = thread_counts.get(event_id).copied().unwrap_or(0);
             if manual_count > num_replies {
                 num_replies = manual_count;
             }
@@ -840,14 +859,12 @@ impl<'chat> Constellations {
                 .find(|r| &r.id == room_id)
                 .and_then(|r| r.name.as_deref())
                 .unwrap_or("Room");
+
+            // ⚡ Bolt Optimization: Avoid parsing UserId per frame
             let is_in_call = self.user_id.as_ref().is_some_and(|uid| {
-                if let Ok(user_id) = matrix_sdk::ruma::UserId::parse(uid) {
-                    self.call_participants
-                        .get(room_id)
-                        .is_some_and(|p| p.contains(&user_id))
-                } else {
-                    false
-                }
+                self.call_participants
+                    .get(room_id)
+                    .is_some_and(|p| p.iter().any(|participant| participant.as_str() == uid))
             });
 
             let call_participants = self.call_participants.get(room_id);
