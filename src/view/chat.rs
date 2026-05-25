@@ -403,18 +403,13 @@ impl<'chat> Constellations {
         // avoiding a `.to_vec()` or `.to_string()` allocation bottleneck on every single frame.
         if self.app_settings.render_markdown {
             bubble_col = bubble_col.push(
-                crate::rich_text::RichSelectableText::new(markdown, |url| {
-                    Message::OpenUrl(url)
-                })
-                .into_element(),
+                crate::rich_text::RichSelectableText::new(markdown, |url| Message::OpenUrl(url))
+                    .into_element(),
             );
         } else {
             bubble_col = bubble_col.push(
-                crate::rich_text::RichSelectableText::new(
-                    plain_text,
-                    Message::OpenUrl,
-                )
-                .into_element(),
+                crate::rich_text::RichSelectableText::new(plain_text, Message::OpenUrl)
+                    .into_element(),
             );
         }
         bubble_col
@@ -451,9 +446,6 @@ impl<'chat> Constellations {
             )))
             .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
             .push(button::text(crate::fl!("close-thread")).on_press(Message::CloseThread));
-
-        // In a real application, you might want to find and show the root message first.
-        // For simplicity, we assume it's part of the threaded timeline from the SDK.
 
         // ⚡ Bolt Optimization: Reuse precomputed thread_counts from main timeline
         // to maintain O(N) rendering for the thread summary fallback checks.
@@ -596,8 +588,11 @@ impl<'chat> Constellations {
                     bubble_col = bubble_col.push(self.view_message_file(file));
                 }
                 _ => {
-                    bubble_col =
-                        bubble_col.push(self.view_message_text(message.msgtype(), &item.markdown, &item.plain_text));
+                    bubble_col = bubble_col.push(self.view_message_text(
+                        message.msgtype(),
+                        &item.markdown,
+                        &item.plain_text,
+                    ));
                 }
             }
 
