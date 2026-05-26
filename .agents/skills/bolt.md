@@ -88,3 +88,11 @@
 ## 2024-10-24 - [Avoid parsing `UserId` on every render frame for call participants]
 **Learning:** `src/view/chat.rs` parsed `self.user_id` string into a `UserId` on every render frame for every room to check if the current user is active in a call.
 **Action:** Instead of parsing the string into a domain object (`UserId`) just to use standard collection inclusion checks (`.contains`), iterate over the collection elements and extract the string slice (`.as_str()`) for a direct `&str` comparison, avoiding per-frame parsing and allocations.
+
+## 2024-05-25 - [Safe String Truncation in UI]
+**Learning:** When truncating large strings for snippets in UI (e.g. `snippet.len() > 100`), using `snippet.truncate(97)` blindly on byte length can lead to instant panics if the 97th byte splits a multi-byte UTF-8 character.
+**Action:** Use `char_indices().nth(...)` to safely locate the valid byte index of the desired character count before slicing, e.g. `if let Some((idx, _)) = char_indices.nth(97) { s.push_str(&body[..idx]); }`.
+
+## 2024-05-25 - [Optimize Cow Allocations in View loops]
+**Learning:** `src/view/chat.rs` used `Cow` to theoretically avoid snippet allocations, but negated it by calling `.into_owned()` unconditionally before passing to `text::body(...)`. This resulted in `String` allocations every frame anyway.
+**Action:** In `libcosmic` or `iced` UI code, text widgets like `text::body()` directly accept `impl Into<Cow<'_, str>>`. To avoid per-frame allocations, pass the `Cow` straight into the widget (e.g., `text::body(snippet)`) or allow it to be implicitly converted, ensuring `String` is only allocated when truncation or formatting genuinely requires it.

@@ -877,7 +877,7 @@ impl<'chat> Constellations {
                             .spacing(5)
                             .align_y(Alignment::Center)
                             .push(cosmic::widget::icon::from_name("camera-video-symbolic").size(16))
-                            .push(text::body(participant_count.to_string()).size(12)),
+                            .push(text::body(format!("{participant_count}")).size(12)),
                     )
                     .padding([2, 5]),
                 );
@@ -937,32 +937,52 @@ impl<'chat> Constellations {
         }
 
         if let Some(replying_to) = &self.replying_to {
-            let mut snippet = replying_to
+            let body = replying_to
                 .item
                 .as_event()
                 .and_then(|ev| ev.content().as_message())
-                .map(|msg| msg.body().to_string())
+                .map(|msg| msg.body())
                 .unwrap_or_default();
-            if snippet.len() > 100 {
-                snippet.truncate(97);
-                snippet.push_str("...");
-            }
+
+            let mut char_indices = body.char_indices();
+            let snippet = if let Some((idx_97, _)) = char_indices.nth(97) {
+                if char_indices.nth(2).is_some() {
+                    let mut s = String::with_capacity(100);
+                    s.push_str(&body[..idx_97]);
+                    s.push_str("...");
+                    std::borrow::Cow::Owned(s)
+                } else {
+                    std::borrow::Cow::Borrowed(body)
+                }
+            } else {
+                std::borrow::Cow::Borrowed(body)
+            };
 
             let reply_bar = view_reply_bar(snippet, replying_to);
             content = content.push(container(reply_bar).padding(10));
         }
 
         if let Some(editing_item) = &self.editing_item {
-            let mut snippet = editing_item
+            let body = editing_item
                 .item
                 .as_event()
                 .and_then(|ev| ev.content().as_message())
-                .map(|msg| msg.body().to_string())
+                .map(|msg| msg.body())
                 .unwrap_or_default();
-            if snippet.len() > 100 {
-                snippet.truncate(97);
-                snippet.push_str("...");
-            }
+
+            let mut char_indices = body.char_indices();
+            let snippet = if let Some((idx_97, _)) = char_indices.nth(97) {
+                if char_indices.nth(2).is_some() {
+                    let mut s = String::with_capacity(100);
+                    s.push_str(&body[..idx_97]);
+                    s.push_str("...");
+                    std::borrow::Cow::Owned(s)
+                } else {
+                    std::borrow::Cow::Borrowed(body)
+                }
+            } else {
+                std::borrow::Cow::Borrowed(body)
+            };
 
             let edit_bar = Row::new()
                 .spacing(10)
@@ -1084,10 +1104,10 @@ impl<'chat> Constellations {
 }
 
 #[rust_analyzer::skip]
-fn view_reply_bar(
-    snippet: String,
-    replying_to: &crate::ConstellationsItem,
-) -> Row<'_, Message, Theme> {
+fn view_reply_bar<'a>(
+    snippet: impl Into<std::borrow::Cow<'a, str>> + 'a,
+    replying_to: &'a crate::ConstellationsItem,
+) -> Row<'a, Message, Theme> {
     Row::new()
         .spacing(10)
         .align_y(Alignment::Center)
