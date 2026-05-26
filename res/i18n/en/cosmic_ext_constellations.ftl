@@ -40,6 +40,7 @@ select-room-to-start = Select a room from the sidebar to start chatting.
 load-more = Load More
 loading = Loading...
 close-thread = Close Thread
+close-picker = Close Picker
 thread = Thread
 view-thread = View Thread
 reaction = 💗

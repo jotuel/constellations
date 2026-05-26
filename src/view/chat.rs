@@ -146,11 +146,17 @@ impl<'chat> Constellations {
                 Message::ToggleComposerEmojiPicker
             });
 
+        let close_btn_tooltip = tooltip(
+            close_btn,
+            text::body(crate::fl!("close-picker")),
+            Position::Bottom,
+        );
+
         let top_row = Row::new()
             .spacing(5)
             .align_y(Alignment::Center)
             .push(search_input)
-            .push(close_btn);
+            .push(close_btn_tooltip);
 
         let mut picker_col = Column::new().spacing(8);
         picker_col = picker_col.push(top_row);
