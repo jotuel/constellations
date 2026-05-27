@@ -14,7 +14,7 @@
 
 [x] When you have a Room open and you switch Space its name changes from actual to "Room"
 
-[ ] New messages listed in Room switcher should be stopped at '\n'
+[x] New messages listed in Room switcher should be stopped at '\n'
 
 # ***General***
 
