@@ -1830,7 +1830,7 @@ impl State {
 
     fn view_profile<'a>(&'a self) -> Element<'a, Message> {
         if self.is_loading || self.is_loading_avatar {
-            return text::body("Loading profile...").into();
+            return text::body(crate::fl!("loading-profile")).into();
         }
 
         let mut avatar_col = Column::new().spacing(10).align_x(Alignment::Center);
@@ -1840,7 +1840,7 @@ impl State {
                 avatar_col.push(cosmic::widget::image(handle.clone()).width(128).height(128));
         } else {
             avatar_col = avatar_col.push(
-                cosmic::widget::container(text::body("No Avatar").size(16))
+                cosmic::widget::container(text::body(crate::fl!("no-avatar")).size(16))
                     .width(128)
                     .height(128)
                     .align_x(Alignment::Center)
@@ -1872,7 +1872,12 @@ impl State {
         }
 
         let save_widget: Element<'_, Message> = if !has_changes && !self.is_saving {
-            tooltip(save_btn, text::body("Make changes to save"), Position::Top).into()
+            tooltip(
+                save_btn,
+                text::body(crate::fl!("make-changes-to-save")),
+                Position::Top,
+            )
+            .into()
         } else {
             save_btn.into()
         };
@@ -1932,14 +1937,14 @@ impl State {
             if is_empty {
                 tooltip(
                     pw_btn,
-                    text::body("Fill in all fields to change password"),
+                    text::body(crate::fl!("fill-all-fields-to-change-password")),
                     Position::Top,
                 )
                 .into()
             } else if !passwords_match {
                 tooltip(
                     pw_btn,
-                    text::body("New passwords do not match"),
+                    text::body(crate::fl!("new-passwords-do-not-match")),
                     Position::Top,
                 )
                 .into()
@@ -1966,7 +1971,7 @@ impl State {
         let mut section = settings::section().title("Devices & Sessions");
 
         if self.is_loading_devices {
-            section = section.add(text::body("Loading devices..."));
+            section = section.add(text::body(crate::fl!("loading-devices")));
         } else {
             for device in &self.devices {
                 let name = device
@@ -1989,15 +1994,18 @@ impl State {
                 }
 
                 let mut del_btn = button::destructive(if device.is_deleting {
-                    "Deleting..."
+                    crate::fl!("deleting")
                 } else {
-                    "Delete"
+                    crate::fl!("delete")
                 });
                 if !device.is_deleting {
                     del_btn = del_btn.on_press(Message::DeleteDevice(device.device_id.clone()));
                 }
-                action_row =
-                    action_row.push(tooltip(del_btn, text::body("Delete Device"), Position::Top));
+                action_row = action_row.push(tooltip(
+                    del_btn,
+                    text::body(crate::fl!("delete-device")),
+                    Position::Top,
+                ));
 
                 let mut title_row = Row::new().spacing(10).align_y(Alignment::Center);
                 if device.is_renaming {

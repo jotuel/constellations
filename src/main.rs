@@ -1923,9 +1923,12 @@ impl Application for Constellations {
                 .align_x(Alignment::Center)
                 .align_y(Alignment::Center);
 
-            let close_button = container(
-                cosmic::widget::tooltip(button::icon(cosmic::widget::icon::from_name("window-close-symbolic")).on_press(Message::CloseImage), text::body(crate::fl!("close-image")), cosmic::widget::tooltip::Position::Bottom)
-            )
+            let close_button = container(cosmic::widget::tooltip(
+                button::icon(cosmic::widget::icon::from_name("window-close-symbolic"))
+                    .on_press(Message::CloseImage),
+                text::body(crate::fl!("close-image")),
+                cosmic::widget::tooltip::Position::Bottom,
+            ))
             .width(cosmic::iced::Length::Fill)
             .height(cosmic::iced::Length::Fill)
             .padding(10)

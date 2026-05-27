@@ -40,6 +40,7 @@ select-room-to-start = Select a room from the sidebar to start chatting.
 load-more = Load More
 loading = Loading...
 close-thread = Close Thread
+close-picker = Close Picker
 thread = Thread
 view-thread = View Thread
 reaction = 💗
@@ -287,3 +288,8 @@ login-qr-success = Successfully authenticated! Logging you in...
 login-qr-simulate = Simulate Mobile Scan
 login-qr-cancel = Cancel QR Login
 close-image = Close Image
+
+fill-all-fields-to-change-password = Fill in all fields to change password
+new-passwords-do-not-match = New passwords do not match
+delete-device = Delete Device
+deleting = Deleting...

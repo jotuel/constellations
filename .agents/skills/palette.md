@@ -87,3 +87,6 @@
 **Learning:** Found several English strings hardcoded directly into the user settings and chat UI. Hardcoding UI strings negatively impacts accessibility and user experience for international users relying on translated interfaces or screen readers.
 **Action:** When adding form labels, status messages, and other UI strings, always use `crate::fl!("key-name")` and ensure the keys exist in `res/i18n/en/cosmic_ext_constellations.ftl` to properly support full localization.
 ## 2026-05-25 - Tooltip for Icon-Only Close Button\n**Learning:** Icon-only close buttons lacking tooltips can fail to provide necessary context for screen readers and certain users, hurting accessibility.\n**Action:** When adding or modifying a standalone, icon-only button like `button::icon`, always wrap it in a `cosmic::widget::tooltip` with a descriptive `text::body` using localized string keys to ensure accessibility and clarity.
+## 2026-05-26 - Icon Button Accessibility
+**Learning:** Icon-only buttons without tooltips are a common accessibility issue. Wrapping them in a `cosmic::widget::tooltip` with localized text significantly improves the experience for both mouse and screen reader users.
+**Action:** When adding or reviewing icon-only buttons in `libcosmic` interfaces, ensure they are always wrapped in a tooltip using `cosmic::widget::tooltip` and a corresponding translation key.
