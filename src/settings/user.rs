@@ -2061,6 +2061,28 @@ impl State {
     }
 
     fn view_deactivate_account<'a>(&'a self) -> Element<'a, Message> {
+        let mut deactivate_btn = button::destructive(if self.is_deactivating {
+            crate::fl!("deactivating")
+        } else {
+            crate::fl!("deactivate-account")
+        });
+
+        let is_pass_empty = self.deactivate_password.is_empty();
+        if !is_pass_empty {
+            deactivate_btn = deactivate_btn.on_press(Message::DeactivateAccount);
+        }
+
+        let deactivate_widget: Element<'_, Message> = if is_pass_empty {
+            tooltip(
+                deactivate_btn,
+                text::body(crate::fl!("enter-password-to-deactivate")),
+                Position::Top,
+            )
+            .into()
+        } else {
+            deactivate_btn.into()
+        };
+
         settings::section()
             .title(crate::fl!("deactivate-account"))
             .add(text::body(crate::fl!("deactivate-warning")))
@@ -2072,12 +2094,7 @@ impl State {
             ))
             .add(settings::item(
                 crate::fl!("deactivate"),
-                button::destructive(if self.is_deactivating {
-                    crate::fl!("deactivating")
-                } else {
-                    crate::fl!("deactivate-account")
-                })
-                .on_press(Message::DeactivateAccount),
+                deactivate_widget,
             ))
             .into()
     }
@@ -2162,6 +2179,22 @@ impl State {
                 ));
             }
 
+            let mut email_btn = button::text(crate::fl!("send-verification"));
+            let is_email_empty = self.new_3pid_email.trim().is_empty();
+            if !is_email_empty {
+                email_btn = email_btn.on_press(Message::Request3PIDEmailToken);
+            }
+            let email_widget: Element<'_, Message> = if is_email_empty {
+                tooltip(
+                    email_btn,
+                    text::body(crate::fl!("enter-email-to-link")),
+                    Position::Top,
+                )
+                .into()
+            } else {
+                email_btn.into()
+            };
+
             section = section.add(settings::item(
                 crate::fl!("link-email"),
                 Row::new()
@@ -2170,10 +2203,7 @@ impl State {
                         text_input("email@example.com", &self.new_3pid_email)
                             .on_input(Message::New3PIDEmailChanged),
                     )
-                    .push(
-                        button::text(crate::fl!("send-verification"))
-                            .on_press(Message::Request3PIDEmailToken),
-                    )
+                    .push(email_widget)
                     .wrap(),
             ));
 
@@ -2190,11 +2220,43 @@ impl State {
                         .on_input(Message::Add3PIDPasswordChanged),
                 ));
 
+                let mut complete_btn = button::suggested(crate::fl!("add-account"));
+                let is_pass_empty = self.add_3pid_password.is_empty();
+                if !is_pass_empty {
+                    complete_btn = complete_btn.on_press(Message::Add3PID);
+                }
+                let complete_widget: Element<'_, Message> = if is_pass_empty {
+                    tooltip(
+                        complete_btn,
+                        text::body(crate::fl!("enter-password-to-confirm")),
+                        Position::Top,
+                    )
+                    .into()
+                } else {
+                    complete_btn.into()
+                };
+
                 section = section.add(settings::item(
                     crate::fl!("complete"),
-                    button::suggested(crate::fl!("add-account")).on_press(Message::Add3PID),
+                    complete_widget,
                 ));
             }
+
+            let mut phone_btn = button::text(crate::fl!("send-sms"));
+            let is_phone_empty = self.new_3pid_msisdn.trim().is_empty();
+            if !is_phone_empty {
+                phone_btn = phone_btn.on_press(Message::Request3PIDMsisdnToken);
+            }
+            let phone_widget: Element<'_, Message> = if is_phone_empty {
+                tooltip(
+                    phone_btn,
+                    text::body(crate::fl!("enter-phone-to-link")),
+                    Position::Top,
+                )
+                .into()
+            } else {
+                phone_btn.into()
+            };
 
             section = section.add(settings::item(
                 crate::fl!("link-phone"),
@@ -2209,10 +2271,7 @@ impl State {
                         text_input("Phone Number", &self.new_3pid_msisdn)
                             .on_input(Message::New3PIDMsisdnChanged),
                     )
-                    .push(
-                        button::text(crate::fl!("send-sms"))
-                            .on_press(Message::Request3PIDMsisdnToken),
-                    )
+                    .push(phone_widget)
                     .wrap(),
             ));
         }
@@ -2238,6 +2297,23 @@ impl State {
                 }
             }
 
+            let mut ignore_btn = button::destructive(crate::fl!("ignore"));
+            let is_user_empty = self.new_ignore_user_id.trim().is_empty();
+            if !is_user_empty {
+                ignore_btn = ignore_btn.on_press(Message::IgnoreUser);
+            }
+
+            let ignore_widget: Element<'_, Message> = if is_user_empty {
+                tooltip(
+                    ignore_btn,
+                    text::body(crate::fl!("enter-user-id-to-ignore")),
+                    Position::Top,
+                )
+                .into()
+            } else {
+                ignore_btn.into()
+            };
+
             section = section.add(settings::item(
                 crate::fl!("ignore"),
                 Row::new()
@@ -2247,7 +2323,7 @@ impl State {
                             .on_input(Message::NewIgnoreUserIdChanged)
                             .on_submit(|_| Message::IgnoreUser),
                     )
-                    .push(button::destructive(crate::fl!("ignore")).on_press(Message::IgnoreUser))
+                    .push(ignore_widget)
                     .wrap(),
             ));
         }

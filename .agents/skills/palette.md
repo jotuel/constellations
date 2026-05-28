@@ -90,3 +90,6 @@
 ## 2026-05-26 - Icon Button Accessibility
 **Learning:** Icon-only buttons without tooltips are a common accessibility issue. Wrapping them in a `cosmic::widget::tooltip` with localized text significantly improves the experience for both mouse and screen reader users.
 **Action:** When adding or reviewing icon-only buttons in `libcosmic` interfaces, ensure they are always wrapped in a tooltip using `cosmic::widget::tooltip` and a corresponding translation key.
+## 2026-06-25 - Tooltips for Disabled Action Buttons in User Settings
+**Learning:** Found several primary action buttons (like linking an email/phone, ignoring a user, or deactivating an account) in User Settings that were left enabled even when the required input fields were empty. This allows for phantom submissions and user confusion.
+**Action:** Always conditionally disable primary action buttons when the required input fields are empty or consist only of whitespace. Wrap the conditionally disabled buttons in a `cosmic::widget::tooltip` with an explanatory message (e.g., "Enter a user ID to ignore") to provide context.

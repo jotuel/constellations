@@ -204,6 +204,11 @@ accept-verification = Accept Verification
 loading-profile = Loading profile...
 loading-devices = Loading devices...
 loading-ignored-users = Loading ignored users...
+enter-email-to-link = Enter an email address to link
+enter-phone-to-link = Enter a phone number to link
+enter-password-to-confirm = Enter your password to confirm
+enter-password-to-deactivate = Enter your password to deactivate account
+enter-user-id-to-ignore = Enter a user ID to ignore
 
 # Space Settings
 space-profile = Space Profile
