@@ -2,6 +2,7 @@ use cosmic::{Action, Task};
 
 use crate::{Constellations, Message};
 
+pub mod app;
 pub mod chat;
 pub mod error;
 pub mod login;

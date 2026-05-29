@@ -1,8 +1,11 @@
 use crate::matrix::TimelineItem;
+use crate::settings;
 use crate::{
     ApplyVectorDiffExt, Constellations, ConstellationsItem, MediaSource, Message, OwnedRoomId,
-    QrLoginStep, Url, matrix, redact_url,
+    QrLoginStep, SettingsPanel, THREADED_TIMELINE_ID, TIMELINE_ID, Url, matrix, redact_url,
 };
+use crate::preview::parse_markdown;
+use cosmic::iced::widget::scrollable;
 use cosmic::{Action, Application, Task};
 use futures::FutureExt;
 use futures::stream::StreamExt;
@@ -1287,6 +1290,611 @@ impl Constellations {
                 self.handle_login_finished(Ok("@simulated_user:matrix.org".to_string()))
             }
             _ => Task::none(),
+        }
+    }
+
+    pub fn handle_update(&mut self, message: Message) -> Task<Action<Message>> {
+        match message {
+            Message::EngineReady(res) => self.handle_engine_ready(res),
+            Message::UserReady(user_id, sync_res) => self.handle_user_ready(user_id, sync_res),
+
+            Message::Matrix(event) => self.handle_matrix_event(event),
+            Message::MatrixThreadDiff(root_id, diff) => {
+                self.handle_timeline_diff(diff, true, Some(root_id))
+            }
+            Message::MatrixThreadReset(root_id) => {
+                if self.active_thread_root.as_ref() == Some(&root_id) {
+                    self.threaded_timeline_items.clear();
+                }
+                Task::none()
+            }
+            Message::OpenThread(root_id) => {
+                self.active_thread_root = Some(root_id);
+                self.threaded_timeline_items.clear();
+                self.last_threaded_timeline_offset = 0.0;
+                Task::batch(vec![
+                    self.handle_load_more(true),
+                    scrollable::snap_to(
+                        THREADED_TIMELINE_ID.clone(),
+                        scrollable::RelativeOffset::END.into(),
+                    ),
+                ])
+            }
+            Message::StartReply(item_id) => {
+                let mut found_item = None;
+                for item in self
+                    .timeline_items
+                    .iter()
+                    .chain(self.threaded_timeline_items.iter())
+                {
+                    if let Some(event) = item.item.as_event()
+                        && event.identifier() == item_id
+                    {
+                        found_item = Some(item.clone());
+                        break;
+                    }
+                }
+                self.replying_to = found_item;
+                Task::none()
+            }
+            Message::CancelReply => {
+                self.replying_to = None;
+                Task::none()
+            }
+            Message::CloseThread => {
+                self.active_thread_root = None;
+                self.threaded_timeline_items.clear();
+                Task::none()
+            }
+            Message::LoadMoreFinished(res) => {
+                self.is_loading_more = false;
+                if let Err(e) = res {
+                    self.set_error(format!("Failed to load more messages: {}", e));
+                }
+                Task::none()
+            }
+            Message::TimelineScrolled(viewport, is_thread) => {
+                let current_offset = viewport.absolute_offset().y;
+                let last_offset = if is_thread {
+                    self.last_threaded_timeline_offset
+                } else {
+                    self.last_timeline_offset
+                };
+
+                let should_load = current_offset < 100.0 && current_offset < last_offset;
+
+                if is_thread {
+                    self.last_threaded_timeline_offset = current_offset;
+                } else {
+                    self.last_timeline_offset = current_offset;
+                }
+
+                if should_load {
+                    self.handle_load_more(is_thread)
+                } else {
+                    Task::none()
+                }
+            }
+            Message::RoomSelected(room_id) => {
+                if let Some(room) = self.room_list.iter().find(|r| r.id == room_id)
+                    && let Some(name) = &room.name {
+                        self.room_name_cache.insert(room_id.clone(), name.clone());
+                    }
+                self.selected_room = Some(room_id.clone());
+                self.timeline_items.clear();
+                self.last_timeline_offset = 0.0;
+                Task::batch(vec![
+                    self.update_title(),
+                    self.handle_load_more(false),
+                    scrollable::snap_to(
+                        TIMELINE_ID.clone(),
+                        scrollable::RelativeOffset::END.into(),
+                    ),
+                ])
+            }
+            Message::ComposerChanged(text) => {
+                self.composer_preview_events = parse_markdown(&text, false);
+                self.composer_content = cosmic::widget::text_editor::Content::with_text(&text);
+
+                if self.app_settings.send_typing_notifications
+                    && let Some(matrix) = &self.matrix
+                    && let Some(room_id) = &self.selected_room
+                {
+                    let matrix = matrix.clone();
+                    let room_id = room_id.clone();
+                    let typing = !self.composer_content.is_empty();
+                    return Task::perform(
+                        async move {
+                            let _ = matrix.typing_notice(&room_id, typing).await;
+                        },
+                        |_| Action::from(Message::NoOp),
+                    );
+                }
+
+                Task::none()
+            }
+            Message::ComposerAction(action) => {
+                self.composer_content.perform(action);
+                let text = self.composer_content.text();
+                self.composer_preview_events = parse_markdown(&text, false);
+
+                if self.app_settings.send_typing_notifications
+                    && let Some(matrix) = &self.matrix
+                    && let Some(room_id) = &self.selected_room
+                {
+                    let matrix = matrix.clone();
+                    let room_id = room_id.clone();
+                    let typing = !self.composer_content.is_empty();
+                    return Task::perform(
+                        async move {
+                            let _ = matrix.typing_notice(&room_id, typing).await;
+                        },
+                        |_| Action::from(Message::NoOp),
+                    );
+                }
+
+                Task::none()
+            }
+            Message::TogglePreview => {
+                self.composer_is_preview = !self.composer_is_preview;
+                Task::none()
+            }
+            Message::SendMessage => self.handle_send_message(),
+            Message::ShareLocation => self.handle_share_location(),
+            Message::LocationRetrieved(res) => self.handle_location_retrieved(res),
+            Message::MessageSent(res) => {
+                match res {
+                    Ok(_) => {
+                        self.composer_content = cosmic::widget::text_editor::Content::new();
+                        self.composer_preview_events.clear();
+                        self.composer_is_preview = false;
+                        self.replying_to = None;
+                        self.editing_item = None;
+                    }
+                    Err(e) => {
+                        self.set_error(format!("Failed to send message: {}", e));
+                    }
+                }
+                Task::none()
+            }
+            Message::MessageEdited(res) => {
+                match res {
+                    Ok(_) => {
+                        self.composer_content = cosmic::widget::text_editor::Content::new();
+                        self.composer_preview_events.clear();
+                        self.composer_is_preview = false;
+                        self.editing_item = None;
+                    }
+                    Err(e) => {
+                        self.set_error(format!("Failed to edit message: {}", e));
+                    }
+                }
+                Task::none()
+            }
+            Message::MessageRedacted(res) => {
+                if let Err(e) = res {
+                    self.set_error(format!("Failed to redact message: {}", e));
+                }
+                Task::none()
+            }
+            Message::StartEdit(item_id) => {
+                let mut found_item = None;
+                for item in self
+                    .timeline_items
+                    .iter()
+                    .chain(self.threaded_timeline_items.iter())
+                {
+                    if let Some(event) = item.item.as_event()
+                        && event.identifier() == item_id
+                    {
+                        found_item = Some(item.clone());
+                        break;
+                    }
+                }
+                if let Some(item) = found_item
+                    && let Some(event) = item.item.as_event()
+                    && let Some(msg) = event.content().as_message()
+                {
+                    self.composer_content =
+                        cosmic::widget::text_editor::Content::with_text(msg.body());
+                    self.composer_preview_events =
+                        parse_markdown(&self.composer_content.text(), false);
+                    self.editing_item = Some(item);
+                    self.replying_to = None;
+                }
+                Task::none()
+            }
+            Message::CancelEdit => {
+                self.editing_item = None;
+                self.composer_content = cosmic::widget::text_editor::Content::new();
+                self.composer_preview_events.clear();
+                Task::none()
+            }
+            Message::RedactMessage(item_id) => self.handle_redact_message(item_id),
+            Message::AddAttachment => self.handle_add_attachment(),
+            Message::AttachmentsSelected(paths) => {
+                for path in paths {
+                    if !self.composer_attachments.contains(&path) {
+                        self.composer_attachments.push(path);
+                    }
+                }
+                Task::none()
+            }
+            Message::RemoveAttachment(index) => {
+                if index < self.composer_attachments.len() {
+                    self.composer_attachments.remove(index);
+                }
+                Task::none()
+            }
+            Message::AttachmentSent(path, res) => {
+                match res {
+                    Ok(_) => {
+                        // Successfully sent, could remove from ui if we were tracking it per-message
+                    }
+                    Err(e) => {
+                        self.set_error(format!(
+                            "Failed to send attachment {}: {}",
+                            path.display(),
+                            e
+                        ));
+                    }
+                }
+                Task::none()
+            }
+            Message::OpenReactionPicker(item_id) => {
+                self.active_reaction_picker = item_id;
+                if self.active_reaction_picker.is_some() {
+                    self.is_composer_emoji_picker_active = false;
+                }
+                self.emoji_search_query.clear();
+                self.selected_emoji_group = Some(emojis::Group::SmileysAndEmotion);
+                Task::none()
+            }
+            Message::EmojiSearchQueryChanged(query) => {
+                self.emoji_search_query = query;
+                Task::none()
+            }
+            Message::SelectEmojiGroup(group) => {
+                self.selected_emoji_group = group;
+                Task::none()
+            }
+            Message::ToggleComposerEmojiPicker => {
+                self.is_composer_emoji_picker_active = !self.is_composer_emoji_picker_active;
+                if self.is_composer_emoji_picker_active {
+                    self.emoji_search_query.clear();
+                    self.selected_emoji_group = Some(emojis::Group::SmileysAndEmotion);
+                    self.active_reaction_picker = None;
+                }
+                Task::none()
+            }
+            Message::EmojiPickerSelected(emoji) => {
+                if let Some(item_id) = self.active_reaction_picker.clone() {
+                    self.handle_update(Message::ToggleReaction(item_id, emoji.to_string()))
+                } else {
+                    self.handle_update(Message::InsertEmoji(emoji.to_string()))
+                }
+            }
+            Message::InsertEmoji(emoji) => {
+                let mut text = self.composer_content.text();
+                text.push_str(&emoji);
+                self.composer_content = cosmic::widget::text_editor::Content::with_text(&text);
+                self.composer_preview_events = parse_markdown(&text, false);
+
+                if self.app_settings.send_typing_notifications
+                    && let Some(matrix) = &self.matrix
+                    && let Some(room_id) = &self.selected_room
+                {
+                    let matrix = matrix.clone();
+                    let room_id = room_id.clone();
+                    let typing = !self.composer_content.is_empty();
+                    return Task::perform(
+                        async move {
+                            let _ = matrix.typing_notice(&room_id, typing).await;
+                        },
+                        |_| Action::from(Message::NoOp),
+                    );
+                }
+
+                Task::none()
+            }
+            Message::ToggleReaction(item_id, key) => {
+                self.active_reaction_picker = None;
+                if let (Some(matrix), Some(room_id)) = (&self.matrix, &self.selected_room) {
+                    let matrix_clone = matrix.clone();
+                    let room_id_clone = room_id.clone();
+                    return Task::perform(
+                        async move {
+                            matrix_clone
+                                .toggle_reaction(&room_id_clone, &item_id, &key)
+                                .await
+                                .map_err(|e| e.to_string())
+                        },
+                        |res| Message::ReactionToggled(res).into(),
+                    );
+                }
+                Task::none()
+            }
+            Message::ReactionToggled(res) => {
+                if let Err(e) = res {
+                    self.set_error(format!("Failed to toggle reaction: {}", e));
+                }
+                Task::none()
+            }
+            Message::FetchMedia(source) => self.handle_fetch_media(source),
+            Message::MediaFetched(mxc_url, res) => self.handle_media_fetched(mxc_url, res),
+            Message::MediaFetchedBatch(batch) => self.handle_media_fetched_batch(batch),
+            Message::DismissError => {
+                self.error = None;
+                if matches!(
+                    self.sync_status,
+                    matrix::SyncStatus::Error(_) | matrix::SyncStatus::MissingSlidingSyncSupport
+                ) {
+                    self.sync_status = matrix::SyncStatus::Disconnected;
+                }
+                Task::none()
+            }
+            Message::ToggleCreateRoom => {
+                self.creating_room = !self.creating_room;
+                self.creating_space = false;
+                self.new_room_name.clear();
+                Task::none()
+            }
+            Message::ToggleCreateSpace => {
+                self.creating_space = !self.creating_space;
+                self.creating_room = false;
+                self.new_room_name.clear();
+                Task::none()
+            }
+            Message::NewRoomNameChanged(name) => {
+                self.new_room_name = name;
+                Task::none()
+            }
+            Message::CreateRoom(name) => self.handle_create_room(name),
+            Message::RoomCreated(res) => {
+                match res {
+                    Ok(room_id) => {
+                        self.creating_room = false;
+                        self.new_room_name.clear();
+                        self.selected_room = Some(room_id.as_str().into());
+                    }
+                    Err(e) => {
+                        self.set_error(format!("Failed to create room: {}", e));
+                    }
+                }
+                Task::none()
+            }
+            Message::CreateSpace(name) => self.handle_create_space(name),
+            Message::SpaceCreated(res) => {
+                match res {
+                    Ok(space_id) => {
+                        self.creating_space = false;
+                        self.new_room_name.clear();
+                        if let Ok(rid) = space_id.as_str().try_into() {
+                            return self.handle_select_space(Some(rid));
+                        }
+                    }
+                    Err(e) => {
+                        self.set_error(format!("Failed to create space: {}", e));
+                    }
+                }
+                Task::none()
+            }
+            Message::LoginHomeserverChanged(homeserver) => {
+                self.login_homeserver = homeserver;
+                Task::none()
+            }
+            Message::LoginUsernameChanged(username) => {
+                self.login_username = username;
+                Task::none()
+            }
+            Message::LoginPasswordChanged(password) => {
+                self.login_password = password;
+                Task::none()
+            }
+            Message::SubmitLogin => self.handle_submit_login(),
+            Message::LoginFinished(res) => self.handle_login_finished(res),
+            Message::ToggleLoginMode => self.handle_toggle_login_mode(),
+            Message::SubmitRegister => self.handle_submit_register(),
+            Message::RegisterFinished(res) => self.handle_register_finished(res),
+            Message::SelectSpace(space_id) => {
+                let parsed_id = space_id.and_then(|id| matrix_sdk::ruma::RoomId::parse(&*id).ok());
+                self.handle_select_space(parsed_id)
+            }
+            Message::SpaceChildrenFetched(space_id, res) => {
+                self.handle_space_children_fetched(space_id, res)
+            }
+            Message::SpaceFilterUpdated => {
+                self.update_filtered_rooms();
+                Task::none()
+            }
+            Message::NoOp => Task::none(),
+            Message::SubmitOidcLogin => self.handle_submit_oidc_login(),
+            Message::OidcLoginStarted(res) => self.handle_oidc_login_started(res),
+            Message::OidcCallback(url) => self.handle_oidc_callback(url),
+            Message::StartQrLogin => self.handle_start_qr_login(),
+            Message::CancelQrLogin => self.handle_cancel_qr_login(),
+            Message::SimulateQrScan => self.handle_simulate_qr_scan(),
+            Message::QrLoginStepChanged(step) => self.handle_qr_login_step_changed(step),
+            Message::JoinRoom(room_id) => {
+                if let Some(matrix) = &self.matrix {
+                    let matrix = matrix.clone();
+                    return Task::perform(
+                        async move {
+                            let rid = matrix_sdk::ruma::RoomId::parse(&*room_id)
+                                .map_err(|e| e.to_string())?;
+                            matrix
+                                .join_room(&rid)
+                                .await
+                                .map(|_| rid)
+                                .map_err(|e| e.to_string())
+                        },
+                        |res| Message::RoomJoined(res).into(),
+                    );
+                }
+                Task::none()
+            }
+            Message::RoomJoined(res) => {
+                match res {
+                    Ok(room_id) => {
+                        self.selected_room = Some(room_id.as_str().into());
+                        // Refresh both lists
+                        self.update_filtered_rooms();
+                        if let (Some(matrix), Some(space_id)) = (&self.matrix, &self.selected_space)
+                        {
+                            let matrix = matrix.clone();
+                            let sid = space_id.clone();
+                            let sid_clone = sid.clone();
+                            return Task::perform(
+                                async move {
+                                    matrix
+                                        .get_space_children(sid_clone.as_str())
+                                        .await
+                                        .map_err(|e| e.to_string())
+                                },
+                                move |res| Message::SpaceChildrenFetched(sid, res).into(),
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        self.set_error(format!("Failed to join room: {}", e));
+                    }
+                }
+                Task::none()
+            }
+            Message::Logout => self.handle_logout(),
+            Message::LogoutFinished => self.handle_logout_finished(),
+            Message::OpenSettings(panel) => {
+                self.current_settings_panel = Some(panel.clone());
+                self.core.set_show_context(true);
+
+                if self.is_search_active {
+                    match panel {
+                        SettingsPanel::Room => {
+                            self.room_settings.member_filter = self.search_query.clone();
+                        }
+                        SettingsPanel::Space => {
+                            self.space_settings.child_filter = self.search_query.clone();
+                        }
+                        _ => {}
+                    }
+                }
+
+                if panel == SettingsPanel::User {
+                    return self
+                        .user_settings
+                        .update(settings::user::Message::LoadProfile, &self.matrix);
+                } else if panel == SettingsPanel::Room {
+                    if let Some(room_id) = &self.selected_room {
+                        return self.room_settings.update(
+                            settings::room::Message::LoadRoom(room_id.clone()),
+                            &self.matrix,
+                        );
+                    }
+                } else if panel == SettingsPanel::Space
+                    && let Some(space_id) = &self.selected_space
+                {
+                    return self.space_settings.update(
+                        settings::space::Message::LoadSpace(Arc::from(space_id.as_str())),
+                        &self.matrix,
+                    );
+                }
+                Task::none()
+            }
+            Message::CloseSettings => {
+                self.current_settings_panel = None;
+                self.core.set_show_context(false);
+                Task::none()
+            }
+            Message::UserSettings(msg) => self.user_settings.update(msg, &self.matrix),
+            Message::RoomSettings(msg) => self.room_settings.update(msg, &self.matrix),
+            Message::SpaceSettings(msg) => self.space_settings.update(msg, &self.matrix),
+            Message::AppSettings(msg) => match msg {
+                settings::app::Message::ClearCache => {
+                    self.media_cache.clear();
+                    Task::none()
+                }
+                _ => self.app_settings.update(msg),
+            },
+            Message::AppSettingChanged => {
+                let config = settings::config::Config {
+                    show_sync_indicator: self.app_settings.show_sync_indicator,
+                    send_typing_notifications: self.app_settings.send_typing_notifications,
+                    render_markdown: self.app_settings.render_markdown,
+                    compact_mode: self.app_settings.compact_mode,
+                    hide_threaded_messages: self.app_settings.hide_threaded_messages,
+                    media_previews_display_policy: self.user_settings.media_previews_display_policy,
+                    invite_avatars_display_policy: self.user_settings.invite_avatars_display_policy,
+                };
+                let save_task = Task::perform(async move { config.save() }, |_| {
+                    Action::from(Message::NoOp)
+                });
+                let fetch_task = self.fetch_missing_media();
+                Task::batch(vec![save_task, fetch_task])
+            }
+            Message::ToggleSearch => {
+                self.is_search_active = !self.is_search_active;
+                if !self.is_search_active {
+                    self.search_query.clear();
+                    self.room_settings.member_filter.clear();
+                    self.space_settings.child_filter.clear();
+                } else if let Some(panel) = &self.current_settings_panel {
+                    match panel {
+                        SettingsPanel::Room => {
+                            self.search_query = self.room_settings.member_filter.clone();
+                        }
+                        SettingsPanel::Space => {
+                            self.search_query = self.space_settings.child_filter.clone();
+                        }
+                        _ => {}
+                    }
+                }
+                self.update_filtered_rooms();
+                Task::none()
+            }
+            Message::SearchQueryChanged(query) => {
+                self.search_query = query.clone();
+                if let Some(panel) = &self.current_settings_panel {
+                    match panel {
+                        SettingsPanel::Room => {
+                            self.room_settings.member_filter = query;
+                        }
+                        SettingsPanel::Space => {
+                            self.space_settings.child_filter = query;
+                        }
+                        _ => {}
+                    }
+                }
+                self.update_filtered_rooms();
+                Task::none()
+            }
+            Message::JoinCall => self.handle_join_call(),
+            Message::LeaveCall => self.handle_leave_call(),
+            Message::CallJoined(res) => {
+                if let Err(e) = res {
+                    self.set_error(format!("Failed to join call: {}", e));
+                }
+                Task::none()
+            }
+            Message::CallLeft(res) => {
+                if let Err(e) = res {
+                    self.set_error(format!("Failed to leave call: {}", e));
+                }
+                Task::none()
+            }
+            Message::OpenUrl(url) => Task::perform(
+                async move {
+                    let _ = open::that(url);
+                },
+                |_| Action::from(Message::NoOp),
+            ),
+            Message::OpenImage(handle) => {
+                self.fullscreen_image = Some(handle);
+                Task::none()
+            }
+            Message::CloseImage => {
+                self.fullscreen_image = None;
+                Task::none()
+            }
         }
     }
 }
