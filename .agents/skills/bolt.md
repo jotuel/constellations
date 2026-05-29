@@ -96,3 +96,6 @@
 ## 2024-05-25 - [Optimize Cow Allocations in View loops]
 **Learning:** `src/view/chat.rs` used `Cow` to theoretically avoid snippet allocations, but negated it by calling `.into_owned()` unconditionally before passing to `text::body(...)`. This resulted in `String` allocations every frame anyway.
 **Action:** In `libcosmic` or `iced` UI code, text widgets like `text::body()` directly accept `impl Into<Cow<'_, str>>`. To avoid per-frame allocations, pass the `Cow` straight into the widget (e.g., `text::body(snippet)`) or allow it to be implicitly converted, ensuring `String` is only allocated when truncation or formatting genuinely requires it.
+## 2024-10-24 - [Avoid `String` allocations from `fl!` macro in view loops]
+**Learning:** `src/view/switcher.rs` was calling `crate::fl!("unknown-room")` and `crate::fl!("room-has-no-avatar")` unconditionally for every room in the list on every frame. `fl!` dynamically allocates a `String` representing the localized message. This resulted in O(N) heap allocations per render frame.
+**Action:** In libcosmic/iced `view()` render loops, avoid calling `crate::fl!()` unconditionally. Instead, wrap it in a closure or `unwrap_or_else` block (e.g., returning `std::borrow::Cow::Owned(crate::fl!(...))`) to lazily evaluate and allocate the localized string only when genuinely needed (e.g., as a fallback for missing data).

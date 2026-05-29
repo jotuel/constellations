@@ -184,14 +184,14 @@ impl<'switcher> Constellations {
         }
 
         if let Some(selected_space) = &self.selected_space {
-            let space_name_fallback = crate::fl!("unknown-space");
             let space_name = self
                 .room_list
                 .iter()
                 .find(|r| r.id.as_ref() == selected_space.as_str())
                 .and_then(|r| r.name.as_deref())
-                .unwrap_or(space_name_fallback.as_str())
-                .to_string();
+                .map(std::borrow::Cow::Borrowed)
+                .unwrap_or_else(|| std::borrow::Cow::Owned(crate::fl!("unknown-space")));
+
             let space_header = Row::new()
                 .align_y(Alignment::Center)
                 .push(text::title3(space_name))
@@ -288,15 +288,21 @@ impl<'switcher> Constellations {
         &self,
         room: &'switcher crate::matrix::RoomData,
     ) -> Row<'switcher, Message, cosmic::prelude::Theme> {
-        let name_fallback = crate::fl!("unknown-room");
+        let name_str = room.name.as_deref();
         let name = text::body(
-            room.name
-                .as_deref()
-                .unwrap_or(name_fallback.as_str())
-                .to_string(),
+            name_str.map(std::borrow::Cow::Borrowed)
+                .unwrap_or_else(|| std::borrow::Cow::Owned(crate::fl!("unknown-room")))
         );
         let mut header = Row::new().spacing(10).align_y(Alignment::Center);
-        let default_avatar = crate::fl!("room-has-no-avatar");
+
+        let view_default_avatar = || {
+            container(text::body(crate::fl!("room-has-no-avatar")))
+                .width(ROOM_AVATAR_WIDTH)
+                .height(ROOM_AVATAR_HEIGHT)
+                .align_x(Alignment::Center)
+                .align_y(Alignment::Center)
+        };
+
         if let Some(avatar_url) = &room.avatar_url {
             if let Some(handle) = self.media_cache.get(avatar_url) {
                 header = header.push(
@@ -306,22 +312,10 @@ impl<'switcher> Constellations {
                         .border_radius(AVATAR_RADIUS),
                 );
             } else {
-                header = header.push(
-                    container(text::body(default_avatar))
-                        .width(ROOM_AVATAR_WIDTH)
-                        .height(ROOM_AVATAR_HEIGHT)
-                        .align_x(Alignment::Center)
-                        .align_y(Alignment::Center),
-                );
+                header = header.push(view_default_avatar());
             }
         } else {
-            header = header.push(
-                container(text::body(default_avatar))
-                    .width(ROOM_AVATAR_WIDTH)
-                    .height(ROOM_AVATAR_HEIGHT)
-                    .align_x(Alignment::Center)
-                    .align_y(Alignment::Center),
-            );
+            header = header.push(view_default_avatar());
         }
         header.push(name)
     }
