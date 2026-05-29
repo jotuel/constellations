@@ -16,6 +16,12 @@
 
 [x] New messages listed in Room switcher should be stopped at '\n'
 
+[ ] In QR Code Login QR code doesn't work
+
+[ ] OIDC or QR Code Login can't be cancelled
+
+[ ] Search option is available in Login screen
+
 # ***General***
 
 [x] Remove the surrounding bubble from around Space avatars
@@ -28,9 +34,9 @@
 
 [x] Way to enlarge images
 
-[ ] Implement every Setting (autoloading images, typing notifications etc...)
+[x] Implement every Setting (autoloading images, typing notifications etc...)
 
-[ ] Logging in via QR code
+[x] Logging in via QR code
 
 [ ] Refactor code into smaller functions moved into smaller files
 
@@ -48,7 +54,7 @@
 
 [ ] Context aware search
 
-[ ] Filter out Rooms in Space settings
+[x] Filter out Rooms in Space settings
 
 [x] Filter out Users in Room settings
 
@@ -78,7 +84,7 @@
 
 [x] Settings for Notifications
 
-[ ] Notification for Errors?
+[x] Notification for Errors?
 
 # ***Settings***
 ## **Application**
@@ -138,7 +144,7 @@ cannot be undone).
 
  [x] Add/Remove Rooms: Manage the m.space.child state events to link rooms to the Space.
 
- [ ] Set Suggestions: Mark certain children as "suggested" so they are highlighted to new Space members.
+ [x] Set Suggestions: Mark certain children as "suggested" so they are highlighted to new Space members.
 
  [x] Ordering: Define the order string in the child event to control how rooms appear in the Space sidebar.
 
@@ -177,7 +183,7 @@ cannot be undone).
 
 ### *3. Notifications & Push Rules (client.notification_settings())*
 
-[ ] Keywords: Manage custom keywords the user wants to be notified for.
+[x] Keywords: Manage custom keywords the user wants to be notified for.
 
 ### *4. Privacy & Preferences (client.account())*
 

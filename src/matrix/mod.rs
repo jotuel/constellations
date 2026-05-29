@@ -1090,7 +1090,6 @@ impl MatrixEngine {
                 }
         }
 
-        // TODO: debug why it no longer function as expected
         let last_message = match room.latest_event().await {
             LatestEventValue::Remote {
                 content: TimelineItemContent::MsgLike(m),

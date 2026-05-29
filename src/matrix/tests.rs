@@ -429,6 +429,7 @@ async fn test_complete_oidc_login_no_client() {
 }
 
 #[tokio::test]
+#[serial_test::serial]
 async fn test_ipc_callback_trigger_failure() {
     let test_uri = "fi.joonastuomi.CosmicExtConstellations://callback?code=test_code".to_string();
     let result = crate::ipc::call_handle_callback(test_uri).await;
@@ -449,6 +450,17 @@ fn test_timeline_diff_variant() {
     } else {
         panic!("Expected TimelineDiff variant");
     }
+}
+
+#[test]
+fn test_fuzzy_match_ignore_case() {
+    assert!(crate::fuzzy_match_ignore_case("hello world", "hw"));
+    assert!(crate::fuzzy_match_ignore_case("hello world", "hello"));
+    assert!(crate::fuzzy_match_ignore_case("hello world", ""));
+    assert!(crate::fuzzy_match_ignore_case("hello world", "Hw"));
+    assert!(crate::fuzzy_match_ignore_case("rust code", "rc"));
+    assert!(!crate::fuzzy_match_ignore_case("rust code", "cr"));
+    assert!(!crate::fuzzy_match_ignore_case("hello world", "xyz"));
 }
 
 fn create_test_session() -> matrix_sdk::authentication::matrix::MatrixSession {

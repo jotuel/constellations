@@ -22,6 +22,10 @@ impl<'chat> Constellations {
             && !self.search_query.is_empty()
             && self.current_settings_panel.is_none();
 
+        if is_filtering {
+            return self.view_search_results();
+        }
+
         let filter_is_ascii = self.search_query.is_ascii();
         let filter_lower_fallback =
             (is_filtering && !filter_is_ascii).then(|| self.search_query.to_lowercase());
@@ -1106,6 +1110,84 @@ impl<'chat> Constellations {
             .push(composer)
             .push(controls)
             .into()
+    }
+
+    pub fn view_search_results(&self) -> Element<'_, Message> {
+        let mut results_col = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
+
+        // Find fuzzy matched messages
+        let mut matches = Vec::new();
+        for item in &self.timeline_items {
+            if let Some(event) = item.item.as_event()
+                && let Some(message) = event.content().as_message()
+            {
+                let body = message.body();
+                if crate::fuzzy_match_ignore_case(body, &self.search_query) {
+                    matches.push(item);
+                }
+            }
+        }
+
+        // Header card
+        results_col = results_col.push(
+            container(
+                Row::new()
+                    .spacing(10)
+                    .align_y(Alignment::Center)
+                    .push(
+                        text::body(format!(
+                            "Search Results: Found {} matches for \"{}\" (fuzzy subsequence matching)",
+                            matches.len(),
+                            self.search_query
+                        ))
+                        .size(14)
+                    )
+            )
+            .style(|theme: &cosmic::Theme| {
+                use cosmic::iced::widget::container::Catalog;
+                theme.style(&cosmic::theme::Container::Card)
+            })
+            .padding(12)
+            .width(cosmic::iced::Length::Fill)
+        );
+
+        let mut results_list = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
+        let thread_counts = std::collections::HashMap::new();
+
+        if matches.is_empty() {
+            results_list = results_list.push(
+                container(
+                    text::body("No matches found.")
+                        .size(16)
+                )
+                .width(cosmic::iced::Length::Fill)
+                .align_x(Alignment::Center)
+                .padding(40)
+            );
+        } else {
+            for item in matches {
+                results_list = results_list.push(
+                    container(self.view_item(item, &thread_counts))
+                        .style(|theme: &cosmic::Theme| {
+                            use cosmic::iced::widget::container::Catalog;
+                            let cosmic = theme.cosmic();
+                            let mut style = theme.style(&cosmic::theme::Container::Card);
+                            style.border.color = cosmic.accent.base.into();
+                            style.border.width = 1.0;
+                            style
+                        })
+                        .padding(10)
+                        .width(cosmic::iced::Length::Fill)
+                );
+            }
+        }
+
+        results_col = results_col.push(
+            scrollable(results_list)
+                .height(cosmic::iced::Length::Fill)
+        );
+
+        results_col.into()
     }
 }
 

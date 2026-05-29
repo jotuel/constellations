@@ -48,7 +48,7 @@ impl Constellations {
                 )
             }
             Err(e) => {
-                self.error = Some(format!("Failed to initialize Matrix engine: {}", e));
+                self.set_error(format!("Failed to initialize Matrix engine: {}", e));
                 self.is_initializing = false;
                 Task::none()
             }
@@ -600,7 +600,7 @@ impl Constellations {
                 }
             }
             Err(e) => {
-                self.error = Some(format!("Failed to retrieve location: {}", e));
+                self.set_error(format!("Failed to retrieve location: {}", e));
                 Task::none()
             }
         }
@@ -920,7 +920,7 @@ impl Constellations {
                 self.other_rooms = other_rooms;
             }
             Err(e) => {
-                self.error = Some(format!("Failed to fetch space children: {}", e));
+                self.set_error(format!("Failed to fetch space children: {}", e));
             }
         }
 
@@ -963,7 +963,7 @@ impl Constellations {
                 );
             }
             Err(e) => {
-                self.error = Some(format!("Failed to fetch media: {}", e));
+                self.set_error(format!("Failed to fetch media: {}", e));
             }
         }
         Task::none()
@@ -982,7 +982,7 @@ impl Constellations {
                     );
                 }
                 Err(e) => {
-                    self.error = Some(format!("Failed to fetch media: {}", e));
+                    self.set_error(format!("Failed to fetch media: {}", e));
                 }
             }
         }
@@ -1049,7 +1049,7 @@ impl Constellations {
                 self.update_title()
             }
             Err(e) => {
-                self.error = Some(format!("Registration failed: {}", e));
+                self.set_error(format!("Registration failed: {}", e));
                 Task::none()
             }
         }
@@ -1102,7 +1102,7 @@ impl Constellations {
                 self.sync_status = matrix::SyncStatus::MissingSlidingSyncSupport;
             }
             Err(e) => {
-                self.error = Some(format!("Login failed: {}", e));
+                self.set_error(format!("Login failed: {}", e));
             }
         }
         Task::none()
@@ -1141,7 +1141,7 @@ impl Constellations {
             }
             Err(e) => {
                 self.is_oidc_logging_in = false;
-                self.error = Some(format!("OIDC login failed to start: {}", e));
+                self.set_error(format!("OIDC login failed to start: {}", e));
             }
         }
         Task::none()

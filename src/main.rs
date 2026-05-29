@@ -158,6 +158,23 @@ pub fn contains_ignore_ascii_case(
     }
 }
 
+pub fn fuzzy_match_ignore_case(haystack: &str, query: &str) -> bool {
+    if query.is_empty() {
+        return true;
+    }
+    let mut query_chars = query.chars().peekable();
+    for h_char in haystack.chars() {
+        if let Some(&q_char) = query_chars.peek() {
+            if h_char.to_lowercase().to_string() == q_char.to_lowercase().to_string() {
+                query_chars.next();
+            }
+        } else {
+            return true;
+        }
+    }
+    query_chars.peek().is_none()
+}
+
 struct Constellations {
     core: Core,
     matrix: Option<matrix::MatrixEngine>,
@@ -573,6 +590,17 @@ impl ConstellationsItem {
 }
 
 impl Constellations {
+    pub fn set_error(&mut self, error: String) {
+        tracing::error!("Error occurred: {}", error);
+        let _ = notify_rust::Notification::new()
+            .appname("Constellations")
+            .summary("Constellations Error")
+            .body(&error)
+            .icon("dialog-error")
+            .show();
+        self.error = Some(error);
+    }
+
     pub fn update_filtered_rooms(&mut self) {
         let is_search_empty = self.search_query.is_empty();
 
@@ -1296,7 +1324,7 @@ impl Application for Constellations {
             Message::LoadMoreFinished(res) => {
                 self.is_loading_more = false;
                 if let Err(e) = res {
-                    self.error = Some(format!("Failed to load more messages: {}", e));
+                    self.set_error(format!("Failed to load more messages: {}", e));
                 }
                 Task::none()
             }
@@ -1399,7 +1427,7 @@ impl Application for Constellations {
                         self.editing_item = None;
                     }
                     Err(e) => {
-                        self.error = Some(format!("Failed to send message: {}", e));
+                        self.set_error(format!("Failed to send message: {}", e));
                     }
                 }
                 Task::none()
@@ -1413,14 +1441,14 @@ impl Application for Constellations {
                         self.editing_item = None;
                     }
                     Err(e) => {
-                        self.error = Some(format!("Failed to edit message: {}", e));
+                        self.set_error(format!("Failed to edit message: {}", e));
                     }
                 }
                 Task::none()
             }
             Message::MessageRedacted(res) => {
                 if let Err(e) = res {
-                    self.error = Some(format!("Failed to redact message: {}", e));
+                    self.set_error(format!("Failed to redact message: {}", e));
                 }
                 Task::none()
             }
@@ -1479,7 +1507,7 @@ impl Application for Constellations {
                         // Successfully sent, could remove from ui if we were tracking it per-message
                     }
                     Err(e) => {
-                        self.error = Some(format!(
+                        self.set_error(format!(
                             "Failed to send attachment {}: {}",
                             path.display(),
                             e
@@ -1563,7 +1591,7 @@ impl Application for Constellations {
             }
             Message::ReactionToggled(res) => {
                 if let Err(e) = res {
-                    self.error = Some(format!("Failed to toggle reaction: {}", e));
+                    self.set_error(format!("Failed to toggle reaction: {}", e));
                 }
                 Task::none()
             }
@@ -1605,7 +1633,7 @@ impl Application for Constellations {
                         self.selected_room = Some(room_id.as_str().into());
                     }
                     Err(e) => {
-                        self.error = Some(format!("Failed to create room: {}", e));
+                        self.set_error(format!("Failed to create room: {}", e));
                     }
                 }
                 Task::none()
@@ -1621,7 +1649,7 @@ impl Application for Constellations {
                         }
                     }
                     Err(e) => {
-                        self.error = Some(format!("Failed to create space: {}", e));
+                        self.set_error(format!("Failed to create space: {}", e));
                     }
                 }
                 Task::none()
@@ -1703,7 +1731,7 @@ impl Application for Constellations {
                         }
                     }
                     Err(e) => {
-                        self.error = Some(format!("Failed to join room: {}", e));
+                        self.set_error(format!("Failed to join room: {}", e));
                     }
                 }
                 Task::none()
@@ -1818,13 +1846,13 @@ impl Application for Constellations {
             Message::LeaveCall => self.handle_leave_call(),
             Message::CallJoined(res) => {
                 if let Err(e) = res {
-                    self.error = Some(format!("Failed to join call: {}", e));
+                    self.set_error(format!("Failed to join call: {}", e));
                 }
                 Task::none()
             }
             Message::CallLeft(res) => {
                 if let Err(e) = res {
-                    self.error = Some(format!("Failed to leave call: {}", e));
+                    self.set_error(format!("Failed to leave call: {}", e));
                 }
                 Task::none()
             }
