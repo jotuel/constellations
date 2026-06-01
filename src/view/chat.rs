@@ -893,17 +893,25 @@ impl<'chat> Constellations {
                 );
             }
 
+            let call_button: Element<'_, Message> = if is_in_call {
+                tooltip(
+                    button::custom(cosmic::widget::icon::from_name("call-stop"))
+                        .class(cosmic::theme::Button::Destructive)
+                        .on_press(Message::LeaveCall),
+                    text::body(crate::fl!("call-leave")),
+                    Position::Bottom,
+                )
+                .into()
+            } else {
+                button::icon(Named::new("camera-web"))
+                    .on_press(Message::JoinCall)
+                    .tooltip(crate::fl!("call-join"))
+                    .into()
+            };
+
             room_header = room_header
                 .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
-                .push(if is_in_call {
-                    button::icon(Named::new("call-stop"))
-                        .on_press(Message::LeaveCall)
-                        .tooltip(crate::fl!("call-leave"))
-                } else {
-                    button::icon(Named::new("camera-web"))
-                        .on_press(Message::JoinCall)
-                        .tooltip(crate::fl!("call-join"))
-                })
+                .push(call_button)
                 .push(
                     button::icon(Named::new("emblem-system"))
                         .tooltip(crate::fl!("room-settings"))

@@ -97,3 +97,7 @@
 ## 2026-06-26 - Add Search Icon to Empty States
 **Learning:** Empty states, especially those indicating no results (e.g., "No matches found." in search), can look barren if they consist only of text. Adding an associated icon (like `edit-find-symbolic`) and using localized text makes the empty state more appealing and accessible.
 **Action:** When designing or updating an empty state, particularly for search results or filtering, wrap the state in a `Column`, add an appropriate icon (e.g., `cosmic::widget::icon::from_name("edit-find-symbolic").size(64)`), and use `crate::fl!("key-name")` for the text to improve the visual hierarchy and internationalization.
+
+## 2026-06-27 - Icon-Only Destructive Buttons
+**Learning:** Destructive actions like removing a keyword or leaving a call were using standard `button::icon`, which fails to warn the user visually. Since `button::destructive` expects a string, destructive icon-only buttons need a custom approach.
+**Action:** To create a destructive icon-only button, use `button::custom(cosmic::widget::icon::from_name("...")).class(cosmic::theme::Button::Destructive)` instead of `button::icon`.

@@ -1787,7 +1787,8 @@ impl State {
                 section = section.add(settings::item(
                     keyword.as_str(),
                     tooltip(
-                        button::icon(Named::new("user-trash-symbolic"))
+                        button::custom(cosmic::widget::icon::from_name("user-trash-symbolic"))
+                            .class(cosmic::theme::Button::Destructive)
                             .on_press(Message::RemoveKeyword(keyword.clone())),
                         text::body(crate::fl!("remove-keyword")),
                         Position::Top,
