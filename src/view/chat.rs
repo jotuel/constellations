@@ -36,9 +36,10 @@ impl<'chat> Constellations {
             std::collections::HashMap::new();
         for item in &self.timeline_items {
             if let Some(event) = item.item.as_event()
-                && let Some(root_id) = event.content().thread_root() {
-                    *thread_counts.entry(root_id).or_insert(0) += 1;
-                }
+                && let Some(root_id) = event.content().thread_root()
+            {
+                *thread_counts.entry(root_id).or_insert(0) += 1;
+            }
         }
 
         let mut pending_date_divider: Option<matrix_sdk::ruma::MilliSecondsSinceUnixEpoch> = None;
@@ -459,7 +460,12 @@ impl<'chat> Constellations {
                 room_name
             )))
             .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
-            .push(button::text(crate::fl!("close-thread")).on_press(Message::CloseThread));
+            .push(tooltip(
+                button::icon(cosmic::widget::icon::from_name("window-close-symbolic"))
+                    .on_press(Message::CloseThread),
+                text::body(crate::fl!("close-thread")),
+                Position::Bottom,
+            ));
 
         // ⚡ Bolt Optimization: Reuse precomputed thread_counts from main timeline
         // to maintain O(N) rendering for the thread summary fallback checks.
@@ -467,9 +473,10 @@ impl<'chat> Constellations {
             std::collections::HashMap::new();
         for item in &self.timeline_items {
             if let Some(event) = item.item.as_event()
-                && let Some(root_id) = event.content().thread_root() {
-                    *thread_counts.entry(root_id.clone()).or_insert(0) += 1;
-                }
+                && let Some(root_id) = event.content().thread_root()
+            {
+                *thread_counts.entry(root_id.clone()).or_insert(0) += 1;
+            }
         }
 
         for item in &self.threaded_timeline_items {
@@ -1008,7 +1015,12 @@ impl<'chat> Constellations {
                 .push(text::body(crate::fl!("editing")).size(12))
                 .push(text::body(snippet).size(12))
                 .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
-                .push(button::text(crate::fl!("cancel")).on_press(Message::CancelEdit));
+                .push(tooltip(
+                    button::icon(cosmic::widget::icon::from_name("window-close-symbolic"))
+                        .on_press(Message::CancelEdit),
+                    text::body(crate::fl!("cancel")),
+                    Position::Bottom,
+                ));
 
             content = content.push(container(edit_bar).padding(10));
         }
@@ -1139,24 +1151,21 @@ impl<'chat> Constellations {
         // Header card
         results_col = results_col.push(
             container(
-                Row::new()
-                    .spacing(10)
-                    .align_y(Alignment::Center)
-                    .push(
-                        text::body(crate::fl!(
-                            "search-results-found",
-                            count = matches.len(),
-                            query = self.search_query.as_str()
-                        ))
-                        .size(14)
-                    )
+                Row::new().spacing(10).align_y(Alignment::Center).push(
+                    text::body(crate::fl!(
+                        "search-results-found",
+                        count = matches.len(),
+                        query = self.search_query.as_str()
+                    ))
+                    .size(14),
+                ),
             )
             .style(|theme: &cosmic::Theme| {
                 use cosmic::iced::widget::container::Catalog;
                 theme.style(&cosmic::theme::Container::Card)
             })
             .padding(12)
-            .width(cosmic::iced::Length::Fill)
+            .width(cosmic::iced::Length::Fill),
         );
 
         let mut results_list = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
@@ -1169,11 +1178,11 @@ impl<'chat> Constellations {
                         .spacing(10)
                         .align_x(Alignment::Center)
                         .push(cosmic::widget::icon::from_name("edit-find-symbolic").size(64))
-                        .push(text::body(crate::fl!("no-results-found")).size(16))
+                        .push(text::body(crate::fl!("no-results-found")).size(16)),
                 )
                 .width(cosmic::iced::Length::Fill)
                 .align_x(Alignment::Center)
-                .padding(40)
+                .padding(40),
             );
         } else {
             for item in matches {
@@ -1188,15 +1197,12 @@ impl<'chat> Constellations {
                             style
                         })
                         .padding(10)
-                        .width(cosmic::iced::Length::Fill)
+                        .width(cosmic::iced::Length::Fill),
                 );
             }
         }
 
-        results_col = results_col.push(
-            scrollable(results_list)
-                .height(cosmic::iced::Length::Fill)
-        );
+        results_col = results_col.push(scrollable(results_list).height(cosmic::iced::Length::Fill));
 
         results_col.into()
     }
@@ -1219,5 +1225,10 @@ fn view_reply_bar<'a>(
         )
         .push(text::body(snippet).size(12))
         .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
-        .push(button::text(crate::fl!("cancel")).on_press(Message::CancelReply))
+        .push(tooltip(
+            button::icon(cosmic::widget::icon::from_name("window-close-symbolic"))
+                .on_press(Message::CancelReply),
+            text::body(crate::fl!("cancel")),
+            Position::Top,
+        ))
 }

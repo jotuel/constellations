@@ -1,10 +1,10 @@
 use crate::matrix::TimelineItem;
+use crate::preview::parse_markdown;
 use crate::settings;
 use crate::{
     ApplyVectorDiffExt, Constellations, ConstellationsItem, MediaSource, Message, OwnedRoomId,
     QrLoginStep, SettingsPanel, THREADED_TIMELINE_ID, TIMELINE_ID, Url, matrix, redact_url,
 };
-use crate::preview::parse_markdown;
 use cosmic::iced::widget::scrollable;
 use cosmic::{Action, Application, Task};
 use futures::FutureExt;
@@ -1377,9 +1377,10 @@ impl Constellations {
             }
             Message::RoomSelected(room_id) => {
                 if let Some(room) = self.room_list.iter().find(|r| r.id == room_id)
-                    && let Some(name) = &room.name {
-                        self.room_name_cache.insert(room_id.clone(), name.clone());
-                    }
+                    && let Some(name) = &room.name
+                {
+                    self.room_name_cache.insert(room_id.clone(), name.clone());
+                }
                 self.selected_room = Some(room_id.clone());
                 self.timeline_items.clear();
                 self.last_timeline_offset = 0.0;

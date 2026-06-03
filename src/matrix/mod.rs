@@ -1081,13 +1081,14 @@ impl MatrixEngine {
                 && let Ok(members) = room
                     .members_no_sync(matrix_sdk::RoomMemberships::ACTIVE)
                     .await
+            {
+                let other_member = members.iter().find(|m| m.user_id() != my_user_id);
+                if let Some(other_member) = other_member
+                    && let Some(other_avatar) = other_member.avatar_url()
                 {
-                    let other_member = members.iter().find(|m| m.user_id() != my_user_id);
-                    if let Some(other_member) = other_member
-                        && let Some(other_avatar) = other_member.avatar_url() {
-                            avatar_url = Some(other_avatar.to_string());
-                        }
+                    avatar_url = Some(other_avatar.to_string());
                 }
+            }
         }
 
         let last_message = match room.latest_event().await {
