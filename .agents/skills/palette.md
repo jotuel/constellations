@@ -101,3 +101,6 @@
 ## 2026-06-27 - Icon-Only Destructive Buttons
 **Learning:** Destructive actions like removing a keyword or leaving a call were using standard `button::icon`, which fails to warn the user visually. Since `button::destructive` expects a string, destructive icon-only buttons need a custom approach.
 **Action:** To create a destructive icon-only button, use `button::custom(cosmic::widget::icon::from_name("...")).class(cosmic::theme::Button::Destructive)` instead of `button::icon`.
+## 2024-06-03 - Extracted Hardcoded Strings to Translations
+**Learning:** Found several English strings hardcoded directly into the user settings (like "Current Password", "Display Name", "✅ Verified"). Hardcoding UI strings negatively impacts accessibility and user experience for international users relying on translated interfaces or screen readers.
+**Action:** When adding form labels, status messages, and other UI strings, always use `crate::fl!("key-name")` and ensure the keys exist in `res/i18n/en/cosmic_ext_constellations.ftl` to properly support full localization.

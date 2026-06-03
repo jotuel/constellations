@@ -721,11 +721,11 @@ impl State {
             Message::ChangePassword => {
                 if let Some(matrix) = matrix {
                     if self.new_password != self.confirm_new_password {
-                        self.error = Some("New passwords do not match".to_string());
+                        self.error = Some(crate::fl!("new-passwords-do-not-match"));
                         return Task::none();
                     }
                     if self.new_password.is_empty() || self.current_password.is_empty() {
-                        self.error = Some("Passwords cannot be empty".to_string());
+                        self.error = Some(crate::fl!("passwords-cannot-be-empty"));
                         return Task::none();
                     }
 
@@ -1884,11 +1884,11 @@ impl State {
         };
 
         settings::section()
-            .title("Profile")
+            .title(crate::fl!("profile"))
             .add(avatar_col)
             .add(settings::item(
-                "Display Name",
-                text_input("Enter your display name", &self.display_name)
+                crate::fl!("display-name"),
+                text_input(crate::fl!("display-name"), &self.display_name)
                     .on_input(Message::DisplayNameChanged),
             ))
             .add(settings::item_row(vec![save_widget]))
@@ -1896,24 +1896,24 @@ impl State {
     }
 
     fn view_password_change<'a>(&'a self) -> Element<'a, Message> {
-        let mut section = settings::section().title("Change Password");
+        let mut section = settings::section().title(crate::fl!("change-password"));
 
         section = section
             .add(settings::item(
-                "Current Password",
-                text_input("Current password", &self.current_password)
+                crate::fl!("current-password"),
+                text_input(crate::fl!("current-password"), &self.current_password)
                     .password()
                     .on_input(Message::CurrentPasswordChanged),
             ))
             .add(settings::item(
-                "New Password",
-                text_input("New password", &self.new_password)
+                crate::fl!("new-password"),
+                text_input(crate::fl!("new-password"), &self.new_password)
                     .password()
                     .on_input(Message::NewPasswordChanged),
             ))
             .add(settings::item(
-                "Confirm New Password",
-                text_input("Confirm new password", &self.confirm_new_password)
+                crate::fl!("confirm-password"),
+                text_input(crate::fl!("confirm-password"), &self.confirm_new_password)
                     .password()
                     .on_input(Message::ConfirmNewPasswordChanged),
             ));
@@ -1983,9 +1983,11 @@ impl State {
                 let mut action_row = Row::new().spacing(10).align_y(Alignment::Center);
 
                 if device.is_verified {
-                    action_row = action_row.push(text::body("✅ Verified").size(14));
+                    action_row =
+                        action_row.push(text::body(crate::fl!("verified-device")).size(14));
                 } else {
-                    action_row = action_row.push(text::body("❌ Unverified").size(14));
+                    action_row =
+                        action_row.push(text::body(crate::fl!("unverified-device")).size(14));
                     if !device.is_current {
                         action_row = action_row.push(
                             button::text(crate::fl!("verify"))
@@ -2012,7 +2014,7 @@ impl State {
                 if device.is_renaming {
                     title_row = title_row
                         .push(
-                            text_input("New device name", &device.edit_name)
+                            text_input(crate::fl!("new-device-name"), &device.edit_name)
                                 .on_input({
                                     let id = Arc::clone(&device.device_id);
                                     move |v| Message::EditDeviceNameChanged(id.clone(), v)
@@ -2040,8 +2042,12 @@ impl State {
                 }
 
                 if device.is_current {
-                    title_row = title_row
-                        .push(cosmic::widget::container(text::body("Current").size(12)).padding(2));
+                    title_row = title_row.push(
+                        cosmic::widget::container(
+                            text::body(crate::fl!("current-device")).size(12),
+                        )
+                        .padding(2),
+                    );
                 }
 
                 section = section.add(settings::item_row(vec![
@@ -2051,7 +2057,7 @@ impl State {
             }
 
             section = section.add(settings::item(
-                "Password to delete devices:",
+                crate::fl!("password-to-delete-devices"),
                 text_input(crate::fl!("password"), &self.device_delete_password)
                     .password()
                     .on_input(Message::DeviceDeletePasswordChanged),
@@ -2093,10 +2099,7 @@ impl State {
                     .password()
                     .on_input(Message::DeactivatePasswordChanged),
             ))
-            .add(settings::item(
-                crate::fl!("deactivate"),
-                deactivate_widget,
-            ))
+            .add(settings::item(crate::fl!("deactivate"), deactivate_widget))
             .into()
     }
 
@@ -2167,7 +2170,7 @@ impl State {
     }
 
     fn view_3pids<'a>(&'a self) -> Element<'a, Message> {
-        let mut section = settings::section().title("Emails & Phone Numbers");
+        let mut section = settings::section().title(crate::fl!("emails-and-phone-numbers"));
 
         if self.is_loading_3pids {
             section = section.add(text::body(crate::fl!("loading-linked-accounts")));
@@ -2237,10 +2240,7 @@ impl State {
                     complete_btn.into()
                 };
 
-                section = section.add(settings::item(
-                    crate::fl!("complete"),
-                    complete_widget,
-                ));
+                section = section.add(settings::item(crate::fl!("complete"), complete_widget));
             }
 
             let mut phone_btn = button::text(crate::fl!("send-sms"));
