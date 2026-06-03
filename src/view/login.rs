@@ -92,15 +92,20 @@ impl Constellations {
             }
         };
 
-        let oidc_button = if self.is_oidc_logging_in {
-            button::text(crate::fl!("waiting-for-browser"))
+        let oidc_button: Element<'_, Message> = if self.is_oidc_logging_in {
+            let oidc_col = Column::new()
+                .spacing(5)
+                .align_x(Alignment::Center)
+                .push(text::body(crate::fl!("waiting-for-browser")))
+                .push(button::text(crate::fl!("cancel")).on_press(Message::CancelOidcLogin));
+            oidc_col.into()
         } else {
             let mut btn = button::text(crate::fl!("oidc-login-button"));
             if !self.login_homeserver.is_empty() && !self.is_logging_in && !self.is_registering_mode
             {
                 btn = btn.on_press(Message::SubmitOidcLogin);
             }
-            btn
+            btn.into()
         };
 
         let qr_login_button = {
@@ -164,31 +169,38 @@ impl Constellations {
                 if let Some(ref url) = self.qr_rendezvous_url
                     && let Ok(code) = qrcode::QrCode::new(url.as_bytes()) {
                         let width = code.width();
-                        let mut qr_text = String::new();
-                        for y in 0..width {
-                            for x in 0..width {
-                                if code[(x, y)] == qrcode::Color::Dark {
-                                    qr_text.push_str("██");
+                        let scale = 8;
+                        let scaled_width = width * scale;
+                        let mut pixels = Vec::with_capacity(scaled_width * scaled_width * 4);
+                        for y in 0..scaled_width {
+                            let qr_y = y / scale;
+                            for x in 0..scaled_width {
+                                let qr_x = x / scale;
+                                let is_dark = code[(qr_x, qr_y)] == qrcode::Color::Dark;
+                                let color = if is_dark {
+                                    [0, 0, 0, 255] // Black
                                 } else {
-                                    qr_text.push_str("  ");
-                                }
+                                    [255, 255, 255, 255] // White
+                                };
+                                pixels.extend_from_slice(&color);
                             }
-                            qr_text.push('\n');
                         }
+
+                        let handle = cosmic::iced::widget::image::Handle::from_rgba(
+                            scaled_width as u32,
+                            scaled_width as u32,
+                            pixels,
+                        );
 
                         content = content.push(
                             container(
-                                text::body(qr_text)
-                                    .font(cosmic::iced::Font::MONOSPACE)
-                                    .size(8),
+                                cosmic::widget::image(handle)
+                                    .width(cosmic::iced::Length::Fixed(200.0))
+                                    .height(cosmic::iced::Length::Fixed(200.0))
                             )
                             .padding(15),
                         );
                     }
-
-                let simulate_btn =
-                    button::text(crate::fl!("login-qr-simulate")).on_press(Message::SimulateQrScan);
-                content = content.push(simulate_btn);
             }
             QrLoginStep::RendezvousEstablished => {
                 content = content

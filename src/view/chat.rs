@@ -35,7 +35,8 @@ impl<'chat> Constellations {
         let mut thread_counts: std::collections::HashMap<matrix_sdk::ruma::OwnedEventId, u32> =
             std::collections::HashMap::new();
         for item in &self.timeline_items {
-            if let Some(event) = item.item.as_event()
+            if let Some(timeline_item) = &item.item
+                && let Some(event) = timeline_item.as_event()
                 && let Some(root_id) = event.content().thread_root() {
                     *thread_counts.entry(root_id).or_insert(0) += 1;
                 }
@@ -44,7 +45,14 @@ impl<'chat> Constellations {
         let mut pending_date_divider: Option<matrix_sdk::ruma::MilliSecondsSinceUnixEpoch> = None;
 
         for item in &self.timeline_items {
-            if let Some(event) = item.item.as_event()
+            if item.item.is_none() {
+                // Render simulated/mock items!
+                timeline = timeline.push(self.view_item(item, &thread_counts));
+                continue;
+            }
+
+            if let Some(timeline_item) = &item.item
+                && let Some(event) = timeline_item.as_event()
                 && event.content().as_message().is_some()
             {
                 // View-side thread filtering
@@ -88,8 +96,8 @@ impl<'chat> Constellations {
                 }
 
                 timeline = timeline.push(self.view_item(item, &thread_counts));
-            } else if let Some(matrix::VirtualTimelineItem::DateDivider(date)) =
-                item.item.as_virtual()
+            } else if let Some(timeline_item) = &item.item
+                && let Some(matrix::VirtualTimelineItem::DateDivider(date)) = timeline_item.as_virtual()
             {
                 pending_date_divider = Some(*date);
             }
@@ -412,7 +420,6 @@ impl<'chat> Constellations {
 
     fn view_message_text<'a>(
         &'a self,
-        _message: &'a matrix_sdk::ruma::events::room::message::MessageType,
         markdown: &'a [PreviewEvent],
         plain_text: &'a [PreviewEvent],
     ) -> Column<'a, Message, Theme> {
@@ -466,14 +473,21 @@ impl<'chat> Constellations {
         let mut thread_counts: std::collections::HashMap<matrix_sdk::ruma::OwnedEventId, u32> =
             std::collections::HashMap::new();
         for item in &self.timeline_items {
-            if let Some(event) = item.item.as_event()
+            if let Some(timeline_item) = &item.item
+                && let Some(event) = timeline_item.as_event()
                 && let Some(root_id) = event.content().thread_root() {
                     *thread_counts.entry(root_id.clone()).or_insert(0) += 1;
                 }
         }
 
         for item in &self.threaded_timeline_items {
-            if let Some(event) = item.item.as_event()
+            if item.item.is_none() {
+                timeline_col = timeline_col.push(self.view_item(item, &thread_counts));
+                continue;
+            }
+
+            if let Some(timeline_item) = &item.item
+                && let Some(event) = timeline_item.as_event()
                 && event.content().as_message().is_some()
             {
                 if is_filtering {
@@ -527,7 +541,8 @@ impl<'chat> Constellations {
         item: &'a crate::ConstellationsItem,
         thread_counts: &std::collections::HashMap<matrix_sdk::ruma::OwnedEventId, u32>,
     ) -> Element<'a, Message> {
-        if let Some(event) = item.item.as_event()
+        if let Some(timeline_item) = &item.item
+            && let Some(event) = timeline_item.as_event()
             && let Some(message) = event.content().as_message()
         {
             let is_me = item.is_me;
@@ -597,14 +612,13 @@ impl<'chat> Constellations {
 
             match message.msgtype() {
                 MessageType::Image(image) => {
-                    bubble_col = bubble_col.push(self.view_message_image(image));
+                    bubble_col = bubble_col.push(self.view_message_image(&image));
                 }
                 MessageType::File(file) => {
-                    bubble_col = bubble_col.push(self.view_message_file(file));
+                    bubble_col = bubble_col.push(self.view_message_file(&file));
                 }
                 _ => {
                     bubble_col = bubble_col.push(self.view_message_text(
-                        message.msgtype(),
                         &item.markdown,
                         &item.plain_text,
                     ));
@@ -703,8 +717,46 @@ impl<'chat> Constellations {
                     });
 
             return bubble_wrap.into();
+        } else {
+            let is_me = item.is_me;
+            let is_ignored = self.user_settings.ignored_users.contains(&item.sender_id);
+            let sender_info = self.view_sender_info(
+                item.avatar_url.as_deref(),
+                item.sender_name.as_str(),
+                item.timestamp.as_str(),
+                Some(&item.sender_id),
+                is_ignored,
+                is_me,
+            );
+
+            let mut bubble_col = Column::new()
+                .spacing(if self.app_settings.compact_mode { 0 } else { 2 })
+                .push(sender_info);
+
+            bubble_col = bubble_col.push(self.view_message_text(
+                &item.markdown,
+                &item.plain_text,
+            ));
+
+            let bubble = container(bubble_col)
+                .padding(if self.app_settings.compact_mode {
+                    5
+                } else {
+                    10
+                })
+                .max_width(600);
+
+            let bubble_wrap =
+                container(bubble)
+                    .width(cosmic::iced::Length::Fill)
+                    .align_x(if is_me {
+                        Alignment::End
+                    } else {
+                        Alignment::Start
+                    });
+
+            bubble_wrap.into()
         }
-        cosmic::widget::space().height(0).into()
     }
 
     fn view_thread_summary(
@@ -742,7 +794,8 @@ impl<'chat> Constellations {
                 // Try to find in timeline_items for better profile info
                 if let Some(item) = self.timeline_items.iter().rfind(|i| {
                     i.item
-                        .as_event()
+                        .as_ref()
+                        .and_then(|timeline_item| timeline_item.as_event())
                         .and_then(|e| e.event_id())
                         .map(|id| match &latest_ev.identifier {
                             matrix::TimelineEventItemId::EventId(eid) => id == eid,
@@ -751,7 +804,8 @@ impl<'chat> Constellations {
                         .unwrap_or(false)
                 }) {
                     latest_sender = Some(item.sender_name.as_str());
-                    if let Some(ev) = item.item.as_event()
+                    if let Some(timeline_item) = &item.item
+                        && let Some(ev) = timeline_item.as_event()
                         && let Some(msg) = ev.content().as_message()
                     {
                         latest_body = Some(msg.body());
@@ -772,14 +826,16 @@ impl<'chat> Constellations {
                 && let Some(event_id) = event.event_id()
                 && let Some(item) = self.timeline_items.iter().rfind(|i| {
                     i.item
-                        .as_event()
+                        .as_ref()
+                        .and_then(|timeline_item| timeline_item.as_event())
                         .and_then(|e| e.content().thread_root())
                         .map(|r| r == event_id)
                         .unwrap_or(false)
                 })
             {
                 latest_sender = Some(item.sender_name.as_str());
-                if let Some(ev) = item.item.as_event()
+                if let Some(timeline_item) = &item.item
+                    && let Some(ev) = timeline_item.as_event()
                     && let Some(msg) = ev.content().as_message()
                 {
                     latest_body = Some(msg.body());
@@ -949,10 +1005,17 @@ impl<'chat> Constellations {
         if let Some(replying_to) = &self.replying_to {
             let body = replying_to
                 .item
-                .as_event()
+                .as_ref()
+                .and_then(|i| i.as_event())
                 .and_then(|ev| ev.content().as_message())
                 .map(|msg| msg.body())
-                .unwrap_or_default();
+                .unwrap_or_else(|| {
+                    if let Some(crate::preview::PreviewEvent::Text(txt)) = replying_to.plain_text.first() {
+                        txt.as_str()
+                    } else {
+                        ""
+                    }
+                });
 
             let mut char_indices = body.char_indices();
             let snippet = if let Some((idx_97, _)) = char_indices.nth(97) {
@@ -975,10 +1038,17 @@ impl<'chat> Constellations {
         if let Some(editing_item) = &self.editing_item {
             let body = editing_item
                 .item
-                .as_event()
+                .as_ref()
+                .and_then(|i| i.as_event())
                 .and_then(|ev| ev.content().as_message())
                 .map(|msg| msg.body())
-                .unwrap_or_default();
+                .unwrap_or_else(|| {
+                    if let Some(crate::preview::PreviewEvent::Text(txt)) = editing_item.plain_text.first() {
+                        txt.as_str()
+                    } else {
+                        ""
+                    }
+                });
 
             let mut char_indices = body.char_indices();
             let snippet = if let Some((idx_97, _)) = char_indices.nth(97) {
@@ -1118,13 +1188,23 @@ impl<'chat> Constellations {
         // Find fuzzy matched messages
         let mut matches = Vec::new();
         for item in &self.timeline_items {
-            if let Some(event) = item.item.as_event()
+            let body_matches = if let Some(timeline_item) = &item.item
+                && let Some(event) = timeline_item.as_event()
                 && let Some(message) = event.content().as_message()
             {
-                let body = message.body();
-                if crate::fuzzy_match_ignore_case(body, &self.search_query) {
-                    matches.push(item);
-                }
+                crate::fuzzy_match_ignore_case(message.body(), &self.search_query)
+            } else {
+                item.plain_text.iter().any(|p| {
+                    if let crate::preview::PreviewEvent::Text(txt) = p {
+                        crate::fuzzy_match_ignore_case(txt, &self.search_query)
+                    } else {
+                        false
+                    }
+                })
+            };
+
+            if body_matches {
+                matches.push(item);
             }
         }
 

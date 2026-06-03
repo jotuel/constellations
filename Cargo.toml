@@ -70,3 +70,9 @@ wiremock = "0.6.5"
 
 [lints.rust]
 unused_imports = "warn"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true

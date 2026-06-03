@@ -4,7 +4,7 @@ use crate::preview::{PreviewEvent, parse_markdown};
 
 #[derive(Clone, Debug)]
 pub struct ConstellationsItem {
-    pub item: Arc<matrix::TimelineItem>,
+    pub item: Option<Arc<matrix::TimelineItem>>,
     pub sender_id: matrix_sdk::ruma::OwnedUserId,
     pub sender_name: String,
     pub avatar_url: Option<String>,
@@ -59,11 +59,32 @@ impl ConstellationsItem {
         }
 
         Self {
-            item,
+            item: Some(item),
             sender_id,
             sender_name,
             avatar_url,
             timestamp,
+            is_me,
+            markdown,
+            plain_text,
+        }
+    }
+
+    pub fn new_mock(
+        sender_name: &str,
+        text: &str,
+        timestamp: &str,
+        is_me: bool,
+    ) -> Self {
+        let sender_id = matrix_sdk::ruma::user_id!("@unknown:example.com").to_owned();
+        let markdown = parse_markdown(text, false);
+        let plain_text = vec![PreviewEvent::Text(text.to_owned())];
+        Self {
+            item: None,
+            sender_id,
+            sender_name: sender_name.to_string(),
+            avatar_url: None,
+            timestamp: timestamp.to_string(),
             is_me,
             markdown,
             plain_text,

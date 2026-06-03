@@ -16,11 +16,11 @@
 
 [x] New messages listed in Room switcher should be stopped at '\n'
 
-[ ] In QR Code Login QR code doesn't work
+[x] In QR Code Login QR code doesn't work
 
-[ ] OIDC or QR Code Login can't be cancelled
+[x] OIDC or QR Code Login can't be cancelled
 
-[ ] Search option is available in Login screen
+[x] Search option is available in Login screen
 
 # ***General***
 
@@ -38,7 +38,7 @@
 
 [x] Logging in via QR code
 
-[ ] Refactor code into smaller functions moved into smaller files
+[x] Refactor code into smaller functions moved into smaller files
 
 [x] Location sharing in chat editor
 

@@ -177,11 +177,11 @@ pub enum Message {
     SpaceFilterUpdated,
     NoOp,
     SubmitOidcLogin,
+    CancelOidcLogin,
     OidcLoginStarted(Result<Url, String>),
     OidcCallback(Url),
     StartQrLogin,
     CancelQrLogin,
-    SimulateQrScan,
     QrLoginStepChanged(QrLoginStep),
     JoinRoom(std::sync::Arc<str>),
     RoomJoined(Result<OwnedRoomId, String>),
@@ -733,6 +733,10 @@ impl Application for Constellations {
     fn header_start(&self) -> Vec<Element<'_, Self::Message>> {
         let mut start = Vec::new();
 
+        if self.user_id.is_none() {
+            return start;
+        }
+
         if self.is_search_active {
             let search_btn =
                 button::icon(Named::new("edit-find-symbolic")).on_press(Message::ToggleSearch);
@@ -979,8 +983,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _ = rustls::crypto::ring::default_provider().install_default();
     LazyLock::force(&i18n::LOAD_LOCALIZATION);
 
+    let env_filter = if cfg!(debug_assertions) {
+        "matrix_sdk=debug,matrix_sdk_ui=debug,cosmic_ext_constellations=debug"
+    } else {
+        "warn"
+    };
+
     tracing_subscriber::fmt()
-        .with_env_filter("matrix_sdk=debug,matrix_sdk_ui=debug,cosmic_ext_constellations=debug")
+        .with_env_filter(env_filter)
         .with_writer(std::io::stderr)
         .init();
     let args: Vec<String> = std::env::args().collect();
