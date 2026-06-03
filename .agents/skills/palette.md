@@ -101,3 +101,6 @@
 ## 2024-05-20 - Icon Buttons for Ephemeral UI Bars
 **Learning:** Text-based action buttons like "Cancel" or "Close Thread" in compact UI spaces (like the thread header or composer edit/reply bars) consume unnecessary horizontal space, which is critical in narrow or split views. Replacing them with universally understood semantic icon buttons (`window-close-symbolic`) wrapped in a descriptive `tooltip` improves layout density while maintaining full accessibility.
 **Action:** When designing or refactoring compact UI elements like thread headers, inline edit bars, or small alert cards, always prefer semantic `button::icon` variants with localized `tooltip` text over full text buttons to preserve spatial economy.
+## 2026-06-27 - Icon-Only Destructive Buttons
+**Learning:** Destructive actions like removing a keyword or leaving a call were using standard `button::icon`, which fails to warn the user visually. Since `button::destructive` expects a string, destructive icon-only buttons need a custom approach.
+**Action:** To create a destructive icon-only button, use `button::custom(cosmic::widget::icon::from_name("...")).class(cosmic::theme::Button::Destructive)` instead of `button::icon`.
