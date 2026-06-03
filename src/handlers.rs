@@ -1,10 +1,10 @@
 use crate::matrix::TimelineItem;
+use crate::preview::parse_markdown;
 use crate::settings;
 use crate::{
     ApplyVectorDiffExt, Constellations, ConstellationsItem, MediaSource, Message, OwnedRoomId,
     QrLoginStep, SettingsPanel, THREADED_TIMELINE_ID, TIMELINE_ID, Url, matrix, redact_url,
 };
-use crate::preview::parse_markdown;
 use cosmic::iced::widget::scrollable;
 use cosmic::{Action, Application, Task};
 use futures::FutureExt;
@@ -18,6 +18,17 @@ type PinnedOutput =
     std::pin::Pin<Box<dyn Future<Output = (String, Result<Vec<u8>, String>)> + Send + 'static>>;
 
 impl Constellations {
+    pub fn recompute_thread_counts(&mut self) {
+        self.thread_counts.clear();
+        for item in &self.timeline_items {
+            if let Some(event) = item.item.as_event()
+                && let Some(root_id) = event.content().thread_root()
+            {
+                *self.thread_counts.entry(root_id).or_insert(0) += 1;
+            }
+        }
+    }
+
     pub fn handle_engine_ready(
         &mut self,
         res: Result<matrix::MatrixEngine, matrix::SyncError>,
@@ -342,6 +353,7 @@ impl Constellations {
             }
         } else {
             self.timeline_items.apply_diff(mapped_diff);
+            self.recompute_thread_counts();
         }
 
         if !tasks.is_empty() {
@@ -419,6 +431,7 @@ impl Constellations {
             matrix::MatrixEvent::TimelineDiff(diff) => self.handle_timeline_diff(diff, false, None),
             matrix::MatrixEvent::TimelineReset => {
                 self.timeline_items.clear();
+                self.recompute_thread_counts();
                 Task::none()
             }
             matrix::MatrixEvent::ReactionAdded { .. } => {
@@ -1316,6 +1329,7 @@ impl Constellations {
         self.room_list.clear();
         self.selected_room = None;
         self.timeline_items.clear();
+        self.recompute_thread_counts();
         self.is_logging_in = false;
         self.is_oidc_logging_in = false;
         self.login_password.clear();
@@ -1491,11 +1505,13 @@ impl Constellations {
             }
             Message::RoomSelected(room_id) => {
                 if let Some(room) = self.room_list.iter().find(|r| r.id == room_id)
-                    && let Some(name) = &room.name {
-                        self.room_name_cache.insert(room_id.clone(), name.clone());
-                    }
+                    && let Some(name) = &room.name
+                {
+                    self.room_name_cache.insert(room_id.clone(), name.clone());
+                }
                 self.selected_room = Some(room_id.clone());
                 self.timeline_items.clear();
+                self.recompute_thread_counts();
                 self.last_timeline_offset = 0.0;
 
                 if self.user_id == Some("@simulated_user:matrix.org".to_string()) {
@@ -2169,6 +2185,7 @@ mod tests {
             qr_login_step: QrLoginStep::NotStarted,
             qr_rendezvous_url: None,
             room_name_cache: HashMap::new(),
+            thread_counts: HashMap::new(),
         }
     }
 

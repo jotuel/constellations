@@ -1787,7 +1787,8 @@ impl State {
                 section = section.add(settings::item(
                     keyword.as_str(),
                     tooltip(
-                        button::icon(Named::new("user-trash-symbolic"))
+                        button::custom(cosmic::widget::icon::from_name("user-trash-symbolic"))
+                            .class(cosmic::theme::Button::Destructive)
                             .on_press(Message::RemoveKeyword(keyword.clone())),
                         text::body(crate::fl!("remove-keyword")),
                         Position::Top,
@@ -2092,10 +2093,7 @@ impl State {
                     .password()
                     .on_input(Message::DeactivatePasswordChanged),
             ))
-            .add(settings::item(
-                crate::fl!("deactivate"),
-                deactivate_widget,
-            ))
+            .add(settings::item(crate::fl!("deactivate"), deactivate_widget))
             .into()
     }
 
@@ -2236,10 +2234,7 @@ impl State {
                     complete_btn.into()
                 };
 
-                section = section.add(settings::item(
-                    crate::fl!("complete"),
-                    complete_widget,
-                ));
+                section = section.add(settings::item(crate::fl!("complete"), complete_widget));
             }
 
             let mut phone_btn = button::text(crate::fl!("send-sms"));

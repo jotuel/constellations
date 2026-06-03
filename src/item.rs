@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use crate::matrix;
 use crate::preview::{PreviewEvent, parse_markdown};
+use std::sync::Arc;
 
 #[derive(Clone, Debug)]
 pub struct ConstellationsItem {

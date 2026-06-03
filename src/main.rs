@@ -1,8 +1,8 @@
 #![recursion_limit = "256"]
 
+pub mod item;
 pub mod preview;
 pub mod utils;
-pub mod item;
 
 mod handlers;
 pub mod i18n;
@@ -12,9 +12,11 @@ pub mod rich_text;
 pub mod settings;
 mod view;
 
-pub use preview::{PreviewEvent, parse_markdown};
-pub use utils::{ApplyVectorDiffExt, contains_ignore_ascii_case, fuzzy_match_ignore_case, redact_url};
 pub use item::ConstellationsItem;
+pub use preview::{PreviewEvent, parse_markdown};
+pub use utils::{
+    ApplyVectorDiffExt, contains_ignore_ascii_case, fuzzy_match_ignore_case, redact_url,
+};
 
 use anyhow::Result;
 use cosmic::iced::widget::image;
@@ -109,6 +111,7 @@ pub struct Constellations {
     selected_emoji_group: Option<emojis::Group>,
     is_composer_emoji_picker_active: bool,
     room_name_cache: std::collections::HashMap<std::sync::Arc<str>, String>,
+    pub thread_counts: std::collections::HashMap<matrix_sdk::ruma::OwnedEventId, u32>,
 }
 
 #[derive(Debug, Clone)]
@@ -900,6 +903,7 @@ impl Application for Constellations {
             selected_emoji_group: None,
             is_composer_emoji_picker_active: false,
             room_name_cache: std::collections::HashMap::new(),
+            thread_counts: std::collections::HashMap::new(),
         };
 
         let title_task = app.update_title();
@@ -1093,6 +1097,7 @@ mod tests {
             selected_emoji_group: None,
             is_composer_emoji_picker_active: false,
             room_name_cache: std::collections::HashMap::new(),
+            thread_counts: std::collections::HashMap::new(),
         }
     }
 
@@ -1325,7 +1330,8 @@ mod tests {
 
         assert_eq!(app.get_room_name(&room_id), None);
 
-        app.room_name_cache.insert(room_id.clone(), "Cached Room Name".to_string());
+        app.room_name_cache
+            .insert(room_id.clone(), "Cached Room Name".to_string());
         assert_eq!(app.get_room_name(&room_id), Some("Cached Room Name"));
 
         app.room_list = vec![matrix::RoomData {

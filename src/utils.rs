@@ -47,7 +47,9 @@ pub fn fuzzy_match_ignore_case(haystack: &str, query: &str) -> bool {
     let mut query_chars = query.chars().peekable();
     for h_char in haystack.chars() {
         if let Some(&q_char) = query_chars.peek() {
-            if h_char.to_lowercase().to_string() == q_char.to_lowercase().to_string() {
+            // ⚡ Bolt Optimization: Compare iterators directly with `.eq()`
+            // to avoid O(N) `.to_string()` heap allocations per character match.
+            if h_char.to_lowercase().eq(q_char.to_lowercase()) {
                 query_chars.next();
             }
         } else {

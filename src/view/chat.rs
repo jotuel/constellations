@@ -466,7 +466,13 @@ impl<'chat> Constellations {
                 room_name
             )))
             .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
-            .push(button::text(crate::fl!("close-thread")).on_press(Message::CloseThread));
+            .push(tooltip(
+                button::icon(cosmic::widget::icon::from_name("window-close-symbolic"))
+                    .on_press(Message::CloseThread),
+                text::body(crate::fl!("close-thread")),
+                Position::Bottom,
+            ));
+
 
         // ⚡ Bolt Optimization: Reuse precomputed thread_counts from main timeline
         // to maintain O(N) rendering for the thread summary fallback checks.
@@ -504,7 +510,7 @@ impl<'chat> Constellations {
                         continue;
                     }
                 }
-                timeline_col = timeline_col.push(self.view_item(item, &thread_counts));
+                timeline_col = timeline_col.push(self.view_item(item, &self.thread_counts));
             }
         }
 
@@ -949,17 +955,25 @@ impl<'chat> Constellations {
                 );
             }
 
+            let call_button: Element<'_, Message> = if is_in_call {
+                tooltip(
+                    button::custom(cosmic::widget::icon::from_name("call-stop"))
+                        .class(cosmic::theme::Button::Destructive)
+                        .on_press(Message::LeaveCall),
+                    text::body(crate::fl!("call-leave")),
+                    Position::Bottom,
+                )
+                .into()
+            } else {
+                button::icon(Named::new("camera-web"))
+                    .on_press(Message::JoinCall)
+                    .tooltip(crate::fl!("call-join"))
+                    .into()
+            };
+
             room_header = room_header
                 .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
-                .push(if is_in_call {
-                    button::icon(Named::new("call-stop"))
-                        .on_press(Message::LeaveCall)
-                        .tooltip(crate::fl!("call-leave"))
-                } else {
-                    button::icon(Named::new("camera-web"))
-                        .on_press(Message::JoinCall)
-                        .tooltip(crate::fl!("call-join"))
-                })
+                .push(call_button)
                 .push(
                     button::icon(Named::new("emblem-system"))
                         .tooltip(crate::fl!("room-settings"))
@@ -1070,7 +1084,12 @@ impl<'chat> Constellations {
                 .push(text::body(crate::fl!("editing")).size(12))
                 .push(text::body(snippet).size(12))
                 .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
-                .push(button::text(crate::fl!("cancel")).on_press(Message::CancelEdit));
+                .push(tooltip(
+                    button::icon(cosmic::widget::icon::from_name("window-close-symbolic"))
+                        .on_press(Message::CancelEdit),
+                    text::body(crate::fl!("cancel")),
+                    Position::Bottom,
+                ));
 
             content = content.push(container(edit_bar).padding(10));
         }
@@ -1211,24 +1230,21 @@ impl<'chat> Constellations {
         // Header card
         results_col = results_col.push(
             container(
-                Row::new()
-                    .spacing(10)
-                    .align_y(Alignment::Center)
-                    .push(
-                        text::body(format!(
-                            "Search Results: Found {} matches for \"{}\" (fuzzy subsequence matching)",
-                            matches.len(),
-                            self.search_query
-                        ))
-                        .size(14)
-                    )
+                Row::new().spacing(10).align_y(Alignment::Center).push(
+                    text::body(crate::fl!(
+                        "search-results-found",
+                        count = matches.len(),
+                        query = self.search_query.as_str()
+                    ))
+                    .size(14),
+                ),
             )
             .style(|theme: &cosmic::Theme| {
                 use cosmic::iced::widget::container::Catalog;
                 theme.style(&cosmic::theme::Container::Card)
             })
             .padding(12)
-            .width(cosmic::iced::Length::Fill)
+            .width(cosmic::iced::Length::Fill),
         );
 
         let mut results_list = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
@@ -1237,12 +1253,15 @@ impl<'chat> Constellations {
         if matches.is_empty() {
             results_list = results_list.push(
                 container(
-                    text::body("No matches found.")
-                        .size(16)
+                    Column::new()
+                        .spacing(10)
+                        .align_x(Alignment::Center)
+                        .push(cosmic::widget::icon::from_name("edit-find-symbolic").size(64))
+                        .push(text::body(crate::fl!("no-results-found")).size(16)),
                 )
                 .width(cosmic::iced::Length::Fill)
                 .align_x(Alignment::Center)
-                .padding(40)
+                .padding(40),
             );
         } else {
             for item in matches {
@@ -1257,15 +1276,12 @@ impl<'chat> Constellations {
                             style
                         })
                         .padding(10)
-                        .width(cosmic::iced::Length::Fill)
+                        .width(cosmic::iced::Length::Fill),
                 );
             }
         }
 
-        results_col = results_col.push(
-            scrollable(results_list)
-                .height(cosmic::iced::Length::Fill)
-        );
+        results_col = results_col.push(scrollable(results_list).height(cosmic::iced::Length::Fill));
 
         results_col.into()
     }
@@ -1288,5 +1304,10 @@ fn view_reply_bar<'a>(
         )
         .push(text::body(snippet).size(12))
         .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
-        .push(button::text(crate::fl!("cancel")).on_press(Message::CancelReply))
+        .push(tooltip(
+            button::icon(cosmic::widget::icon::from_name("window-close-symbolic"))
+                .on_press(Message::CancelReply),
+            text::body(crate::fl!("cancel")),
+            Position::Top,
+        ))
 }

@@ -66,6 +66,7 @@ type-message-or-attach = Type a message or attach a file
 search = Search
 close-search = Close Search
 search-placeholder = Search...
+search-results-found = Search Results: Found { $count } matches for "{ $query }"
 call-join = Join a call
 call-leave = Leave call
 

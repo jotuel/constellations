@@ -2,11 +2,11 @@
 
 Constellations is a native Matrix client for the [COSMIC desktop environment](https://github.com/pop-os/cosmic-epoch), built with [libcosmic](https://github.com/pop-os/libcosmic) and [matrix-rust-sdk](https://github.com/matrix-org/matrix-rust-sdk).
 
-## Project Status: Alpha
+## Project Status
 
-Constellations is currently **alpha quality** software. While it is usable for basic daily tasks, you should expect bugs, missing features, and potential breaking changes.
+Constellations is currently alpha quality software. While it is usable for basic daily tasks, you should expect bugs, missing features, and potential breaking changes.
 
-The goal is to reach a stable 1.0 release once the underlying [matrix-rust-sdk](https://github.com/matrix-org/matrix-rust-sdk) reaches its own stable release.
+The goal is to reach a stable 1.0 release around the same time the underlying [matrix-rust-sdk](https://github.com/matrix-org/matrix-rust-sdk) and [iced-rs](https://iced.rs/) reach their stable releases.
 
 ### Recommendations
 
@@ -17,9 +17,9 @@ If you are looking for a more mature Matrix client today, we highly recommend:
 
 ## Build
 
-To build Constellations, you will need a new version Rust toolchain. On Debian based distros (atleast):
+To build Constellations, you will need a new version of Rust using `rustup`. On Debian based distros at least these:
 ```sh
-sudo apt-get update && sudo apt-get install -y pkg-config libxkbcommon-dev libx11-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libglib2.0-dev before running cargo test or cargo build.
+sudo apt-get update && sudo apt-get install -y pkg-config libxkbcommon-dev libx11-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libglib2.0-dev
 ```
 
 ```bash

@@ -17,14 +17,17 @@ const AVATAR_RADIUS: i32 = 15;
 impl Constellations {
     pub fn get_room_name(&self, room_id: &str) -> Option<&str> {
         if let Some(room) = self.room_list.iter().find(|r| r.id.as_ref() == room_id)
-            && let Some(name) = &room.name {
-                return Some(name.as_str());
-            }
+            && let Some(name) = &room.name
+        {
+            return Some(name.as_str());
+        }
         self.room_name_cache.get(room_id).map(|s| s.as_str())
     }
 
     pub fn update_title(&mut self) -> Task<Action<Message>> {
-        let title = self.selected_room.as_ref()
+        let title = self
+            .selected_room
+            .as_ref()
             .and_then(|id| self.get_room_name(id))
             .unwrap_or("Constellations - Matrix Client");
         self.core.set_header_title(title.to_string());
