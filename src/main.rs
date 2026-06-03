@@ -1,8 +1,8 @@
 #![recursion_limit = "256"]
 
+pub mod item;
 pub mod preview;
 pub mod utils;
-pub mod item;
 
 mod handlers;
 pub mod i18n;
@@ -12,9 +12,11 @@ pub mod rich_text;
 pub mod settings;
 mod view;
 
-pub use preview::{PreviewEvent, parse_markdown};
-pub use utils::{ApplyVectorDiffExt, contains_ignore_ascii_case, fuzzy_match_ignore_case, redact_url};
 pub use item::ConstellationsItem;
+pub use preview::{PreviewEvent, parse_markdown};
+pub use utils::{
+    ApplyVectorDiffExt, contains_ignore_ascii_case, fuzzy_match_ignore_case, redact_url,
+};
 
 use anyhow::Result;
 use cosmic::iced::widget::image;
@@ -1315,7 +1317,8 @@ mod tests {
 
         assert_eq!(app.get_room_name(&room_id), None);
 
-        app.room_name_cache.insert(room_id.clone(), "Cached Room Name".to_string());
+        app.room_name_cache
+            .insert(room_id.clone(), "Cached Room Name".to_string());
         assert_eq!(app.get_room_name(&room_id), Some("Cached Room Name"));
 
         app.room_list = vec![matrix::RoomData {

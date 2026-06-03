@@ -97,3 +97,7 @@
 ## 2026-06-26 - Add Search Icon to Empty States
 **Learning:** Empty states, especially those indicating no results (e.g., "No matches found." in search), can look barren if they consist only of text. Adding an associated icon (like `edit-find-symbolic`) and using localized text makes the empty state more appealing and accessible.
 **Action:** When designing or updating an empty state, particularly for search results or filtering, wrap the state in a `Column`, add an appropriate icon (e.g., `cosmic::widget::icon::from_name("edit-find-symbolic").size(64)`), and use `crate::fl!("key-name")` for the text to improve the visual hierarchy and internationalization.
+
+## 2024-05-20 - Icon Buttons for Ephemeral UI Bars
+**Learning:** Text-based action buttons like "Cancel" or "Close Thread" in compact UI spaces (like the thread header or composer edit/reply bars) consume unnecessary horizontal space, which is critical in narrow or split views. Replacing them with universally understood semantic icon buttons (`window-close-symbolic`) wrapped in a descriptive `tooltip` improves layout density while maintaining full accessibility.
+**Action:** When designing or refactoring compact UI elements like thread headers, inline edit bars, or small alert cards, always prefer semantic `button::icon` variants with localized `tooltip` text over full text buttons to preserve spatial economy.

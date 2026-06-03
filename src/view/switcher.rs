@@ -290,8 +290,9 @@ impl<'switcher> Constellations {
     ) -> Row<'switcher, Message, cosmic::prelude::Theme> {
         let name_str = room.name.as_deref();
         let name = text::body(
-            name_str.map(std::borrow::Cow::Borrowed)
-                .unwrap_or_else(|| std::borrow::Cow::Owned(crate::fl!("unknown-room")))
+            name_str
+                .map(std::borrow::Cow::Borrowed)
+                .unwrap_or_else(|| std::borrow::Cow::Owned(crate::fl!("unknown-room"))),
         );
         let mut header = Row::new().spacing(10).align_y(Alignment::Center);
 

@@ -1,9 +1,9 @@
+use cosmic::Element;
 use cosmic::iced::Alignment;
 use cosmic::iced::widget::image;
-use cosmic::widget::{Column, Row, button, container, text, Widget};
-use cosmic::Element;
+use cosmic::widget::{Column, Row, Widget, button, container, text};
 
-use crate::{Constellations, Message, matrix, CONSTELLATIONS_ICON};
+use crate::{CONSTELLATIONS_ICON, Constellations, Message, matrix};
 
 impl Constellations {
     pub fn view_app(&self) -> Element<'_, Message> {
