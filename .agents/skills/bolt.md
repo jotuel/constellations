@@ -99,3 +99,7 @@
 ## 2024-10-24 - [Avoid `String` allocations from `fl!` macro in view loops]
 **Learning:** `src/view/switcher.rs` was calling `crate::fl!("unknown-room")` and `crate::fl!("room-has-no-avatar")` unconditionally for every room in the list on every frame. `fl!` dynamically allocates a `String` representing the localized message. This resulted in O(N) heap allocations per render frame.
 **Action:** In libcosmic/iced `view()` render loops, avoid calling `crate::fl!()` unconditionally. Instead, wrap it in a closure or `unwrap_or_else` block (e.g., returning `std::borrow::Cow::Owned(crate::fl!(...))`) to lazily evaluate and allocate the localized string only when genuinely needed (e.g., as a fallback for missing data).
+
+## 2025-02-27 - [Precomputing derived view state vs in-view allocation]
+**Learning:** `view_thread_summary` was taking a massive hit because it iterated through the timeline items, conditionally accumulating thread counts *for each event* during the `view()` loop. Passing `self.thread_counts` map directly eliminates O(N^2) checks per frame.
+**Action:** When working in Iced/Libcosmic, move derived collections (like mapping root IDs to counts) into `update()`/application state and reuse via reference. DO NOT do aggregation traversals in `view()`.

@@ -30,24 +30,12 @@ impl<'chat> Constellations {
         let filter_lower_fallback =
             (is_filtering && !filter_is_ascii).then(|| self.search_query.to_lowercase());
 
-        // ⚡ Bolt Optimization: Precompute thread counts in O(N) to avoid O(N^2) bottleneck
-        // inside view_thread_summary which previously iterated over the whole timeline per message.
-        let mut thread_counts: std::collections::HashMap<matrix_sdk::ruma::OwnedEventId, u32> =
-            std::collections::HashMap::new();
-        for item in &self.timeline_items {
-            if let Some(timeline_item) = &item.item
-                && let Some(event) = timeline_item.as_event()
-                && let Some(root_id) = event.content().thread_root() {
-                    *thread_counts.entry(root_id).or_insert(0) += 1;
-                }
-        }
-
         let mut pending_date_divider: Option<matrix_sdk::ruma::MilliSecondsSinceUnixEpoch> = None;
 
         for item in &self.timeline_items {
             if item.item.is_none() {
                 // Render simulated/mock items!
-                timeline = timeline.push(self.view_item(item, &thread_counts));
+                timeline = timeline.push(self.view_item(item, &self.thread_counts));
                 continue;
             }
 
@@ -95,9 +83,10 @@ impl<'chat> Constellations {
                     );
                 }
 
-                timeline = timeline.push(self.view_item(item, &thread_counts));
+                timeline = timeline.push(self.view_item(item, &self.thread_counts));
             } else if let Some(timeline_item) = &item.item
-                && let Some(matrix::VirtualTimelineItem::DateDivider(date)) = timeline_item.as_virtual()
+                && let Some(matrix::VirtualTimelineItem::DateDivider(date)) =
+                    timeline_item.as_virtual()
             {
                 pending_date_divider = Some(*date);
             }
@@ -473,22 +462,9 @@ impl<'chat> Constellations {
                 Position::Bottom,
             ));
 
-
-        // ⚡ Bolt Optimization: Reuse precomputed thread_counts from main timeline
-        // to maintain O(N) rendering for the thread summary fallback checks.
-        let mut thread_counts: std::collections::HashMap<matrix_sdk::ruma::OwnedEventId, u32> =
-            std::collections::HashMap::new();
-        for item in &self.timeline_items {
-            if let Some(timeline_item) = &item.item
-                && let Some(event) = timeline_item.as_event()
-                && let Some(root_id) = event.content().thread_root() {
-                    *thread_counts.entry(root_id.clone()).or_insert(0) += 1;
-                }
-        }
-
         for item in &self.threaded_timeline_items {
             if item.item.is_none() {
-                timeline_col = timeline_col.push(self.view_item(item, &thread_counts));
+                timeline_col = timeline_col.push(self.view_item(item, &self.thread_counts));
                 continue;
             }
 
@@ -618,16 +594,14 @@ impl<'chat> Constellations {
 
             match message.msgtype() {
                 MessageType::Image(image) => {
-                    bubble_col = bubble_col.push(self.view_message_image(&image));
+                    bubble_col = bubble_col.push(self.view_message_image(image));
                 }
                 MessageType::File(file) => {
-                    bubble_col = bubble_col.push(self.view_message_file(&file));
+                    bubble_col = bubble_col.push(self.view_message_file(file));
                 }
                 _ => {
-                    bubble_col = bubble_col.push(self.view_message_text(
-                        &item.markdown,
-                        &item.plain_text,
-                    ));
+                    bubble_col =
+                        bubble_col.push(self.view_message_text(&item.markdown, &item.plain_text));
                 }
             }
 
@@ -722,7 +696,7 @@ impl<'chat> Constellations {
                         Alignment::Start
                     });
 
-            return bubble_wrap.into();
+            bubble_wrap.into()
         } else {
             let is_me = item.is_me;
             let is_ignored = self.user_settings.ignored_users.contains(&item.sender_id);
@@ -739,10 +713,7 @@ impl<'chat> Constellations {
                 .spacing(if self.app_settings.compact_mode { 0 } else { 2 })
                 .push(sender_info);
 
-            bubble_col = bubble_col.push(self.view_message_text(
-                &item.markdown,
-                &item.plain_text,
-            ));
+            bubble_col = bubble_col.push(self.view_message_text(&item.markdown, &item.plain_text));
 
             let bubble = container(bubble_col)
                 .padding(if self.app_settings.compact_mode {
@@ -1024,7 +995,9 @@ impl<'chat> Constellations {
                 .and_then(|ev| ev.content().as_message())
                 .map(|msg| msg.body())
                 .unwrap_or_else(|| {
-                    if let Some(crate::preview::PreviewEvent::Text(txt)) = replying_to.plain_text.first() {
+                    if let Some(crate::preview::PreviewEvent::Text(txt)) =
+                        replying_to.plain_text.first()
+                    {
                         txt.as_str()
                     } else {
                         ""
@@ -1057,7 +1030,9 @@ impl<'chat> Constellations {
                 .and_then(|ev| ev.content().as_message())
                 .map(|msg| msg.body())
                 .unwrap_or_else(|| {
-                    if let Some(crate::preview::PreviewEvent::Text(txt)) = editing_item.plain_text.first() {
+                    if let Some(crate::preview::PreviewEvent::Text(txt)) =
+                        editing_item.plain_text.first()
+                    {
                         txt.as_str()
                     } else {
                         ""

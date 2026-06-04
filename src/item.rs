@@ -70,12 +70,7 @@ impl ConstellationsItem {
         }
     }
 
-    pub fn new_mock(
-        sender_name: &str,
-        text: &str,
-        timestamp: &str,
-        is_me: bool,
-    ) -> Self {
+    pub fn new_mock(sender_name: &str, text: &str, timestamp: &str, is_me: bool) -> Self {
         let sender_id = matrix_sdk::ruma::user_id!("@unknown:example.com").to_owned();
         let markdown = parse_markdown(text, false);
         let plain_text = vec![PreviewEvent::Text(text.to_owned())];

@@ -167,40 +167,41 @@ impl Constellations {
                 content = content.push(text::body(crate::fl!("login-qr-scanning")));
 
                 if let Some(ref url) = self.qr_rendezvous_url
-                    && let Ok(code) = qrcode::QrCode::new(url.as_bytes()) {
-                        let width = code.width();
-                        let scale = 8;
-                        let scaled_width = width * scale;
-                        let mut pixels = Vec::with_capacity(scaled_width * scaled_width * 4);
-                        for y in 0..scaled_width {
-                            let qr_y = y / scale;
-                            for x in 0..scaled_width {
-                                let qr_x = x / scale;
-                                let is_dark = code[(qr_x, qr_y)] == qrcode::Color::Dark;
-                                let color = if is_dark {
-                                    [0, 0, 0, 255] // Black
-                                } else {
-                                    [255, 255, 255, 255] // White
-                                };
-                                pixels.extend_from_slice(&color);
-                            }
+                    && let Ok(code) = qrcode::QrCode::new(url.as_bytes())
+                {
+                    let width = code.width();
+                    let scale = 8;
+                    let scaled_width = width * scale;
+                    let mut pixels = Vec::with_capacity(scaled_width * scaled_width * 4);
+                    for y in 0..scaled_width {
+                        let qr_y = y / scale;
+                        for x in 0..scaled_width {
+                            let qr_x = x / scale;
+                            let is_dark = code[(qr_x, qr_y)] == qrcode::Color::Dark;
+                            let color = if is_dark {
+                                [0, 0, 0, 255] // Black
+                            } else {
+                                [255, 255, 255, 255] // White
+                            };
+                            pixels.extend_from_slice(&color);
                         }
-
-                        let handle = cosmic::iced::widget::image::Handle::from_rgba(
-                            scaled_width as u32,
-                            scaled_width as u32,
-                            pixels,
-                        );
-
-                        content = content.push(
-                            container(
-                                cosmic::widget::image(handle)
-                                    .width(cosmic::iced::Length::Fixed(200.0))
-                                    .height(cosmic::iced::Length::Fixed(200.0))
-                            )
-                            .padding(15),
-                        );
                     }
+
+                    let handle = cosmic::iced::widget::image::Handle::from_rgba(
+                        scaled_width as u32,
+                        scaled_width as u32,
+                        pixels,
+                    );
+
+                    content = content.push(
+                        container(
+                            cosmic::widget::image(handle)
+                                .width(cosmic::iced::Length::Fixed(200.0))
+                                .height(cosmic::iced::Length::Fixed(200.0)),
+                        )
+                        .padding(15),
+                    );
+                }
             }
             QrLoginStep::RendezvousEstablished => {
                 content = content
