@@ -301,9 +301,6 @@ impl<'chat> Constellations {
         avatar_url: Option<&'a str>,
         sender_name: &'a str,
         timestamp: &'a str,
-        sender_id: Option<&'a matrix_sdk::ruma::UserId>,
-        is_ignored: bool,
-        is_me: bool,
     ) -> Row<'a, Message, cosmic::Theme> {
         let mut sender_info = Row::new().spacing(5).align_y(Alignment::Center);
 
@@ -325,26 +322,6 @@ impl<'chat> Constellations {
         }
 
         sender_info = sender_info.push(text::body(sender_name).size(10));
-
-        if !is_me && let Some(id) = sender_id {
-            if is_ignored {
-                sender_info = sender_info.push(
-                    button::icon(Named::new("dialog-error-symbolic"))
-                        .on_press(Message::UserSettings(
-                            crate::settings::user::Message::UnignoreUserById(id.to_owned()),
-                        ))
-                        .tooltip(crate::fl!("unignore-user")),
-                );
-            } else {
-                sender_info = sender_info.push(
-                    button::icon(Named::new("dialog-error-symbolic"))
-                        .on_press(Message::UserSettings(
-                            crate::settings::user::Message::IgnoreUserById(id.to_owned()),
-                        ))
-                        .tooltip(crate::fl!("ignore")),
-                );
-            }
-        }
 
         sender_info = sender_info.push(text::body(timestamp).size(10));
 
@@ -559,9 +536,6 @@ impl<'chat> Constellations {
                 item.avatar_url.as_deref(),
                 item.sender_name.as_str(),
                 item.timestamp.as_str(),
-                Some(&item.sender_id),
-                is_ignored,
-                is_me,
             );
 
             let mut bubble_col = Column::new()
@@ -648,22 +622,7 @@ impl<'chat> Constellations {
             );
             action_row = action_row.push(btn_tooltip);
 
-            // Start a thread
-            let root_id = event.identifier();
-            let start_thread_btn = button::icon(cosmic::widget::icon::from_name(
-                "view-list-symbolic",
-            ))
-            .on_press(match root_id {
-                matrix::TimelineEventItemId::EventId(id) => Message::OpenThread(id.to_owned()),
-                _ => Message::NoOp,
-            });
-            let action_tooltip = tooltip(
-                start_thread_btn,
-                text::body(crate::fl!("tooltip-thread")),
-                Position::Bottom,
-            );
-            action_row = action_row.push(action_tooltip);
-
+            // Reply button
             let reply_btn = button::icon(cosmic::widget::icon::from_name("mail-replied-symbolic"))
                 .on_press(Message::StartReply(event.identifier().clone()));
             let reply_tooltip = tooltip(
@@ -672,6 +631,42 @@ impl<'chat> Constellations {
                 Position::Bottom,
             );
             action_row = action_row.push(reply_tooltip);
+
+            // Thread button (either summary or start thread button)
+            let has_thread_root = event.content().thread_root().is_some();
+            let mut num_replies = event
+                .content()
+                .thread_summary()
+                .map(|s| s.num_replies)
+                .unwrap_or_default();
+
+            if let Some(event_id) = event.event_id() {
+                let manual_count = thread_counts.get(event_id).copied().unwrap_or(0);
+                if manual_count > num_replies {
+                    num_replies = manual_count;
+                }
+            }
+
+            let has_thread_summary = num_replies > 0 && !has_thread_root && self.active_thread_root.is_none();
+
+            if has_thread_summary {
+                action_row = action_row.push(self.view_thread_summary(event, thread_counts));
+            } else {
+                let root_id = event.identifier();
+                let start_thread_btn = button::icon(cosmic::widget::icon::from_name(
+                    "view-list-symbolic",
+                ))
+                .on_press(match root_id {
+                    matrix::TimelineEventItemId::EventId(id) => Message::OpenThread(id.to_owned()),
+                    _ => Message::NoOp,
+                });
+                let action_tooltip = tooltip(
+                    start_thread_btn,
+                    text::body(crate::fl!("tooltip-thread")),
+                    Position::Bottom,
+                );
+                action_row = action_row.push(action_tooltip);
+            }
 
             if is_me {
                 let edit_btn = button::icon(cosmic::widget::icon::from_name("edit-symbolic"))
@@ -693,6 +688,22 @@ impl<'chat> Constellations {
                     Position::Bottom,
                 );
                 action_row = action_row.push(delete_tooltip);
+            } else {
+                if is_ignored {
+                    let ignore_btn = button::icon(Named::new("dialog-error-symbolic"))
+                        .on_press(Message::UserSettings(
+                            crate::settings::user::Message::UnignoreUserById(item.sender_id.to_owned()),
+                        ))
+                        .tooltip(crate::fl!("unignore-user"));
+                    action_row = action_row.push(ignore_btn);
+                } else {
+                    let ignore_btn = button::icon(Named::new("dialog-error-symbolic"))
+                        .on_press(Message::UserSettings(
+                            crate::settings::user::Message::IgnoreUserById(item.sender_id.to_owned()),
+                        ))
+                        .tooltip(crate::fl!("ignore"));
+                    action_row = action_row.push(ignore_btn);
+                }
             }
 
             bubble_col = bubble_col.push(reaction_row);
@@ -702,7 +713,6 @@ impl<'chat> Constellations {
                     bubble_col.push(self.view_emoji_picker(Some(event.identifier().clone())));
             }
 
-            action_row = action_row.push(self.view_thread_summary(event, thread_counts));
             bubble_col = bubble_col.push(action_row);
 
             let bubble = container(bubble_col)
@@ -725,14 +735,10 @@ impl<'chat> Constellations {
             return bubble_wrap.into();
         } else {
             let is_me = item.is_me;
-            let is_ignored = self.user_settings.ignored_users.contains(&item.sender_id);
             let sender_info = self.view_sender_info(
                 item.avatar_url.as_deref(),
                 item.sender_name.as_str(),
                 item.timestamp.as_str(),
-                Some(&item.sender_id),
-                is_ignored,
-                is_me,
             );
 
             let mut bubble_col = Column::new()
