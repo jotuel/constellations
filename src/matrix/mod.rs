@@ -1066,28 +1066,28 @@ impl MatrixEngine {
         Ok(())
     }
 
-fn strip_reply_quote(body: &str) -> &str {
-    let mut actual_line = None;
-    let mut in_quote = false;
-    for line in body.lines() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with('>') {
-            in_quote = true;
-            continue;
+    fn strip_reply_quote(body: &str) -> &str {
+        let mut actual_line = None;
+        let mut in_quote = false;
+        for line in body.lines() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with('>') {
+                in_quote = true;
+                continue;
+            }
+            if in_quote && trimmed.is_empty() {
+                continue;
+            }
+            actual_line = Some(line);
+            break;
         }
-        if in_quote && trimmed.is_empty() {
-            continue;
-        }
-        actual_line = Some(line);
-        break;
-    }
 
-    if let Some(line) = actual_line {
-        line.trim()
-    } else {
-        body.split('\n').next().unwrap_or("").trim()
+        if let Some(line) = actual_line {
+            line.trim()
+        } else {
+            body.split('\n').next().unwrap_or("").trim()
+        }
     }
-}
 
     pub async fn fetch_room_data(&self, room: &matrix_sdk::Room) -> Result<RoomData> {
         let id: std::sync::Arc<str> = room.room_id().as_str().into();
@@ -2602,7 +2602,9 @@ fn strip_reply_quote(body: &str) -> &str {
         }
 
         if !store_path.exists() && search_index_path.exists() {
-            tracing::info!("Fresh SQLite store, clearing existing search index path to prevent mismatched keys.");
+            tracing::info!(
+                "Fresh SQLite store, clearing existing search index path to prevent mismatched keys."
+            );
             let _ = std::fs::remove_dir_all(&search_index_path);
         }
 

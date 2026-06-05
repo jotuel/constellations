@@ -1305,10 +1305,15 @@ impl State {
                                     }
 
                                     if let Some(params_box) = &info.params {
-                                        if let Ok(params) = serde_json::from_str::<UiaaParams>(params_box.get()) {
+                                        if let Ok(params) =
+                                            serde_json::from_str::<UiaaParams>(params_box.get())
+                                        {
                                             if let Some(oauth) = params.oauth {
                                                 if let Err(err) = open::that(&oauth.url) {
-                                                    return Err(format!("Failed to open authentication link: {err}. Please open: {}", oauth.url));
+                                                    return Err(format!(
+                                                        "Failed to open authentication link: {err}. Please open: {}",
+                                                        oauth.url
+                                                    ));
                                                 }
                                                 return Err("Authentication required in web browser. Please complete the cross-signing reset in the browser, then try bootstrapping again.".to_string());
                                             }
@@ -2093,10 +2098,7 @@ impl State {
                     );
                 }
 
-                let device_layout = Column::new()
-                    .spacing(6)
-                    .push(title_row)
-                    .push(action_row);
+                let device_layout = Column::new().spacing(6).push(title_row).push(action_row);
 
                 section = section.add(settings::item_row(vec![device_layout.into()]));
             }
@@ -2515,8 +2517,14 @@ mod tests {
         assert!(state.devices[0].is_current);
 
         state.is_loading_devices = true;
-        let _ = state.update(Message::DevicesLoaded(Err("network error".to_string())), &None);
+        let _ = state.update(
+            Message::DevicesLoaded(Err("network error".to_string())),
+            &None,
+        );
         assert!(!state.is_loading_devices);
-        assert_eq!(state.error, Some("Failed to load devices: network error".to_string()));
+        assert_eq!(
+            state.error,
+            Some("Failed to load devices: network error".to_string())
+        );
     }
 }

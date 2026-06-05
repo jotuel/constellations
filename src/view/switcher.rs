@@ -9,8 +9,8 @@ use cosmic::{
     Element,
     iced::Alignment,
     widget::{
-        Column, RcElementWrapper, Row, button, container, divider, icon::Named, menu, scrollable, text,
-        text_input, tooltip, tooltip::Position,
+        Column, RcElementWrapper, Row, button, container, divider, icon::Named, menu, scrollable,
+        text, text_input, tooltip, tooltip::Position,
     },
 };
 
@@ -44,8 +44,7 @@ impl<'switcher> Constellations {
         // Global icon (All Rooms)
         let is_global_selected = self.selected_space.is_none();
 
-        let mut global_btn = button::icon(Named::new("web-browser"))
-            .selected(is_global_selected);
+        let mut global_btn = button::icon(Named::new("web-browser")).selected(is_global_selected);
         if !is_global_selected {
             global_btn = global_btn.on_press(Message::SelectSpace(None));
         }
@@ -80,8 +79,7 @@ impl<'switcher> Constellations {
                 .align_x(Alignment::Center)
                 .align_y(Alignment::Center);
 
-            let mut btn = button::custom(space_container)
-                .selected(is_selected);
+            let mut btn = button::custom(space_container).selected(is_selected);
             if !is_selected {
                 btn = btn.on_press(Message::SelectSpace(Some(space_id_str)));
             }
@@ -257,7 +255,7 @@ impl<'switcher> Constellations {
                         .width(24)
                         .height(24)
                         .align_x(Alignment::Center)
-                        .align_y(Alignment::Center)
+                        .align_y(Alignment::Center),
                 )
             };
 
@@ -269,10 +267,11 @@ impl<'switcher> Constellations {
                 .push(text::title3(space_name).width(cosmic::iced::Length::Fill))
                 .push(
                     button::icon(Named::new("emblem-system"))
+                        .extra_small()
                         .tooltip(crate::fl!("space-settings"))
                         .on_press(Message::OpenSettings(crate::SettingsPanel::Space)),
                 );
-            room_list = room_list.push(container(space_header).padding(5));
+            room_list = room_list.push(container(space_header).padding(5).align_top(50));
             room_list = room_list.push(divider::horizontal::default());
 
             if !self.other_rooms.is_empty() {
@@ -298,7 +297,11 @@ impl<'switcher> Constellations {
 
             if let Some(last_msg) = &room.last_message {
                 let first_line = clean_last_message(last_msg);
-                room_content = room_content.push(text::body(first_line).size(12).width(cosmic::iced::Length::Fill));
+                room_content = room_content.push(
+                    text::body(first_line)
+                        .size(12)
+                        .width(cosmic::iced::Length::Fill),
+                );
             }
 
             let is_selected = self.selected_room.as_ref() == Some(&room.id);
@@ -308,7 +311,9 @@ impl<'switcher> Constellations {
                     .width(cosmic::iced::Length::Fill),
             )
             .selected(is_selected)
-            .class(cosmic::theme::Button::ListItem(self.core.system_theme().cosmic().corner_radii.radius_m))
+            .class(cosmic::theme::Button::ListItem(
+                self.core.system_theme().cosmic().corner_radii.radius_m,
+            ))
             .on_press(Message::RoomSelected(room_id));
 
             room_list = room_list.push(btn.width(cosmic::iced::Fill));
@@ -333,7 +338,11 @@ impl<'switcher> Constellations {
 
                 if let Some(last_msg) = &room.last_message {
                     let first_line = clean_last_message(last_msg);
-                    room_content = room_content.push(text::body(first_line).size(12).width(cosmic::iced::Length::Fill));
+                    room_content = room_content.push(
+                        text::body(first_line)
+                            .size(12)
+                            .width(cosmic::iced::Length::Fill),
+                    );
                 }
 
                 let btn = button::custom(
@@ -342,7 +351,9 @@ impl<'switcher> Constellations {
                         .width(cosmic::iced::Length::Fill),
                 )
                 .selected(false)
-                .class(cosmic::theme::Button::ListItem(self.core.system_theme().cosmic().corner_radii.radius_m))
+                .class(cosmic::theme::Button::ListItem(
+                    self.core.system_theme().cosmic().corner_radii.radius_m,
+                ))
                 .width(cosmic::iced::Length::Fill);
 
                 let join_btn =
@@ -374,7 +385,10 @@ impl<'switcher> Constellations {
                 .unwrap_or_else(|| std::borrow::Cow::Owned(crate::fl!("unknown-room"))),
         )
         .width(cosmic::iced::Length::Fill);
-        let mut header = Row::new().spacing(10).align_y(Alignment::Center).width(cosmic::iced::Length::Fill);
+        let mut header = Row::new()
+            .spacing(10)
+            .align_y(Alignment::Center)
+            .width(cosmic::iced::Length::Fill);
 
         let view_default_avatar = || {
             container(text::body(crate::fl!("room-has-no-avatar")))

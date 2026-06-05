@@ -1238,22 +1238,14 @@ impl<'chat> Constellations {
             .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
             .push(send_btn_widget);
 
-        let composer_card = container(
-            Column::new()
-                .spacing(5)
-                .push(composer)
-                .push(controls)
-        )
-        .style(|theme: &cosmic::Theme| {
-            use cosmic::iced::widget::container::Catalog;
-            theme.style(&cosmic::theme::Container::Card)
-        })
-        .padding(10);
+        let composer_card = container(Column::new().spacing(5).push(composer).push(controls))
+            .style(|theme: &cosmic::Theme| {
+                use cosmic::iced::widget::container::Catalog;
+                theme.style(&cosmic::theme::Container::Card)
+            })
+            .padding(10);
 
-        content
-            .push(attachments_view)
-            .push(composer_card)
-            .into()
+        content.push(attachments_view).push(composer_card).into()
     }
 
     pub fn view_search_results(&self) -> Element<'_, Message> {

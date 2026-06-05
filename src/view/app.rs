@@ -1,7 +1,7 @@
 use cosmic::Element;
 use cosmic::iced::Alignment;
 use cosmic::iced::widget::image;
-use cosmic::widget::{Column, Row, Widget, button, container, text, divider};
+use cosmic::widget::{Column, Row, Widget, button, container, divider, text};
 
 use crate::{CONSTELLATIONS_ICON, Constellations, Message, matrix};
 

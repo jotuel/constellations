@@ -857,26 +857,20 @@ impl State {
                     .spacing(5)
                     .align_y(Alignment::Center)
                     .push(text::body(crate::fl!("suggested")).size(12))
-                    .push(cosmic::widget::toggler(child.suggested).on_toggle(
-                        move |suggested| {
-                            Message::ToggleChildSuggested(
-                                child_id_for_suggested.clone(),
-                                suggested,
-                            )
-                        },
-                    ));
+                    .push(
+                        cosmic::widget::toggler(child.suggested).on_toggle(move |suggested| {
+                            Message::ToggleChildSuggested(child_id_for_suggested.clone(), suggested)
+                        }),
+                    );
 
                 let child_id_clone = child.id.to_string();
-                let mut order_row = Row::new()
-                    .spacing(5)
-                    .align_y(Alignment::Center)
-                    .push(
-                        text_input::text_input(crate::fl!("order"), order_to_show)
-                            .on_input(move |new_order| {
-                                Message::ChildOrderInputChanged(child_id_clone.clone(), new_order)
-                            })
-                            .width(80),
-                    );
+                let mut order_row = Row::new().spacing(5).align_y(Alignment::Center).push(
+                    text_input::text_input(crate::fl!("order"), order_to_show)
+                        .on_input(move |new_order| {
+                            Message::ChildOrderInputChanged(child_id_clone.clone(), new_order)
+                        })
+                        .width(80),
+                );
 
                 if order_to_show != current_order {
                     order_row = order_row.push(
