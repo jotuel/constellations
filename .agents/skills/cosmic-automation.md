@@ -56,6 +56,22 @@ gcc -O3 -o wtype main.c virtual-keyboard-unstable-v1-client-protocol.c $(pkg-con
   ./wtype -d 20 "Typing slowly..."
   ```
 
+### Pointer Control and Scrolling (wlrctl)
+If `wlrctl` is installed, it can be used to simulate pointer actions (clicks, movement, and scrolling) under Wayland.
+
+* **Left click at current pointer position:**
+  ```bash
+  wlrctl pointer click left
+  ```
+* **Scroll vertically (positive value to scroll down, negative to scroll up):**
+  ```bash
+  wlrctl pointer scroll 150 0
+  ```
+* **Scroll horizontally:**
+  ```bash
+  wlrctl pointer scroll 0 150
+  ```
+
 ## 4. Window Management (Closing Windows)
 COSMIC DE uses a tiling/windowing model where `Super + Q` (or `Logo + Q`) is the default keyboard shortcut to close the active focused window.
 To close the currently focused window programmatically:

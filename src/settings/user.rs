@@ -1812,18 +1812,22 @@ impl State {
                 add_btn.into()
             };
 
-            section = section.add(settings::item(
-                "Add Keyword",
-                Row::new()
-                    .spacing(10)
-                    .push(
-                        text_input("New keyword", &self.new_keyword)
-                            .on_input(Message::NewKeywordChanged)
-                            .on_submit(|_| Message::AddKeyword),
-                    )
-                    .push(btn_widget)
-                    .wrap(),
-            ));
+            let add_keyword_layout = Column::new()
+                .spacing(5)
+                .push(text::body("Add Keyword").size(12))
+                .push(
+                    Row::new()
+                        .spacing(10)
+                        .align_y(Alignment::Center)
+                        .push(
+                            text_input("New keyword", &self.new_keyword)
+                                .on_input(Message::NewKeywordChanged)
+                                .on_submit(|_| Message::AddKeyword),
+                        )
+                        .push(btn_widget),
+                );
+
+            section = section.add(settings::item_row(vec![add_keyword_layout.into()]));
         }
 
         section.into()
@@ -2050,10 +2054,12 @@ impl State {
                     );
                 }
 
-                section = section.add(settings::item_row(vec![
-                    title_row.into(),
-                    action_row.into(),
-                ]));
+                let device_layout = Column::new()
+                    .spacing(6)
+                    .push(title_row)
+                    .push(action_row);
+
+                section = section.add(settings::item_row(vec![device_layout.into()]));
             }
 
             section = section.add(settings::item(
@@ -2199,17 +2205,21 @@ impl State {
                 email_btn.into()
             };
 
-            section = section.add(settings::item(
-                crate::fl!("link-email"),
-                Row::new()
-                    .spacing(10)
-                    .push(
-                        text_input("email@example.com", &self.new_3pid_email)
-                            .on_input(Message::New3PIDEmailChanged),
-                    )
-                    .push(email_widget)
-                    .wrap(),
-            ));
+            let link_email_layout = Column::new()
+                .spacing(5)
+                .push(text::body(crate::fl!("link-email")).size(12))
+                .push(
+                    Row::new()
+                        .spacing(10)
+                        .align_y(Alignment::Center)
+                        .push(
+                            text_input("email@example.com", &self.new_3pid_email)
+                                .on_input(Message::New3PIDEmailChanged),
+                        )
+                        .push(email_widget),
+                );
+
+            section = section.add(settings::item_row(vec![link_email_layout.into()]));
 
             if let Some(sid) = &self.adding_3pid_sid {
                 section = section.add(settings::item(
@@ -2259,22 +2269,26 @@ impl State {
                 phone_btn.into()
             };
 
-            section = section.add(settings::item(
-                crate::fl!("link-phone"),
-                Row::new()
-                    .spacing(10)
-                    .push(
-                        text_input("+1", &self.new_3pid_country_code)
-                            .width(50)
-                            .on_input(Message::New3PIDCountryCodeChanged),
-                    )
-                    .push(
-                        text_input("Phone Number", &self.new_3pid_msisdn)
-                            .on_input(Message::New3PIDMsisdnChanged),
-                    )
-                    .push(phone_widget)
-                    .wrap(),
-            ));
+            let link_phone_layout = Column::new()
+                .spacing(5)
+                .push(text::body(crate::fl!("link-phone")).size(12))
+                .push(
+                    Row::new()
+                        .spacing(10)
+                        .align_y(Alignment::Center)
+                        .push(
+                            text_input("+1", &self.new_3pid_country_code)
+                                .width(50)
+                                .on_input(Message::New3PIDCountryCodeChanged),
+                        )
+                        .push(
+                            text_input("Phone Number", &self.new_3pid_msisdn)
+                                .on_input(Message::New3PIDMsisdnChanged),
+                        )
+                        .push(phone_widget),
+                );
+
+            section = section.add(settings::item_row(vec![link_phone_layout.into()]));
         }
 
         section.into()
@@ -2315,18 +2329,22 @@ impl State {
                 ignore_btn.into()
             };
 
-            section = section.add(settings::item(
-                crate::fl!("ignore"),
-                Row::new()
-                    .spacing(10)
-                    .push(
-                        text_input("@user:example.com", &self.new_ignore_user_id)
-                            .on_input(Message::NewIgnoreUserIdChanged)
-                            .on_submit(|_| Message::IgnoreUser),
-                    )
-                    .push(ignore_widget)
-                    .wrap(),
-            ));
+            let ignore_layout = Column::new()
+                .spacing(5)
+                .push(text::body(crate::fl!("ignore")).size(12))
+                .push(
+                    Row::new()
+                        .spacing(10)
+                        .align_y(Alignment::Center)
+                        .push(
+                            text_input("@user:example.com", &self.new_ignore_user_id)
+                                .on_input(Message::NewIgnoreUserIdChanged)
+                                .on_submit(|_| Message::IgnoreUser),
+                        )
+                        .push(ignore_widget),
+                );
+
+            section = section.add(settings::item_row(vec![ignore_layout.into()]));
         }
 
         section.into()

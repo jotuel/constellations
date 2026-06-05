@@ -772,13 +772,21 @@ impl State {
                     .map(|s| s.as_str())
                     .unwrap_or(current_order);
 
-                let mut row = Row::new().spacing(10).align_y(Alignment::Center).push(
-                    Column::new()
-                        .push(text::body(name.to_string()))
-                        .push(text::body(child.id.to_string()).size(10)),
-                );
+                let header_row = Row::new()
+                    .spacing(10)
+                    .align_y(Alignment::Center)
+                    .push(
+                        Column::new()
+                            .push(text::body(name.to_string()))
+                            .push(text::body(child.id.to_string()).size(10)),
+                    )
+                    .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
+                    .push(
+                        button::destructive(crate::fl!("remove"))
+                            .on_press(Message::RemoveChild(child.id.to_string())),
+                    );
 
-                row = row.push(cosmic::widget::space().width(cosmic::iced::Length::Fill));
+                let mut layout = Column::new().spacing(8).push(header_row);
 
                 if !child.is_space {
                     use matrix_sdk::ruma::events::room::join_rules::{
@@ -840,46 +848,52 @@ impl State {
                         ));
                     }
 
-                    row = row.push(Row::new().spacing(5).push(invite_btn).push(restricted_btn));
+                    let join_rule_row = Row::new().spacing(5).push(invite_btn).push(restricted_btn);
+                    layout = layout.push(join_rule_row);
                 }
 
                 let child_id_for_suggested = child.id.to_string();
-                row = row.push(
-                    Row::new()
-                        .spacing(5)
-                        .align_y(Alignment::Center)
-                        .push(text::body(crate::fl!("suggested")).size(12))
-                        .push(cosmic::widget::toggler(child.suggested).on_toggle(
-                            move |suggested| {
-                                Message::ToggleChildSuggested(
-                                    child_id_for_suggested.clone(),
-                                    suggested,
-                                )
-                            },
-                        )),
-                );
+                let suggested_widget = Row::new()
+                    .spacing(5)
+                    .align_y(Alignment::Center)
+                    .push(text::body(crate::fl!("suggested")).size(12))
+                    .push(cosmic::widget::toggler(child.suggested).on_toggle(
+                        move |suggested| {
+                            Message::ToggleChildSuggested(
+                                child_id_for_suggested.clone(),
+                                suggested,
+                            )
+                        },
+                    ));
 
                 let child_id_clone = child.id.to_string();
-                row = row.push(
-                    text_input::text_input(crate::fl!("order"), order_to_show)
-                        .on_input(move |new_order| {
-                            Message::ChildOrderInputChanged(child_id_clone.clone(), new_order)
-                        })
-                        .width(100),
-                );
+                let mut order_row = Row::new()
+                    .spacing(5)
+                    .align_y(Alignment::Center)
+                    .push(
+                        text_input::text_input(crate::fl!("order"), order_to_show)
+                            .on_input(move |new_order| {
+                                Message::ChildOrderInputChanged(child_id_clone.clone(), new_order)
+                            })
+                            .width(80),
+                    );
 
                 if order_to_show != current_order {
-                    row = row.push(
+                    order_row = order_row.push(
                         button::text(crate::fl!("apply"))
                             .on_press(Message::SaveChildOrder(child.id.to_string())),
                     );
                 }
 
-                row = row.push(
-                    button::destructive(crate::fl!("remove"))
-                        .on_press(Message::RemoveChild(child.id.to_string())),
-                );
-                section = section.add(settings::item_row(vec![row.into()]));
+                let controls_row = Row::new()
+                    .spacing(15)
+                    .align_y(Alignment::Center)
+                    .push(suggested_widget)
+                    .push(order_row);
+
+                layout = layout.push(controls_row);
+
+                section = section.add(settings::item_row(vec![layout.into()]));
             }
         }
         section.into()
@@ -906,21 +920,24 @@ impl State {
             add_btn.into()
         };
 
-        section = section.add(settings::item_row(vec![
-            Row::new()
-                .spacing(10)
-                .push(
-                    text_input::text_input("!room_id:server.com", &self.new_child_id)
-                        .on_input(Message::NewChildIdChanged),
-                )
-                .push(
-                    text_input::text_input(crate::fl!("order-optional"), &self.new_child_order)
-                        .on_input(Message::NewChildOrderChanged)
-                        .width(150),
-                )
-                .push(btn_widget)
-                .into(),
-        ]));
+        let add_child_col = Column::new()
+            .spacing(10)
+            .push(
+                text_input::text_input("!room_id:server.com", &self.new_child_id)
+                    .on_input(Message::NewChildIdChanged),
+            )
+            .push(
+                Row::new()
+                    .spacing(10)
+                    .align_y(Alignment::Center)
+                    .push(
+                        text_input::text_input(crate::fl!("order-optional"), &self.new_child_order)
+                            .on_input(Message::NewChildOrderChanged),
+                    )
+                    .push(btn_widget),
+            );
+
+        section = section.add(settings::item_row(vec![add_child_col.into()]));
 
         section.into()
     }

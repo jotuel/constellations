@@ -1453,17 +1453,22 @@ impl State {
             add_btn.into()
         };
 
-        section = section.add(settings::item(
-            crate::fl!("add-alternative-alias"),
-            Row::new()
-                .spacing(10)
-                .push(
-                    text_input("#new-alias:example.com", &self.new_alt_alias_input)
-                        .on_input(Message::NewAltAliasInputChanged)
-                        .on_submit(|_| Message::AltAliasAdded),
-                )
-                .push(add_widget),
-        ));
+        let add_alias_layout = Column::new()
+            .spacing(5)
+            .push(text::body(crate::fl!("add-alternative-alias")).size(12))
+            .push(
+                Row::new()
+                    .spacing(10)
+                    .align_y(Alignment::Center)
+                    .push(
+                        text_input("#new-alias:example.com", &self.new_alt_alias_input)
+                            .on_input(Message::NewAltAliasInputChanged)
+                            .on_submit(|_| Message::AltAliasAdded),
+                    )
+                    .push(add_widget),
+            );
+
+        section = section.add(settings::item_row(vec![add_alias_layout.into()]));
 
         section.into()
     }
@@ -1917,16 +1922,21 @@ impl State {
             pin_btn.into()
         };
 
-        section = section.add(settings::item(
-            crate::fl!("pin-event-by-id"),
-            Row::new()
-                .spacing(10)
-                .push(
-                    text_input("Event ID ($...)", &self.pinned_event_id_input)
-                        .on_input(Message::PinnedEventIdChanged),
-                )
-                .push(pin_widget),
-        ));
+        let pin_event_layout = Column::new()
+            .spacing(5)
+            .push(text::body(crate::fl!("pin-event-by-id")).size(12))
+            .push(
+                Row::new()
+                    .spacing(10)
+                    .align_y(Alignment::Center)
+                    .push(
+                        text_input("Event ID ($...)", &self.pinned_event_id_input)
+                            .on_input(Message::PinnedEventIdChanged),
+                    )
+                    .push(pin_widget),
+            );
+
+        section = section.add(settings::item_row(vec![pin_event_layout.into()]));
 
         section.into()
     }
