@@ -1024,9 +1024,8 @@ impl<'chat> Constellations {
                 content = content.push(self.view_threaded_timeline());
             } else {
                 content = content.push(room_header);
-
+                content = content.push(divider::horizontal::default());
                 content = content.push(self.view_timeline());
-
                 content = content.push(self.view_composer());
             }
         } else {
