@@ -1303,6 +1303,12 @@ impl MatrixEngine {
     pub async fn timeline(&self, room_id: &str) -> Result<Arc<Timeline>> {
         let room_id = RoomId::parse(room_id)?;
 
+        let rls = self
+            .room_list_service()
+            .await
+            .context("RoomListService not initialized")?;
+        rls.subscribe_to_rooms(&[&room_id]).await;
+
         {
             let inner = self.inner.read().await;
             if let Some(timeline) = inner.timelines.get(&room_id) {
@@ -1310,10 +1316,6 @@ impl MatrixEngine {
             }
         }
 
-        let rls = self
-            .room_list_service()
-            .await
-            .context("RoomListService not initialized")?;
         let room = rls
             .room(&room_id)
             .map_err(|e| anyhow::anyhow!("Failed to get room: {}", e))?;
@@ -1340,6 +1342,12 @@ impl MatrixEngine {
         let room_id = RoomId::parse(room_id)?;
         let root_event_id = root_event_id.to_owned();
 
+        let rls = self
+            .room_list_service()
+            .await
+            .context("RoomListService not initialized")?;
+        rls.subscribe_to_rooms(&[&room_id]).await;
+
         {
             let inner = self.inner.read().await;
             if let Some(timeline) = inner
@@ -1350,10 +1358,6 @@ impl MatrixEngine {
             }
         }
 
-        let rls = self
-            .room_list_service()
-            .await
-            .context("RoomListService not initialized")?;
         let room = rls
             .room(&room_id)
             .map_err(|e| anyhow::anyhow!("Failed to get room: {}", e))?;
@@ -2608,6 +2612,11 @@ impl MatrixEngine {
                     .await?
             }
         };
+
+        if let Some(machine) = client.olm_machine_for_testing().await.as_ref() {
+            machine.set_room_key_requests_enabled(true);
+            machine.set_room_key_forwarding_enabled(true);
+        }
 
         Ok(client)
     }
