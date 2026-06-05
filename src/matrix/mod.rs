@@ -2576,6 +2576,11 @@ impl MatrixEngine {
             std::fs::create_dir_all(&data_dir)?;
         }
 
+        if !store_path.exists() && search_index_path.exists() {
+            tracing::info!("Fresh SQLite store, clearing existing search index path to prevent mismatched keys.");
+            let _ = std::fs::remove_dir_all(&search_index_path);
+        }
+
         let passphrase = Self::get_or_create_store_passphrase().await?;
 
         let build_client = |path: PathBuf, search_path: PathBuf, pass: String| {
