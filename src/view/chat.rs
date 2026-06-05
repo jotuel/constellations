@@ -44,9 +44,7 @@ impl<'chat> Constellations {
                 && event.content().as_message().is_some()
             {
                 // View-side thread filtering
-                if self.app_settings.hide_threaded_messages
-                    && event.content().thread_root().is_some()
-                {
+                if self.app_settings.hide_threaded_messages && item.thread_root_id.is_some() {
                     continue;
                 }
 
@@ -607,7 +605,7 @@ impl<'chat> Constellations {
             action_row = action_row.push(reply_tooltip);
 
             // Thread button (either summary or start thread button)
-            let has_thread_root = event.content().thread_root().is_some();
+            let has_thread_root = item.thread_root_id.is_some();
             let mut num_replies = event
                 .content()
                 .thread_summary()
@@ -621,10 +619,11 @@ impl<'chat> Constellations {
                 }
             }
 
-            let has_thread_summary = num_replies > 0 && !has_thread_root && self.active_thread_root.is_none();
+            let has_thread_summary =
+                num_replies > 0 && !has_thread_root && self.active_thread_root.is_none();
 
             if has_thread_summary {
-                action_row = action_row.push(self.view_thread_summary(event, thread_counts));
+                action_row = action_row.push(self.view_thread_summary(item, event, thread_counts));
             } else {
                 let root_id = event.identifier();
                 let start_thread_btn = button::icon(cosmic::widget::icon::from_name(
@@ -666,14 +665,18 @@ impl<'chat> Constellations {
                 if is_ignored {
                     let ignore_btn = button::icon(Named::new("dialog-error-symbolic"))
                         .on_press(Message::UserSettings(
-                            crate::settings::user::Message::UnignoreUserById(item.sender_id.to_owned()),
+                            crate::settings::user::Message::UnignoreUserById(
+                                item.sender_id.to_owned(),
+                            ),
                         ))
                         .tooltip(crate::fl!("unignore-user"));
                     action_row = action_row.push(ignore_btn);
                 } else {
                     let ignore_btn = button::icon(Named::new("dialog-error-symbolic"))
                         .on_press(Message::UserSettings(
-                            crate::settings::user::Message::IgnoreUserById(item.sender_id.to_owned()),
+                            crate::settings::user::Message::IgnoreUserById(
+                                item.sender_id.to_owned(),
+                            ),
                         ))
                         .tooltip(crate::fl!("ignore"));
                     action_row = action_row.push(ignore_btn);
@@ -744,10 +747,11 @@ impl<'chat> Constellations {
 
     fn view_thread_summary(
         &'chat self,
+        item: &crate::ConstellationsItem,
         event: &matrix_sdk_ui::timeline::EventTimelineItem,
         thread_counts: &std::collections::HashMap<matrix_sdk::ruma::OwnedEventId, u32>,
     ) -> cosmic::widget::Container<'chat, Message, cosmic::Theme> {
-        let has_thread_root = event.content().thread_root().is_some();
+        let has_thread_root = item.thread_root_id.is_some();
 
         let mut num_replies = event
             .content()
@@ -811,7 +815,7 @@ impl<'chat> Constellations {
                     i.item
                         .as_ref()
                         .and_then(|timeline_item| timeline_item.as_event())
-                        .and_then(|e| e.content().thread_root())
+                        .and_then(|_e| i.thread_root_id.clone())
                         .map(|r| r == event_id)
                         .unwrap_or(false)
                 })

@@ -103,3 +103,6 @@
 ## 2025-02-27 - [Precomputing derived view state vs in-view allocation]
 **Learning:** `view_thread_summary` was taking a massive hit because it iterated through the timeline items, conditionally accumulating thread counts *for each event* during the `view()` loop. Passing `self.thread_counts` map directly eliminates O(N^2) checks per frame.
 **Action:** When working in Iced/Libcosmic, move derived collections (like mapping root IDs to counts) into `update()`/application state and reuse via reference. DO NOT do aggregation traversals in `view()`.
+## 2025-05-15 - [Avoid `event.content().thread_root()` allocation in render loop]
+**Learning:** `event.content().thread_root()` allocates an `OwnedEventId` and parses JSON on every call. It was being called repeatedly in the `view_timeline` and `view_item` rendering loops for every message on every frame, causing a massive O(N) allocation bottleneck.
+**Action:** Extract `thread_root_id` and evaluate it exactly once during item creation inside `ConstellationsItem::new`, store it as `Option<OwnedEventId>`, and check it via `.is_some()` or `.clone()` in the render loop. This drastically reduces allocations.

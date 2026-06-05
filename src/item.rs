@@ -12,6 +12,7 @@ pub struct ConstellationsItem {
     pub is_me: bool,
     pub markdown: Vec<PreviewEvent>,
     pub plain_text: Vec<PreviewEvent>,
+    pub thread_root_id: Option<matrix_sdk::ruma::OwnedEventId>,
 }
 
 impl ConstellationsItem {
@@ -23,6 +24,7 @@ impl ConstellationsItem {
         let mut is_me = false;
         let mut markdown = Vec::new();
         let mut plain_text = Vec::new();
+        let mut thread_root_id = None;
         // ⚡ Bolt Optimization: Pre-compute plain_text representation here
         // to avoid allocating new Strings and Vecs inside the UI render loop (`view_message_text`).
 
@@ -56,6 +58,7 @@ impl ConstellationsItem {
                 .to_string();
 
             is_me = user_id == Some(event.sender().as_str());
+            thread_root_id = event.content().thread_root();
         }
 
         Self {
@@ -67,6 +70,7 @@ impl ConstellationsItem {
             is_me,
             markdown,
             plain_text,
+            thread_root_id,
         }
     }
 
@@ -83,6 +87,7 @@ impl ConstellationsItem {
             is_me,
             markdown,
             plain_text,
+            thread_root_id: None,
         }
     }
 }

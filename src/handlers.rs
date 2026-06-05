@@ -21,8 +21,8 @@ impl Constellations {
     pub fn recompute_thread_counts(&mut self) {
         self.thread_counts.clear();
         for item in &self.timeline_items {
-            if let Some(event) = item.item.as_ref().expect("No item").as_event()
-                && let Some(root_id) = event.content().thread_root()
+            if let Some(_event) = item.item.as_ref().expect("No item").as_event()
+                && let Some(root_id) = item.thread_root_id.clone()
             {
                 *self.thread_counts.entry(root_id).or_insert(0) += 1;
             }
