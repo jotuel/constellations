@@ -817,7 +817,11 @@ impl State {
                                 devices.push(DeviceInfo {
                                     device_id: Arc::from(device.device_id().as_str()),
                                     display_name: device.display_name().map(|n| n.to_string()),
-                                    is_verified: device.is_verified(),
+                                    is_verified: if device.device_id() == current_device_id {
+                                        device.is_cross_signed_by_owner()
+                                    } else {
+                                        device.is_verified()
+                                    },
                                     is_current: device.device_id() == current_device_id,
                                     is_renaming: false,
                                     edit_name: String::new(),
@@ -1289,6 +1293,28 @@ impl State {
                             if let Err(e) = client.encryption().bootstrap_cross_signing(None).await
                             {
                                 if let Some(info) = e.as_uiaa_response() {
+                                    #[derive(serde::Deserialize)]
+                                    struct UiaaParams {
+                                        #[serde(rename = "m.oauth")]
+                                        oauth: Option<OAuthParams>,
+                                    }
+
+                                    #[derive(serde::Deserialize)]
+                                    struct OAuthParams {
+                                        url: String,
+                                    }
+
+                                    if let Some(params_box) = &info.params {
+                                        if let Ok(params) = serde_json::from_str::<UiaaParams>(params_box.get()) {
+                                            if let Some(oauth) = params.oauth {
+                                                if let Err(err) = open::that(&oauth.url) {
+                                                    return Err(format!("Failed to open authentication link: {err}. Please open: {}", oauth.url));
+                                                }
+                                                return Err("Authentication required in web browser. Please complete the cross-signing reset in the browser, then try bootstrapping again.".to_string());
+                                            }
+                                        }
+                                    }
+
                                     if password.is_empty() {
                                         return Err(
                                             "Password required for bootstrapping (use the delete-device password field)".to_string()
@@ -1978,6 +2004,13 @@ impl State {
         if self.is_loading_devices {
             section = section.add(text::body(crate::fl!("loading-devices")));
         } else {
+            let is_current_verified = self
+                .devices
+                .iter()
+                .find(|d| d.is_current)
+                .map(|d| d.is_verified)
+                .unwrap_or(false);
+
             for device in &self.devices {
                 let name = device
                     .display_name
@@ -1989,6 +2022,12 @@ impl State {
                 if device.is_verified {
                     action_row =
                         action_row.push(text::body(crate::fl!("verified-device")).size(14));
+                    if !device.is_current && !is_current_verified {
+                        action_row = action_row.push(
+                            button::text(crate::fl!("verify"))
+                                .on_press(Message::VerifyDevice(device.device_id.clone())),
+                        );
+                    }
                 } else {
                     action_row =
                         action_row.push(text::body(crate::fl!("unverified-device")).size(14));
@@ -2410,9 +2449,9 @@ impl State {
             self.view_password_change(),
             self.view_ignored_users(),
             self.view_devices(),
+            self.view_verification(),
             self.view_cross_signing(),
             self.view_3pids(),
-            self.view_verification(),
             self.view_deactivate_account(),
         ]);
 
@@ -2451,5 +2490,33 @@ mod tests {
         state.error = Some("Error".to_string());
         let _ = state.update(Message::DismissError, &None);
         assert_eq!(state.error, None);
+    }
+
+    #[test]
+    fn test_devices_loaded() {
+        let mut state = State::default();
+        state.is_loading_devices = true;
+
+        let devices = vec![DeviceInfo {
+            device_id: Arc::from("DEV1"),
+            display_name: Some("Test Device".to_string()),
+            is_verified: true,
+            is_current: true,
+            is_renaming: false,
+            edit_name: String::new(),
+            is_deleting: false,
+        }];
+
+        let _ = state.update(Message::DevicesLoaded(Ok(devices.clone())), &None);
+        assert!(!state.is_loading_devices);
+        assert_eq!(state.devices.len(), 1);
+        assert_eq!(state.devices[0].device_id.as_ref(), "DEV1");
+        assert!(state.devices[0].is_verified);
+        assert!(state.devices[0].is_current);
+
+        state.is_loading_devices = true;
+        let _ = state.update(Message::DevicesLoaded(Err("network error".to_string())), &None);
+        assert!(!state.is_loading_devices);
+        assert_eq!(state.error, Some("Failed to load devices: network error".to_string()));
     }
 }
