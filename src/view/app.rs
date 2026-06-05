@@ -1,7 +1,7 @@
 use cosmic::Element;
 use cosmic::iced::Alignment;
 use cosmic::iced::widget::image;
-use cosmic::widget::{Column, Row, Widget, button, container, text};
+use cosmic::widget::{Column, Row, Widget, button, container, text, divider};
 
 use crate::{CONSTELLATIONS_ICON, Constellations, Message, matrix};
 
@@ -37,7 +37,9 @@ impl Constellations {
 
         let main_view = Row::new()
             .push(self.view_space_switcher())
+            .push(divider::vertical::default())
             .push(sidebar)
+            .push(divider::vertical::default())
             .push(content);
 
         let mut final_view: Element<'_, Message> = main_view.into();
