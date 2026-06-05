@@ -1066,6 +1066,29 @@ impl MatrixEngine {
         Ok(())
     }
 
+fn strip_reply_quote(body: &str) -> &str {
+    let mut actual_line = None;
+    let mut in_quote = false;
+    for line in body.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with('>') {
+            in_quote = true;
+            continue;
+        }
+        if in_quote && trimmed.is_empty() {
+            continue;
+        }
+        actual_line = Some(line);
+        break;
+    }
+
+    if let Some(line) = actual_line {
+        line.trim()
+    } else {
+        body.split('\n').next().unwrap_or("").trim()
+    }
+}
+
     pub async fn fetch_room_data(&self, room: &matrix_sdk::Room) -> Result<RoomData> {
         let id: std::sync::Arc<str> = room.room_id().as_str().into();
         let name = match room.name() {
@@ -1097,7 +1120,8 @@ impl MatrixEngine {
                 ..
             } => {
                 if let MsgLikeKind::Message(msg_content) = &m.kind {
-                    let mut msg = msg_content.body().to_string();
+                    let cleaned = Self::strip_reply_quote(msg_content.body());
+                    let mut msg = cleaned.to_string();
                     if msg.len() > 30 {
                         msg.truncate(26);
                         msg.push_str("...");
@@ -1112,7 +1136,8 @@ impl MatrixEngine {
                 ..
             } => {
                 if let MsgLikeKind::Message(msg_content) = &m.kind {
-                    let mut msg = msg_content.body().to_string();
+                    let cleaned = Self::strip_reply_quote(msg_content.body());
+                    let mut msg = cleaned.to_string();
                     if msg.len() > 30 {
                         msg.truncate(26);
                         msg.push_str("...");

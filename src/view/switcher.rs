@@ -14,6 +14,29 @@ use cosmic::{
     },
 };
 
+fn clean_last_message(last_msg: &str) -> &str {
+    let mut actual_line = None;
+    let mut in_quote = false;
+    for line in last_msg.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with('>') {
+            in_quote = true;
+            continue;
+        }
+        if in_quote && trimmed.is_empty() {
+            continue;
+        }
+        actual_line = Some(line);
+        break;
+    }
+
+    if let Some(line) = actual_line {
+        line.trim()
+    } else {
+        last_msg.split('\n').next().unwrap_or("").trim()
+    }
+}
+
 impl<'switcher> Constellations {
     pub fn view_space_switcher(&self) -> Element<'_, Message> {
         let mut content = Column::new().spacing(10).align_x(Alignment::Center);
@@ -225,7 +248,7 @@ impl<'switcher> Constellations {
             room_content = room_content.push(header);
 
             if let Some(last_msg) = &room.last_message {
-                let first_line = last_msg.split('\n').next().unwrap_or("");
+                let first_line = clean_last_message(last_msg);
                 room_content = room_content.push(text::body(first_line).size(12));
             }
 
@@ -259,7 +282,7 @@ impl<'switcher> Constellations {
                 room_content = room_content.push(header);
 
                 if let Some(last_msg) = &room.last_message {
-                    let first_line = last_msg.split('\n').next().unwrap_or("");
+                    let first_line = clean_last_message(last_msg);
                     room_content = room_content.push(text::body(first_line).size(12));
                 }
 
