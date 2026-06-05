@@ -229,11 +229,14 @@ impl<'switcher> Constellations {
                 room_content = room_content.push(text::body(first_line).size(12));
             }
 
+            let is_selected = self.selected_room.as_ref() == Some(&room.id);
             let btn = button::custom(
                 container(room_content)
                     .padding(5)
                     .width(cosmic::iced::Length::Fill),
             )
+            .selected(is_selected)
+            .class(cosmic::theme::Button::ListItem(self.core.system_theme().cosmic().corner_radii.radius_m))
             .on_press(Message::RoomSelected(room_id));
 
             room_list = room_list.push(btn.width(cosmic::iced::Fill));
@@ -264,7 +267,9 @@ impl<'switcher> Constellations {
                     container(room_content)
                         .padding(5)
                         .width(cosmic::iced::Length::Fill),
-                );
+                )
+                .selected(false)
+                .class(cosmic::theme::Button::ListItem(self.core.system_theme().cosmic().corner_radii.radius_m));
 
                 let join_btn =
                     button::text(crate::fl!("join")).on_press(Message::JoinRoom(room.id.clone()));

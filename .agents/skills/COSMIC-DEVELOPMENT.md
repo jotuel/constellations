@@ -35,6 +35,8 @@ Use libcosmic Widgets: Always prefer libcosmic widgets over raw iced widgets whe
 Modular Design: Separate your update, view, and state logic. For complex apps, break components into sub-modules with their own MVU cycles.
 Configuration: Integrate with cosmic-config for handling user settings. This ensures your app's settings persist and respect system-wide overrides.
 Theming: Do not hardcode colors! Use the semantic colors provided by the cosmic-theme (e.g., theme.palette.primary, theme.palette.background). This ensures your app looks correct in both Light and Dark modes.
+List & Sidebar Item Styling: Avoid standard buttons for room lists, settings lists, or navigation sidebars. Instead, use `cosmic::widget::button::custom(...)` styled as `cosmic::theme::Button::ListItem(radii)` and specify the selected state using `.selected(is_selected)`. This removes blocky button backgrounds and uses clean, native selection highlights.
+Accessing Theme in View Functions: If your view helper functions do not receive the `Theme` argument directly, you can access the current system theme and properties (like corner radii) via `self.core.system_theme()` from the application's `Core` state structure.
 4. Applet Specifics
 Composability: Applets often live in the panel. Keep them lightweight.
 Popup vs Embedded: Decide if your applet needs a popover menu (like WiFi) or just an icon/text (like a clock).
@@ -53,6 +55,7 @@ System76 Dev Docs: https://github.com/pop-os/cosmic-epoch
 7. Troubleshooting
 "Component not found": Ensure you have libcosmic features enabled in Cargo.toml.
 Theming issues: Verify you are taking Theme as an argument in your view function and passing it correctly.
+Decryption Key Mismatches in Lazy Stores: If your app uses multiple encrypted stores (e.g., matrix-rust-sdk SQLite store and search index directory), the SQLite store is typically verified/initialized at startup while other directories may be loaded lazily in background threads or tasks. If the passphrase regenerates or changes (e.g. keyring reset/lock), the main store might initialize from scratch successfully, but lazy stores will fail later with decryption/MAC errors (e.g., `invalid MAC of the store key`). Always ensure that if the main store database is cleared or created fresh, all associated lazy cache directories are cleared alongside it.
 
 8. UI Testing & Automation
 For automated testing, screenshotting, or controlling running COSMIC applications programmatically, refer to the detailed [cosmic-automation.md](file:///home/jwnz/.agents/skills/cosmic-automation.md) skill. It includes:
