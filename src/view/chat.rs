@@ -504,6 +504,7 @@ impl<'chat> Constellations {
         {
             let is_me = item.is_me;
 
+            let item_id = event.identifier();
             let reaction_row = self.view_reactions(event);
             let is_ignored = self.user_settings.ignored_users.contains(&item.sender_id);
             let sender_info = self.view_sender_info(
@@ -597,12 +598,12 @@ impl<'chat> Constellations {
             let mut action_row = Row::new().spacing(5).align_y(Alignment::Center);
 
             // "Add reaction" button
-            let is_picker_open = self.active_reaction_picker.as_ref() == Some(&event.identifier());
+            let is_picker_open = self.active_reaction_picker.as_ref() == Some(&item_id);
             let btn = button::icon(cosmic::widget::icon::from_name("face-smile-symbolic"))
                 .on_press(if is_picker_open {
                     Message::OpenReactionPicker(None)
                 } else {
-                    Message::OpenReactionPicker(Some(event.identifier().clone()))
+                    Message::OpenReactionPicker(Some(item_id.clone()))
                 });
             let btn_tooltip = tooltip(
                 btn,
@@ -613,7 +614,7 @@ impl<'chat> Constellations {
 
             // Reply button
             let reply_btn = button::icon(cosmic::widget::icon::from_name("mail-replied-symbolic"))
-                .on_press(Message::StartReply(event.identifier().clone()));
+                .on_press(Message::StartReply(item_id.clone()));
             let reply_tooltip = tooltip(
                 reply_btn,
                 text::body(crate::fl!("tooltip-reply")),
@@ -642,7 +643,7 @@ impl<'chat> Constellations {
             if has_thread_summary {
                 action_row = action_row.push(self.view_thread_summary(item, event, thread_counts));
             } else {
-                let root_id = event.identifier();
+                let root_id = item_id.clone();
                 let start_thread_btn = button::icon(cosmic::widget::icon::from_name(
                     "view-list-symbolic",
                 ))
@@ -660,7 +661,7 @@ impl<'chat> Constellations {
 
             if is_me {
                 let edit_btn = button::icon(cosmic::widget::icon::from_name("edit-symbolic"))
-                    .on_press(Message::StartEdit(event.identifier().clone()));
+                    .on_press(Message::StartEdit(item_id.clone()));
                 let edit_tooltip = tooltip(
                     edit_btn,
                     text::body(crate::fl!("tooltip-edit")),
@@ -671,7 +672,7 @@ impl<'chat> Constellations {
                 let delete_btn =
                     button::custom(cosmic::widget::icon::from_name("user-trash-symbolic"))
                         .class(cosmic::theme::Button::Destructive)
-                        .on_press(Message::RedactMessage(event.identifier().clone()));
+                        .on_press(Message::RedactMessage(item_id.clone()));
                 let delete_tooltip = tooltip(
                     delete_btn,
                     text::body(crate::fl!("tooltip-delete")),
@@ -709,9 +710,9 @@ impl<'chat> Constellations {
                 });
             bubble_col = bubble_col.push(reaction_row_wrap);
 
-            if self.active_reaction_picker.as_ref() == Some(&event.identifier()) {
+            if self.active_reaction_picker.as_ref() == Some(&item_id) {
                 bubble_col =
-                    bubble_col.push(self.view_emoji_picker(Some(event.identifier().clone())));
+                    bubble_col.push(self.view_emoji_picker(Some(item_id.clone())));
             }
 
             let action_row_wrap = container(action_row)
