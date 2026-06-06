@@ -1054,21 +1054,7 @@ impl<'chat> Constellations {
         }
 
         if let Some(replying_to) = &self.replying_to {
-            let body = replying_to
-                .item
-                .as_ref()
-                .and_then(|i| i.as_event())
-                .and_then(|ev| ev.content().as_message())
-                .map(|msg| msg.body())
-                .unwrap_or_else(|| {
-                    if let Some(crate::preview::PreviewEvent::Text(txt)) =
-                        replying_to.plain_text.first()
-                    {
-                        txt.as_str()
-                    } else {
-                        ""
-                    }
-                });
+            let body = replying_to.body_text();
 
             let mut char_indices = body.char_indices();
             let snippet = if let Some((idx_97, _)) = char_indices.nth(97) {
@@ -1078,10 +1064,10 @@ impl<'chat> Constellations {
                     s.push_str("...");
                     std::borrow::Cow::Owned(s)
                 } else {
-                    std::borrow::Cow::Borrowed(body)
+                    std::borrow::Cow::Owned(body)
                 }
             } else {
-                std::borrow::Cow::Borrowed(body)
+                std::borrow::Cow::Owned(body)
             };
 
             let reply_bar = view_reply_bar(snippet, replying_to);
@@ -1089,21 +1075,7 @@ impl<'chat> Constellations {
         }
 
         if let Some(editing_item) = &self.editing_item {
-            let body = editing_item
-                .item
-                .as_ref()
-                .and_then(|i| i.as_event())
-                .and_then(|ev| ev.content().as_message())
-                .map(|msg| msg.body())
-                .unwrap_or_else(|| {
-                    if let Some(crate::preview::PreviewEvent::Text(txt)) =
-                        editing_item.plain_text.first()
-                    {
-                        txt.as_str()
-                    } else {
-                        ""
-                    }
-                });
+            let body = editing_item.body_text();
 
             let mut char_indices = body.char_indices();
             let snippet = if let Some((idx_97, _)) = char_indices.nth(97) {
@@ -1113,10 +1085,10 @@ impl<'chat> Constellations {
                     s.push_str("...");
                     std::borrow::Cow::Owned(s)
                 } else {
-                    std::borrow::Cow::Borrowed(body)
+                    std::borrow::Cow::Owned(body)
                 }
             } else {
-                std::borrow::Cow::Borrowed(body)
+                std::borrow::Cow::Owned(body)
             };
 
             let edit_bar = Row::new()

@@ -1,5 +1,5 @@
 use crate::matrix;
-use crate::preview::{PreviewEvent, parse_markdown};
+use crate::preview::{PreviewEvent, parse_markdown, parse_plain_text};
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
@@ -33,7 +33,7 @@ impl ConstellationsItem {
             if let Some(msg) = event.content().as_message() {
                 let is_reply = event.content().in_reply_to().is_some();
                 markdown = parse_markdown(msg.body(), is_reply);
-                plain_text = vec![PreviewEvent::Text(msg.body().to_owned())];
+                plain_text = parse_plain_text(msg.body());
             }
             let (name, url) = match event.sender_profile() {
                 matrix_sdk_ui::timeline::TimelineDetails::Ready(profile) => (
@@ -77,7 +77,7 @@ impl ConstellationsItem {
     pub fn new_mock(sender_name: &str, text: &str, timestamp: &str, is_me: bool) -> Self {
         let sender_id = matrix_sdk::ruma::user_id!("@unknown:example.com").to_owned();
         let markdown = parse_markdown(text, false);
-        let plain_text = vec![PreviewEvent::Text(text.to_owned())];
+        let plain_text = parse_plain_text(text);
         Self {
             item: None,
             sender_id,
@@ -89,5 +89,26 @@ impl ConstellationsItem {
             plain_text,
             thread_root_id: None,
         }
+    }
+
+    pub fn body_text(&self) -> String {
+        self.item
+            .as_ref()
+            .and_then(|i| i.as_event())
+            .and_then(|ev| ev.content().as_message())
+            .map(|msg| msg.body().to_string())
+            .unwrap_or_else(|| {
+                self.plain_text
+                    .iter()
+                    .filter_map(|p| {
+                        if let PreviewEvent::Text(txt) = p {
+                            Some(txt.as_str())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join("")
+            })
     }
 }

@@ -13,7 +13,7 @@ pub mod settings;
 mod view;
 
 pub use item::ConstellationsItem;
-pub use preview::{PreviewEvent, parse_markdown};
+pub use preview::{PreviewEvent, parse_markdown, parse_plain_text};
 pub use utils::{
     ApplyVectorDiffExt, contains_ignore_ascii_case, fuzzy_match_ignore_case, redact_url,
 };

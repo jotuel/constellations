@@ -12,6 +12,51 @@ pub enum PreviewEvent {
     EndLink,
 }
 
+fn split_text_by_urls(text: &str, events: &mut Vec<PreviewEvent>) {
+    let mut current_idx = 0;
+    
+    while current_idx < text.len() {
+        let remaining = &text[current_idx..];
+        if let Some(pos) = remaining.find("http://").or_else(|| remaining.find("https://")) {
+            let start_of_url = current_idx + pos;
+            
+            if start_of_url > current_idx {
+                events.push(PreviewEvent::Text(text[current_idx..start_of_url].to_string()));
+            }
+            
+            let mut end_of_url = start_of_url;
+            while end_of_url < text.len() {
+                let c = text.as_bytes()[end_of_url];
+                if c.is_ascii_whitespace() {
+                    break;
+                }
+                end_of_url += 1;
+            }
+            
+            while end_of_url > start_of_url {
+                let last_char = text.as_bytes()[end_of_url - 1];
+                if matches!(last_char, b'.' | b',' | b'?' | b'!' | b':' | b';' | b')' | b']' | b'>') {
+                    end_of_url -= 1;
+                } else {
+                    break;
+                }
+            }
+            
+            let url = &text[start_of_url..end_of_url];
+            if !url.is_empty() {
+                events.push(PreviewEvent::StartLink(url.to_string()));
+                events.push(PreviewEvent::Text(url.to_string()));
+                events.push(PreviewEvent::EndLink);
+            }
+            
+            current_idx = end_of_url;
+        } else {
+            events.push(PreviewEvent::Text(remaining.to_string()));
+            break;
+        }
+    }
+}
+
 pub fn parse_markdown(text: &str, skip_first_blockquote: bool) -> Vec<PreviewEvent> {
     let mut events = Vec::new();
     let mut options = pulldown_cmark::Options::empty();
@@ -21,6 +66,7 @@ pub fn parse_markdown(text: &str, skip_first_blockquote: bool) -> Vec<PreviewEve
     let parser = pulldown_cmark::Parser::new_ext(text, options);
     let mut in_blockquote = 0;
     let mut is_first_blockquote = true;
+    let mut in_link = 0;
 
     for event in parser {
         match event {
@@ -45,15 +91,25 @@ pub fn parse_markdown(text: &str, skip_first_blockquote: bool) -> Vec<PreviewEve
                     }
                     pulldown_cmark::Event::Start(pulldown_cmark::Tag::Link {
                         dest_url, ..
-                    }) => events.push(PreviewEvent::StartLink(dest_url.to_string())),
+                    }) => {
+                        in_link += 1;
+                        events.push(PreviewEvent::StartLink(dest_url.to_string()));
+                    }
                     pulldown_cmark::Event::End(pulldown_cmark::TagEnd::Link) => {
-                        events.push(PreviewEvent::EndLink)
+                        if in_link > 0 {
+                            in_link -= 1;
+                        }
+                        events.push(PreviewEvent::EndLink);
                     }
                     pulldown_cmark::Event::End(
                         pulldown_cmark::TagEnd::Paragraph | pulldown_cmark::TagEnd::Heading(_),
                     ) => events.push(PreviewEvent::EndBlock),
                     pulldown_cmark::Event::Text(t) => {
-                        events.push(PreviewEvent::Text(t.to_string()))
+                        if in_link > 0 {
+                            events.push(PreviewEvent::Text(t.to_string()));
+                        } else {
+                            split_text_by_urls(&t, &mut events);
+                        }
                     }
                     pulldown_cmark::Event::Code(c) => {
                         events.push(PreviewEvent::Code(c.to_string()))
@@ -68,6 +124,13 @@ pub fn parse_markdown(text: &str, skip_first_blockquote: bool) -> Vec<PreviewEve
     }
     events
 }
+
+pub fn parse_plain_text(text: &str) -> Vec<PreviewEvent> {
+    let mut events = Vec::new();
+    split_text_by_urls(text, &mut events);
+    events
+}
+
 
 #[cfg(test)]
 mod tests {
@@ -176,6 +239,39 @@ mod tests {
                 PreviewEvent::EndBlock,
                 PreviewEvent::Text("And this is text.".to_string()),
                 PreviewEvent::EndBlock,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_plain_text_urls() {
+        let text = "Check out https://google.com/search?q=test, it is awesome!";
+        let events = parse_markdown(text, false);
+        assert_eq!(
+            events,
+            vec![
+                PreviewEvent::Text("Check out ".to_string()),
+                PreviewEvent::StartLink("https://google.com/search?q=test".to_string()),
+                PreviewEvent::Text("https://google.com/search?q=test".to_string()),
+                PreviewEvent::EndLink,
+                PreviewEvent::Text(", it is awesome!".to_string()),
+                PreviewEvent::EndBlock,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_plain_text_only_urls() {
+        let text = "Check out https://google.com/search?q=test, it is awesome!";
+        let events = parse_plain_text(text);
+        assert_eq!(
+            events,
+            vec![
+                PreviewEvent::Text("Check out ".to_string()),
+                PreviewEvent::StartLink("https://google.com/search?q=test".to_string()),
+                PreviewEvent::Text("https://google.com/search?q=test".to_string()),
+                PreviewEvent::EndLink,
+                PreviewEvent::Text(", it is awesome!".to_string()),
             ]
         );
     }

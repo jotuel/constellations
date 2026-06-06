@@ -652,18 +652,7 @@ impl Constellations {
                 }
                 self.editing_item = None;
             } else if let Some(replying_to) = &self.replying_to {
-                let reply_text = replying_to
-                    .plain_text
-                    .iter()
-                    .filter_map(|p| {
-                        if let crate::preview::PreviewEvent::Text(txt) = p {
-                            Some(txt.clone())
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join(" ");
+                let reply_text = replying_to.body_text();
                 let reply_body = format!("> {}\n\n{}", reply_text, body);
 
                 self.timeline_items
