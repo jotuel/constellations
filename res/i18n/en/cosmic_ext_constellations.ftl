@@ -306,3 +306,5 @@ new-device-name = New device name
 profile = Profile
 current-device = Current
 password-to-delete-devices = Password to delete devices:
+devices-and-sessions = Devices & Sessions
+unknown-device = Unknown Device

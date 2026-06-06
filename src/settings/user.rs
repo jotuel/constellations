@@ -2004,7 +2004,7 @@ impl State {
     }
 
     fn view_devices<'a>(&'a self) -> Element<'a, Message> {
-        let mut section = settings::section().title("Devices & Sessions");
+        let mut section = settings::section().title(crate::fl!("devices-and-sessions"));
 
         if self.is_loading_devices {
             section = section.add(text::body(crate::fl!("loading-devices")));
@@ -2020,7 +2020,7 @@ impl State {
                 let name = device
                     .display_name
                     .clone()
-                    .unwrap_or_else(|| "Unknown Device".to_string());
+                    .unwrap_or_else(|| crate::fl!("unknown-device"));
 
                 let mut action_row = Row::new().spacing(10).align_y(Alignment::Center);
 
