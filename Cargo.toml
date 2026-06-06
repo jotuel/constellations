@@ -8,7 +8,7 @@ default = []
 wgpu = ["libcosmic/wgpu"]
 
 [dependencies]
-libcosmic = { git = "https://github.com/pop-os/libcosmic", branch = "master", features = [
+libcosmic = { git = "https://github.com/pop-os/libcosmic", features = [
     "dbus-config",
     "desktop",
     "winit",

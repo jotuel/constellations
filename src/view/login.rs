@@ -166,40 +166,10 @@ impl Constellations {
             QrLoginStep::ShowingQr => {
                 content = content.push(text::body(crate::fl!("login-qr-scanning")));
 
-                if let Some(ref url) = self.qr_rendezvous_url
-                    && let Ok(code) = qrcode::QrCode::new(url.as_bytes())
-                {
-                    let width = code.width();
-                    let scale = 8;
-                    let scaled_width = width * scale;
-                    let mut pixels = Vec::with_capacity(scaled_width * scaled_width * 4);
-                    for y in 0..scaled_width {
-                        let qr_y = y / scale;
-                        for x in 0..scaled_width {
-                            let qr_x = x / scale;
-                            let is_dark = code[(qr_x, qr_y)] == qrcode::Color::Dark;
-                            let color = if is_dark {
-                                [0, 0, 0, 255] // Black
-                            } else {
-                                [255, 255, 255, 255] // White
-                            };
-                            pixels.extend_from_slice(&color);
-                        }
-                    }
-
-                    let handle = cosmic::iced::widget::image::Handle::from_rgba(
-                        scaled_width as u32,
-                        scaled_width as u32,
-                        pixels,
-                    );
-
+                if let Some(ref url) = self.qr_rendezvous_url {
                     content = content.push(
-                        container(
-                            cosmic::widget::image(handle)
-                                .width(cosmic::iced::Length::Fixed(200.0))
-                                .height(cosmic::iced::Length::Fixed(200.0)),
-                        )
-                        .padding(15),
+                        container(QrCodeWidget::new(url.clone()))
+                            .padding(15),
                     );
                 }
             }
@@ -235,5 +205,94 @@ impl Constellations {
             .align_x(Alignment::Center)
             .align_y(Alignment::Center)
             .into()
+    }
+}
+
+pub struct QrCodeWidget {
+    url: String,
+}
+
+impl QrCodeWidget {
+    pub fn new(url: String) -> Self {
+        Self { url }
+    }
+}
+
+impl<Message, Renderer> cosmic::iced::advanced::Widget<Message, cosmic::Theme, Renderer> for QrCodeWidget
+where
+    Renderer: cosmic::iced::advanced::Renderer,
+{
+    fn size(&self) -> cosmic::iced::Size<cosmic::iced::Length> {
+        cosmic::iced::Size::new(cosmic::iced::Length::Fixed(200.0), cosmic::iced::Length::Fixed(200.0))
+    }
+
+    fn layout(
+        &mut self,
+        _tree: &mut cosmic::iced::advanced::widget::Tree,
+        _renderer: &Renderer,
+        _limits: &cosmic::iced::advanced::layout::Limits,
+    ) -> cosmic::iced::advanced::layout::Node {
+        cosmic::iced::advanced::layout::Node::new(cosmic::iced::Size::new(200.0, 200.0))
+    }
+
+    fn draw(
+        &self,
+        _state: &cosmic::iced::advanced::widget::Tree,
+        renderer: &mut Renderer,
+        _theme: &cosmic::Theme,
+        _style: &cosmic::iced::advanced::renderer::Style,
+        layout: cosmic::iced::advanced::layout::Layout<'_>,
+        _cursor: cosmic::iced::advanced::mouse::Cursor,
+        _viewport: &cosmic::iced::Rectangle,
+    ) {
+        let bounds = layout.bounds();
+
+        // Draw white background
+        renderer.fill_quad(
+            cosmic::iced::advanced::renderer::Quad {
+                bounds,
+                border: cosmic::iced::Border::default(),
+                shadow: cosmic::iced::Shadow::default(),
+                snap: false,
+            },
+            cosmic::iced::Color::WHITE,
+        );
+
+        if let Ok(code) = qrcode::QrCode::new(self.url.as_bytes()) {
+            let width = code.width();
+            let quiet_zone = 2;
+            let side_cells = width + 2 * quiet_zone;
+            let cell_size = bounds.width / side_cells as f32;
+
+            for y in 0..width {
+                for x in 0..width {
+                    if code[(x, y)] == qrcode::Color::Dark {
+                        let cell_x = bounds.x + (x + quiet_zone) as f32 * cell_size;
+                        let cell_y = bounds.y + (y + quiet_zone) as f32 * cell_size;
+                        renderer.fill_quad(
+                            cosmic::iced::advanced::renderer::Quad {
+                                bounds: cosmic::iced::Rectangle::new(
+                                    cosmic::iced::Point::new(cell_x, cell_y),
+                                    cosmic::iced::Size::new(cell_size, cell_size),
+                                ),
+                                border: cosmic::iced::Border::default(),
+                                shadow: cosmic::iced::Shadow::default(),
+                                snap: false,
+                            },
+                            cosmic::iced::Color::BLACK,
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl<'a, Message> From<QrCodeWidget> for cosmic::Element<'a, Message>
+where
+    Message: 'a,
+{
+    fn from(widget: QrCodeWidget) -> Self {
+        cosmic::Element::new(widget)
     }
 }
