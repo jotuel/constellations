@@ -100,10 +100,10 @@ impl<'chat> Constellations {
     fn view_reactions<'a>(
         &'a self,
         event: &'a matrix_sdk_ui::timeline::EventTimelineItem,
+        item_id: &matrix::TimelineEventItemId,
     ) -> Row<'a, Message, cosmic::Theme> {
         let mut reaction_row = Row::new().spacing(5).align_y(Alignment::Center);
         let reactions = event.content().reactions();
-        let item_id = event.identifier();
 
         if let Some(reaction) = reactions {
             for (key, senders) in reaction.iter() {
@@ -501,8 +501,14 @@ impl<'chat> Constellations {
         {
             let is_me = item.is_me;
 
-            let item_id = event.identifier();
-            let reaction_row = self.view_reactions(event);
+            let fallback_id;
+            let item_id = if let Some(id) = item.item_id.as_ref() {
+                id
+            } else {
+                fallback_id = event.identifier();
+                &fallback_id
+            };
+            let reaction_row = self.view_reactions(event, item_id);
             let is_ignored = self.user_settings.ignored_users.contains(&item.sender_id);
             let sender_info = self.view_sender_info(
                 item.avatar_url.as_deref(),
@@ -595,7 +601,7 @@ impl<'chat> Constellations {
             let mut action_row = Row::new().spacing(5).align_y(Alignment::Center);
 
             // "Add reaction" button
-            let is_picker_open = self.active_reaction_picker.as_ref() == Some(&item_id);
+            let is_picker_open = self.active_reaction_picker.as_ref() == Some(item_id);
             let btn = button::icon(cosmic::widget::icon::from_name("face-smile-symbolic"))
                 .on_press(if is_picker_open {
                     Message::OpenReactionPicker(None)
@@ -645,7 +651,7 @@ impl<'chat> Constellations {
                     "view-list-symbolic",
                 ))
                 .on_press(match root_id {
-                    matrix::TimelineEventItemId::EventId(id) => Message::OpenThread(id.to_owned()),
+                    matrix_sdk_ui::timeline::TimelineEventItemId::EventId(id) => Message::OpenThread(id.to_owned()),
                     _ => Message::NoOp,
                 });
                 let action_tooltip = tooltip(
@@ -707,7 +713,7 @@ impl<'chat> Constellations {
                 });
             bubble_col = bubble_col.push(reaction_row_wrap);
 
-            if self.active_reaction_picker.as_ref() == Some(&item_id) {
+            if self.active_reaction_picker.as_ref() == Some(item_id) {
                 bubble_col =
                     bubble_col.push(self.view_emoji_picker(Some(item_id.clone())));
             }
@@ -842,7 +848,7 @@ impl<'chat> Constellations {
                         .and_then(|timeline_item| timeline_item.as_event())
                         .and_then(|e| e.event_id())
                         .map(|id| match &latest_ev.identifier {
-                            matrix::TimelineEventItemId::EventId(eid) => id == eid,
+                            matrix_sdk_ui::timeline::TimelineEventItemId::EventId(eid) => id == eid,
                             _ => false,
                         })
                         .unwrap_or(false)
@@ -943,10 +949,14 @@ impl<'chat> Constellations {
             }
 
             let summary_btn = button::custom(container(summary_row).padding([0, 5])).on_press(
-                match event.identifier() {
-                    matrix::TimelineEventItemId::EventId(id) => Message::OpenThread(id.to_owned()),
-                    _ => Message::NoOp,
-                },
+                {
+                    let fallback_id;
+                    let id_to_use = if let Some(id) = item.item_id.as_ref() { id } else { fallback_id = event.identifier(); &fallback_id };
+                    match id_to_use {
+                        matrix_sdk_ui::timeline::TimelineEventItemId::EventId(id) => Message::OpenThread(id.to_owned()),
+                        _ => Message::NoOp,
+                    }
+                }
             );
 
             container(summary_btn).padding([5, 0])
