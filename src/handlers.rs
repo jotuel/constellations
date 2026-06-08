@@ -395,6 +395,23 @@ impl Constellations {
                     _ => false,
                 };
 
+                let is_prepend = match &mapped_diff {
+                    eyeball_im::VectorDiff::PushFront { .. } => true,
+                    eyeball_im::VectorDiff::Insert { index, .. } => *index < self.threaded_timeline_items.len(),
+                    eyeball_im::VectorDiff::Reset { .. } => self.is_loading_more,
+                    _ => false,
+                };
+
+                let is_reset = match &mapped_diff {
+                    eyeball_im::VectorDiff::Reset { .. } => true,
+                    eyeball_im::VectorDiff::Clear => true,
+                    _ => false,
+                };
+
+                if is_prepend {
+                    self.needs_threaded_scroll_adjustment = true;
+                }
+
                 self.threaded_timeline_items.apply_diff(mapped_diff);
 
                 if is_append && self.is_threaded_timeline_at_bottom {
@@ -402,6 +419,21 @@ impl Constellations {
                         THREADED_TIMELINE_ID.clone(),
                         scrollable::RelativeOffset::END.into(),
                     ));
+                } else if is_reset {
+                    if self.is_threaded_timeline_at_bottom {
+                        tasks.push(scrollable::snap_to(
+                            THREADED_TIMELINE_ID.clone(),
+                            scrollable::RelativeOffset::END.into(),
+                        ));
+                    } else {
+                        tasks.push(scrollable::scroll_to(
+                            THREADED_TIMELINE_ID.clone(),
+                            scrollable::AbsoluteOffset {
+                                x: Some(0.0),
+                                y: Some(self.last_threaded_timeline_offset),
+                            },
+                        ));
+                    }
                 }
             }
         } else {
@@ -411,6 +443,23 @@ impl Constellations {
                 eyeball_im::VectorDiff::Insert { index, .. } => *index >= self.timeline_items.len(),
                 _ => false,
             };
+
+            let is_prepend = match &mapped_diff {
+                eyeball_im::VectorDiff::PushFront { .. } => true,
+                eyeball_im::VectorDiff::Insert { index, .. } => *index < self.timeline_items.len(),
+                eyeball_im::VectorDiff::Reset { .. } => self.is_loading_more,
+                _ => false,
+            };
+
+            let is_reset = match &mapped_diff {
+                eyeball_im::VectorDiff::Reset { .. } => true,
+                eyeball_im::VectorDiff::Clear => true,
+                _ => false,
+            };
+
+            if is_prepend {
+                self.needs_scroll_adjustment = true;
+            }
 
             self.timeline_items.apply_diff(mapped_diff);
             self.recompute_thread_counts();
@@ -422,6 +471,21 @@ impl Constellations {
                     TIMELINE_ID.clone(),
                     scrollable::RelativeOffset::END.into(),
                 ));
+            } else if is_reset {
+                if self.is_timeline_at_bottom {
+                    tasks.push(scrollable::snap_to(
+                        TIMELINE_ID.clone(),
+                        scrollable::RelativeOffset::END.into(),
+                    ));
+                } else {
+                    tasks.push(scrollable::scroll_to(
+                        TIMELINE_ID.clone(),
+                        scrollable::AbsoluteOffset {
+                            x: Some(0.0),
+                            y: Some(self.last_timeline_offset),
+                        },
+                    ));
+                }
             }
         }
 
@@ -499,17 +563,39 @@ impl Constellations {
             }
             matrix::MatrixEvent::TimelineDiff(diff) => self.handle_timeline_diff(diff, false, None),
             matrix::MatrixEvent::TimelineReset => {
+                let is_background_reset = self.is_timeline_initialized;
                 self.timeline_items.clear();
                 self.recompute_thread_counts();
-                self.needs_initial_scroll = true;
-                self.is_timeline_at_bottom = true;
-                self.is_threaded_timeline_at_bottom = true;
+                self.needs_initial_scroll = !is_background_reset;
+                self.needs_scroll_restoration = is_background_reset;
+                self.last_content_height = 0.0;
+                self.needs_scroll_adjustment = false;
+                if !is_background_reset {
+                    self.is_timeline_at_bottom = true;
+                    self.is_threaded_timeline_at_bottom = true;
+                }
                 self.is_timeline_initialized = false;
                 Task::none()
             }
             matrix::MatrixEvent::TimelineInitFinished => {
                 self.is_timeline_initialized = true;
-                if let Some(task) = self.check_and_perform_initial_scroll() {
+                if self.needs_scroll_restoration {
+                    self.needs_scroll_restoration = false;
+                    if self.is_timeline_at_bottom {
+                        scrollable::snap_to(
+                            TIMELINE_ID.clone(),
+                            scrollable::RelativeOffset::END.into(),
+                        )
+                    } else {
+                        scrollable::scroll_to(
+                            TIMELINE_ID.clone(),
+                            scrollable::AbsoluteOffset {
+                                x: Some(0.0),
+                                y: Some(self.last_timeline_offset),
+                            },
+                        )
+                    }
+                } else if let Some(task) = self.check_and_perform_initial_scroll() {
                     task
                 } else {
                     Task::none()
@@ -1518,14 +1604,48 @@ impl Constellations {
             }
             Message::MatrixThreadReset(root_id) => {
                 if self.active_thread_root.as_ref() == Some(&root_id) {
+                    let is_background_reset = !self.threaded_timeline_items.is_empty();
                     self.threaded_timeline_items.clear();
+                    self.needs_threaded_scroll_restoration = is_background_reset;
+                    self.last_threaded_content_height = 0.0;
+                    self.needs_threaded_scroll_adjustment = false;
+                    self.is_threaded_timeline_initialized = false;
                 }
                 Task::none()
+            }
+            Message::MatrixThreadInitFinished(root_id) => {
+                if self.active_thread_root.as_ref() == Some(&root_id) {
+                    self.is_threaded_timeline_initialized = true;
+                    if self.needs_threaded_scroll_restoration {
+                        self.needs_threaded_scroll_restoration = false;
+                        if self.is_threaded_timeline_at_bottom {
+                            scrollable::snap_to(
+                                THREADED_TIMELINE_ID.clone(),
+                                scrollable::RelativeOffset::END.into(),
+                            )
+                        } else {
+                            scrollable::scroll_to(
+                                THREADED_TIMELINE_ID.clone(),
+                                scrollable::AbsoluteOffset {
+                                    x: Some(0.0),
+                                    y: Some(self.last_threaded_timeline_offset),
+                                },
+                            )
+                        }
+                    } else {
+                        Task::none()
+                    }
+                } else {
+                    Task::none()
+                }
             }
             Message::OpenThread(root_id) => {
                 self.active_thread_root = Some(root_id);
                 self.threaded_timeline_items.clear();
                 self.last_threaded_timeline_offset = 0.0;
+                self.last_threaded_content_height = 0.0;
+                self.needs_threaded_scroll_adjustment = false;
+                self.is_threaded_timeline_initialized = false;
                 Task::batch(vec![
                     self.handle_load_more(true),
                     scrollable::snap_to(
@@ -1559,6 +1679,10 @@ impl Constellations {
             Message::CloseThread => {
                 self.active_thread_root = None;
                 self.threaded_timeline_items.clear();
+                self.last_threaded_timeline_offset = 0.0;
+                self.last_threaded_content_height = 0.0;
+                self.needs_threaded_scroll_adjustment = false;
+                self.is_threaded_timeline_initialized = false;
                 Task::none()
             }
             Message::LoadMoreFinished(res) => {
@@ -1575,28 +1699,82 @@ impl Constellations {
             }
             Message::TimelineScrolled(viewport, is_thread) => {
                 let current_offset = viewport.absolute_offset().y;
-                let last_offset = if is_thread {
-                    self.last_threaded_timeline_offset
-                } else {
-                    self.last_timeline_offset
-                };
-
-                let should_load = current_offset < 100.0 && current_offset < last_offset;
-
-                let is_at_bottom = current_offset + viewport.bounds().height >= viewport.content_bounds().height - 20.0;
+                let current_height = viewport.content_bounds().height;
 
                 if is_thread {
-                    self.last_threaded_timeline_offset = current_offset;
-                    self.is_threaded_timeline_at_bottom = is_at_bottom;
-                } else {
-                    self.last_timeline_offset = current_offset;
-                    self.is_timeline_at_bottom = is_at_bottom;
-                }
+                    if !self.is_threaded_timeline_initialized {
+                        return Task::none();
+                    }
 
-                if should_load {
-                    self.handle_load_more(is_thread)
+                    let mut task = Task::none();
+                    let mut actual_offset = current_offset;
+
+                    if self.needs_threaded_scroll_adjustment
+                        && self.last_threaded_content_height > 0.0
+                        && current_height > self.last_threaded_content_height
+                    {
+                        self.needs_threaded_scroll_adjustment = false;
+                        let diff_height = current_height - self.last_threaded_content_height;
+                        actual_offset = current_offset + diff_height;
+                        task = scrollable::scroll_to(
+                            THREADED_TIMELINE_ID.clone(),
+                            scrollable::AbsoluteOffset {
+                                x: Some(0.0),
+                                y: Some(actual_offset),
+                            },
+                        );
+                    }
+
+                    let last_offset = self.last_threaded_timeline_offset;
+                    let should_load = actual_offset < 100.0 && actual_offset < last_offset;
+                    let is_at_bottom = actual_offset + viewport.bounds().height >= current_height - 20.0;
+
+                    self.last_threaded_timeline_offset = actual_offset;
+                    self.last_threaded_content_height = current_height;
+                    self.is_threaded_timeline_at_bottom = is_at_bottom;
+
+                    if should_load {
+                        Task::batch(vec![task, self.handle_load_more(true)])
+                    } else {
+                        task
+                    }
                 } else {
-                    Task::none()
+                    if !self.is_timeline_initialized {
+                        return Task::none();
+                    }
+
+                    let mut task = Task::none();
+                    let mut actual_offset = current_offset;
+
+                    if self.needs_scroll_adjustment
+                        && self.last_content_height > 0.0
+                        && current_height > self.last_content_height
+                    {
+                        self.needs_scroll_adjustment = false;
+                        let diff_height = current_height - self.last_content_height;
+                        actual_offset = current_offset + diff_height;
+                        task = scrollable::scroll_to(
+                            TIMELINE_ID.clone(),
+                            scrollable::AbsoluteOffset {
+                                x: Some(0.0),
+                                y: Some(actual_offset),
+                            },
+                        );
+                    }
+
+                    let last_offset = self.last_timeline_offset;
+                    let should_load = actual_offset < 100.0 && actual_offset < last_offset;
+                    let is_at_bottom = actual_offset + viewport.bounds().height >= current_height - 20.0;
+
+                    self.last_timeline_offset = actual_offset;
+                    self.last_content_height = current_height;
+                    self.is_timeline_at_bottom = is_at_bottom;
+
+                    if should_load {
+                        Task::batch(vec![task, self.handle_load_more(false)])
+                    } else {
+                        task
+                    }
                 }
             }
             Message::RoomSelected(room_id) => {
@@ -1609,13 +1787,14 @@ impl Constellations {
                 self.timeline_items.clear();
                 self.recompute_thread_counts();
                 self.last_timeline_offset = 0.0;
+                self.last_content_height = 0.0;
+                self.needs_scroll_adjustment = false;
                 self.is_timeline_at_bottom = true;
                 self.is_threaded_timeline_at_bottom = true;
                 self.is_timeline_initialized = false;
 
                 if self.user_id == Some("@simulated_user:matrix.org".to_string()) {
                     self.timeline_items = self.generate_mock_timeline(&room_id);
-                    let is_first_time = !self.visited_room_ids.contains(&room_id);
                     self.visited_room_ids.insert(room_id.clone());
 
                     let unread_count = if let Some(room) = self.room_list.iter().find(|r| r.id == room_id) {
@@ -1624,7 +1803,7 @@ impl Constellations {
                         0
                     };
 
-                    let offset = if is_first_time || unread_count == 0 {
+                    let offset = if unread_count == 0 {
                         scrollable::RelativeOffset::END
                     } else {
                         let total_items = self.timeline_items.len();
@@ -1646,7 +1825,7 @@ impl Constellations {
                         ),
                     ])
                 } else {
-                    self.is_first_time_joining = !self.visited_room_ids.contains(&room_id);
+                    self.is_first_time_joining = false;
                     self.visited_room_ids.insert(room_id.clone());
                     self.needs_initial_scroll = true;
 
@@ -2006,6 +2185,8 @@ impl Constellations {
                 match res {
                     Ok(room_id) => {
                         self.selected_room = Some(room_id.as_str().into());
+                        self.is_first_time_joining = true;
+                        self.visited_room_ids.insert(room_id.as_str().into());
                         // Refresh both lists
                         self.update_filtered_rooms();
                         if let (Some(matrix), Some(space_id)) = (&self.matrix, &self.selected_space)
@@ -2288,9 +2469,16 @@ mod tests {
             visited_room_ids: HashSet::new(),
             is_first_time_joining: false,
             needs_initial_scroll: false,
+            needs_scroll_restoration: false,
+            needs_threaded_scroll_restoration: false,
             is_timeline_at_bottom: true,
             is_threaded_timeline_at_bottom: true,
             is_timeline_initialized: false,
+            is_threaded_timeline_initialized: false,
+            last_content_height: 0.0,
+            last_threaded_content_height: 0.0,
+            needs_scroll_adjustment: false,
+            needs_threaded_scroll_adjustment: false,
             selected_space: None,
             current_settings_panel: None,
             user_settings: crate::settings::user::State::default(),
@@ -2654,10 +2842,14 @@ mod tests {
             suggested: false,
         });
 
-        // 1. First time joining
-        let _task = app.update(Message::RoomSelected(room_id.clone()));
+        // 1. Just joined the room
+        let owned_room_id = matrix_sdk::ruma::RoomId::parse(room_id.as_ref()).unwrap();
+        let _ = app.update(Message::RoomJoined(Ok(owned_room_id)));
         assert!(app.visited_room_ids.contains(&room_id));
         assert_eq!(app.is_first_time_joining, true);
+
+        // Simulate timeline reset when subscription starts
+        let _ = app.update(Message::Matrix(matrix::MatrixEvent::TimelineReset));
         assert_eq!(app.needs_initial_scroll, true);
         assert_eq!(app.is_timeline_at_bottom, true);
 
@@ -2678,9 +2870,9 @@ mod tests {
         let _task = app.update(Message::LoadMoreFinished(Ok(())));
         assert_eq!(app.needs_initial_scroll, false);
 
-        // 2. Second time joining (room is already in visited_room_ids)
+        // 2. Normal room selection
         app.timeline_items.clear();
-        app.is_first_time_joining = false;
+        app.is_first_time_joining = true; // set to true to verify RoomSelected sets it to false
         app.needs_initial_scroll = false;
 
         let _task = app.update(Message::RoomSelected(room_id.clone()));
@@ -2724,10 +2916,26 @@ mod tests {
         assert!(app.check_and_perform_initial_scroll().is_some());
         assert_eq!(app.needs_initial_scroll, false);
 
-        // 4. Test timeline reset scroll behavior
+        // 4. Test timeline reset scroll behavior (initial reset)
+        app.is_timeline_initialized = false;
         let _ = app.update(Message::Matrix(matrix::MatrixEvent::TimelineReset));
         assert_eq!(app.needs_initial_scroll, true);
         assert_eq!(app.is_timeline_at_bottom, true);
         assert_eq!(app.is_timeline_initialized, false);
+
+        // 5. Test background timeline reset scroll behavior (when already initialized)
+        app.is_timeline_initialized = true;
+        app.is_timeline_at_bottom = false;
+        app.last_timeline_offset = 150.0;
+        let _ = app.update(Message::Matrix(matrix::MatrixEvent::TimelineReset));
+        assert_eq!(app.needs_initial_scroll, false);
+        assert_eq!(app.needs_scroll_restoration, true);
+        assert_eq!(app.is_timeline_at_bottom, false); // preserved!
+        assert_eq!(app.is_timeline_initialized, false);
+
+        // Simulate TimelineInitFinished for background reset
+        let _ = app.update(Message::Matrix(matrix::MatrixEvent::TimelineInitFinished));
+        assert_eq!(app.is_timeline_initialized, true);
+        assert_eq!(app.needs_scroll_restoration, false);
     }
 }
