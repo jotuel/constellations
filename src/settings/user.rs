@@ -1304,11 +1304,10 @@ impl State {
                                         url: String,
                                     }
 
-                                    if let Some(params_box) = &info.params {
-                                        if let Ok(params) =
+                                    if let Some(params_box) = &info.params
+                                        && let Ok(params) =
                                             serde_json::from_str::<UiaaParams>(params_box.get())
-                                        {
-                                            if let Some(oauth) = params.oauth {
+                                            && let Some(oauth) = params.oauth {
                                                 if let Err(err) = open::that(&oauth.url) {
                                                     return Err(format!(
                                                         "Failed to open authentication link: {err}. Please open: {}",
@@ -1317,8 +1316,6 @@ impl State {
                                                 }
                                                 return Err("Authentication required in web browser. Please complete the cross-signing reset in the browser, then try bootstrapping again.".to_string());
                                             }
-                                        }
-                                    }
 
                                     if password.is_empty() {
                                         return Err(

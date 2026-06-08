@@ -14,8 +14,35 @@ use matrix_sdk::ruma::events::room::{MediaSource, message::MessageType};
 
 use crate::{Constellations, Message, PreviewEvent, matrix};
 
+#[derive(Clone)]
+pub struct LocalizedItemStrings {
+    pub add_reaction: std::sync::Arc<str>,
+    pub reply: std::sync::Arc<str>,
+    pub thread: std::sync::Arc<str>,
+    pub edit: std::sync::Arc<str>,
+    pub delete: std::sync::Arc<str>,
+    pub unignore: std::sync::Arc<str>,
+    pub ignore: std::sync::Arc<str>,
+}
+
+impl LocalizedItemStrings {
+    fn new() -> Self {
+        Self {
+            add_reaction: std::sync::Arc::from(crate::fl!("add-reaction").as_str()),
+            reply: std::sync::Arc::from(crate::fl!("tooltip-reply").as_str()),
+            thread: std::sync::Arc::from(crate::fl!("tooltip-thread").as_str()),
+            edit: std::sync::Arc::from(crate::fl!("tooltip-edit").as_str()),
+            delete: std::sync::Arc::from(crate::fl!("tooltip-delete").as_str()),
+            unignore: std::sync::Arc::from(crate::fl!("unignore-user").as_str()),
+            ignore: std::sync::Arc::from(crate::fl!("ignore").as_str()),
+        }
+    }
+}
+
+
 impl<'chat> Constellations {
     pub fn view_timeline(&self) -> Element<'_, Message> {
+        let item_strings = LocalizedItemStrings::new();
         let mut timeline = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
 
         let is_filtering = self.is_search_active
@@ -35,7 +62,7 @@ impl<'chat> Constellations {
         for item in &self.timeline_items {
             if item.item.is_none() {
                 // Render simulated/mock items!
-                timeline = timeline.push(self.view_item(item, &self.thread_counts));
+                timeline = timeline.push(self.view_item(item, &self.thread_counts, item_strings.clone()));
                 continue;
             }
 
@@ -81,7 +108,7 @@ impl<'chat> Constellations {
                     );
                 }
 
-                timeline = timeline.push(self.view_item(item, &self.thread_counts));
+                timeline = timeline.push(self.view_item(item, &self.thread_counts, item_strings.clone()));
             } else if let Some(timeline_item) = &item.item
                 && let Some(matrix::VirtualTimelineItem::DateDivider(date)) =
                     timeline_item.as_virtual()
@@ -412,6 +439,7 @@ impl<'chat> Constellations {
     }
 
     pub fn view_threaded_timeline(&self) -> Element<'_, Message> {
+        let item_strings = LocalizedItemStrings::new();
         let mut timeline_col = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
 
         let is_filtering = self.is_search_active
@@ -446,7 +474,7 @@ impl<'chat> Constellations {
 
         for item in &self.threaded_timeline_items {
             if item.item.is_none() {
-                timeline_col = timeline_col.push(self.view_item(item, &self.thread_counts));
+                timeline_col = timeline_col.push(self.view_item(item, &self.thread_counts, item_strings.clone()));
                 continue;
             }
 
@@ -468,7 +496,7 @@ impl<'chat> Constellations {
                         continue;
                     }
                 }
-                timeline_col = timeline_col.push(self.view_item(item, &self.thread_counts));
+                timeline_col = timeline_col.push(self.view_item(item, &self.thread_counts, item_strings.clone()));
             }
         }
 
@@ -504,6 +532,7 @@ impl<'chat> Constellations {
         &'a self,
         item: &'a crate::ConstellationsItem,
         thread_counts: &std::collections::HashMap<matrix_sdk::ruma::OwnedEventId, u32>,
+        item_strings: LocalizedItemStrings,
     ) -> Element<'a, Message> {
         if let Some(timeline_item) = &item.item
             && let Some(event) = timeline_item.as_event()
@@ -620,7 +649,7 @@ impl<'chat> Constellations {
                 });
             let btn_tooltip = tooltip(
                 btn,
-                text::body(crate::fl!("add-reaction")),
+                text::body(item_strings.add_reaction.to_string()),
                 Position::Bottom,
             );
             action_row = action_row.push(btn_tooltip);
@@ -630,7 +659,7 @@ impl<'chat> Constellations {
                 .on_press(Message::StartReply(item_id.clone()));
             let reply_tooltip = tooltip(
                 reply_btn,
-                text::body(crate::fl!("tooltip-reply")),
+                text::body(item_strings.reply.to_string()),
                 Position::Bottom,
             );
             action_row = action_row.push(reply_tooltip);
@@ -666,7 +695,7 @@ impl<'chat> Constellations {
                 });
                 let action_tooltip = tooltip(
                     start_thread_btn,
-                    text::body(crate::fl!("tooltip-thread")),
+                    text::body(item_strings.thread.to_string()),
                     Position::Bottom,
                 );
                 action_row = action_row.push(action_tooltip);
@@ -677,7 +706,7 @@ impl<'chat> Constellations {
                     .on_press(Message::StartEdit(item_id.clone()));
                 let edit_tooltip = tooltip(
                     edit_btn,
-                    text::body(crate::fl!("tooltip-edit")),
+                    text::body(item_strings.edit.to_string()),
                     Position::Bottom,
                 );
                 action_row = action_row.push(edit_tooltip);
@@ -688,7 +717,7 @@ impl<'chat> Constellations {
                         .on_press(Message::RedactMessage(item_id.clone()));
                 let delete_tooltip = tooltip(
                     delete_btn,
-                    text::body(crate::fl!("tooltip-delete")),
+                    text::body(item_strings.delete.to_string()),
                     Position::Bottom,
                 );
                 action_row = action_row.push(delete_tooltip);
@@ -700,7 +729,7 @@ impl<'chat> Constellations {
                                 item.sender_id.to_owned(),
                             ),
                         ))
-                        .tooltip(crate::fl!("unignore-user"));
+                        .tooltip(item_strings.unignore.to_string());
                     action_row = action_row.push(ignore_btn);
                 } else {
                     let ignore_btn = button::icon(Named::new("dialog-error-symbolic"))
@@ -709,7 +738,7 @@ impl<'chat> Constellations {
                                 item.sender_id.to_owned(),
                             ),
                         ))
-                        .tooltip(crate::fl!("ignore"));
+                        .tooltip(item_strings.ignore.to_string());
                     action_row = action_row.push(ignore_btn);
                 }
             }
@@ -1239,6 +1268,7 @@ impl<'chat> Constellations {
     }
 
     pub fn view_search_results(&self) -> Element<'_, Message> {
+        let item_strings = LocalizedItemStrings::new();
         let mut results_col = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
 
         // Find fuzzy matched messages
@@ -1303,7 +1333,7 @@ impl<'chat> Constellations {
         } else {
             for item in matches {
                 results_list = results_list.push(
-                    container(self.view_item(item, &thread_counts))
+                    container(self.view_item(item, &thread_counts, item_strings.clone()))
                         .style(|theme: &cosmic::Theme| {
                             use cosmic::iced::widget::container::Catalog;
                             let cosmic = theme.cosmic();
