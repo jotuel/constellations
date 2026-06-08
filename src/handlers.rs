@@ -354,6 +354,35 @@ impl Constellations {
         } else {
             self.timeline_items.apply_diff(mapped_diff);
             self.recompute_thread_counts();
+
+            if self.needs_initial_scroll && !self.timeline_items.is_empty() {
+                self.needs_initial_scroll = false;
+                if let Some(room_id) = &self.selected_room {
+                    let unread_count = if let Some(room) = self.room_list.iter().find(|r| &r.id == room_id) {
+                        room.unread_count
+                    } else {
+                        0
+                    };
+
+                    let offset = if self.is_first_time_joining || unread_count == 0 {
+                        scrollable::RelativeOffset::END
+                    } else {
+                        let total_items = self.timeline_items.len();
+                        let unread = unread_count as usize;
+                        if unread >= total_items {
+                            scrollable::RelativeOffset::START
+                        } else {
+                            let ratio = (total_items - unread) as f32 / total_items as f32;
+                            scrollable::RelativeOffset { x: 0.0, y: ratio }
+                        }
+                    };
+
+                    tasks.push(scrollable::snap_to(
+                        TIMELINE_ID.clone(),
+                        offset.into(),
+                    ));
+                }
+            }
         }
 
         if !tasks.is_empty() {
@@ -1516,21 +1545,44 @@ impl Constellations {
 
                 if self.user_id == Some("@simulated_user:matrix.org".to_string()) {
                     self.timeline_items = self.generate_mock_timeline(&room_id);
+                    let is_first_time = !self.visited_room_ids.contains(&room_id);
+                    self.visited_room_ids.insert(room_id.clone());
+
+                    let unread_count = if let Some(room) = self.room_list.iter().find(|r| r.id == room_id) {
+                        room.unread_count
+                    } else {
+                        0
+                    };
+
+                    let offset = if is_first_time || unread_count == 0 {
+                        scrollable::RelativeOffset::END
+                    } else {
+                        let total_items = self.timeline_items.len();
+                        let unread = unread_count as usize;
+                        if unread >= total_items {
+                            scrollable::RelativeOffset::START
+                        } else {
+                            let ratio = (total_items - unread) as f32 / total_items as f32;
+                            scrollable::RelativeOffset { x: 0.0, y: ratio }
+                        }
+                    };
+
+                    self.needs_initial_scroll = false;
                     Task::batch(vec![
                         self.update_title(),
                         scrollable::snap_to(
                             TIMELINE_ID.clone(),
-                            scrollable::RelativeOffset::END.into(),
+                            offset.into(),
                         ),
                     ])
                 } else {
+                    self.is_first_time_joining = !self.visited_room_ids.contains(&room_id);
+                    self.visited_room_ids.insert(room_id.clone());
+                    self.needs_initial_scroll = true;
+
                     Task::batch(vec![
                         self.update_title(),
                         self.handle_load_more(false),
-                        scrollable::snap_to(
-                            TIMELINE_ID.clone(),
-                            scrollable::RelativeOffset::END.into(),
-                        ),
                     ])
                 }
             }
@@ -2163,6 +2215,9 @@ mod tests {
             search_query: String::new(),
             is_search_active: false,
             joined_room_ids: HashSet::new(),
+            visited_room_ids: HashSet::new(),
+            is_first_time_joining: false,
+            needs_initial_scroll: false,
             selected_space: None,
             current_settings_panel: None,
             user_settings: crate::settings::user::State::default(),
