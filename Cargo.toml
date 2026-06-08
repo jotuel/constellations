@@ -60,6 +60,9 @@ reqwest = { version = "0.13", features = ["json"] }
 emojis = "0.8"
 rustls = { version = "0.23", features = ["ring"] }
 qrcode = "0.14.0"
+unifiedpush = "0.1.0"
+unifiedpush_storage_preferences = "0.1.0"
+
 
 
 

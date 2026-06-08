@@ -8,6 +8,7 @@ mod handlers;
 pub mod i18n;
 mod ipc;
 mod matrix;
+pub mod unified_push;
 pub mod rich_text;
 pub mod settings;
 mod view;
@@ -1017,6 +1018,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_writer(std::io::stderr)
         .init();
     let args: Vec<String> = std::env::args().collect();
+    let is_notify = args.iter().any(|arg| arg == "--notify");
     let uri = args
         .get(1)
         .filter(|u| u.starts_with("fi.joonastuomi.CosmicExtConstellations://"))
@@ -1038,6 +1040,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     if is_running {
+        if is_notify {
+            tracing::info!("App is already running; delegate push to active instance.");
+            return Ok(());
+        }
         if let Some(uri) = uri {
             rt.block_on(async {
                 if let Err(e) = ipc::call_handle_callback(uri).await {
@@ -1046,6 +1052,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             });
         }
         tracing::info!("Another instance is already running, exiting.");
+        return Ok(());
+    }
+
+    if is_notify {
+        rt.block_on(async {
+            if let Err(e) = unified_push::run_headless_notification_handler().await {
+                tracing::error!("Failed to run headless notification handler: {}", e);
+            }
+        });
         return Ok(());
     }
 

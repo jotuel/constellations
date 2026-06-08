@@ -36,6 +36,7 @@ impl Constellations {
         match res {
             Ok(engine) => {
                 self.matrix = Some(engine.clone());
+                crate::unified_push::start_unified_push_listener(engine.clone());
                 Task::perform(
                     async move {
                         let did_restore = engine.restore_session().await.unwrap_or(false);
