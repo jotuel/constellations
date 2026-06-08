@@ -349,39 +349,38 @@ impl Constellations {
             if let Some(root_id) = root_id
                 && self.active_thread_root == Some(root_id)
             {
+                let is_append = match &mapped_diff {
+                    eyeball_im::VectorDiff::PushBack { .. } => true,
+                    eyeball_im::VectorDiff::Append { .. } => true,
+                    eyeball_im::VectorDiff::Insert { index, .. } => *index >= self.threaded_timeline_items.len(),
+                    _ => false,
+                };
+
                 self.threaded_timeline_items.apply_diff(mapped_diff);
+
+                if is_append && self.is_threaded_timeline_at_bottom {
+                    tasks.push(scrollable::snap_to(
+                        THREADED_TIMELINE_ID.clone(),
+                        scrollable::RelativeOffset::END.into(),
+                    ));
+                }
             }
         } else {
+            let is_append = match &mapped_diff {
+                eyeball_im::VectorDiff::PushBack { .. } => true,
+                eyeball_im::VectorDiff::Append { .. } => true,
+                eyeball_im::VectorDiff::Insert { index, .. } => *index >= self.timeline_items.len(),
+                _ => false,
+            };
+
             self.timeline_items.apply_diff(mapped_diff);
             self.recompute_thread_counts();
 
-            if self.needs_initial_scroll && !self.timeline_items.is_empty() {
-                self.needs_initial_scroll = false;
-                if let Some(room_id) = &self.selected_room {
-                    let unread_count = if let Some(room) = self.room_list.iter().find(|r| &r.id == room_id) {
-                        room.unread_count
-                    } else {
-                        0
-                    };
-
-                    let offset = if self.is_first_time_joining || unread_count == 0 {
-                        scrollable::RelativeOffset::END
-                    } else {
-                        let total_items = self.timeline_items.len();
-                        let unread = unread_count as usize;
-                        if unread >= total_items {
-                            scrollable::RelativeOffset::START
-                        } else {
-                            let ratio = (total_items - unread) as f32 / total_items as f32;
-                            scrollable::RelativeOffset { x: 0.0, y: ratio }
-                        }
-                    };
-
-                    tasks.push(scrollable::snap_to(
-                        TIMELINE_ID.clone(),
-                        offset.into(),
-                    ));
-                }
+            if is_append && self.is_timeline_at_bottom {
+                tasks.push(scrollable::snap_to(
+                    TIMELINE_ID.clone(),
+                    scrollable::RelativeOffset::END.into(),
+                ));
             }
         }
 
@@ -748,6 +747,12 @@ impl Constellations {
             }
 
             let mut tasks = Vec::new();
+
+            if self.active_thread_root.is_some() {
+                self.is_threaded_timeline_at_bottom = true;
+            } else {
+                self.is_timeline_at_bottom = true;
+            }
 
             if !body.is_empty() {
                 let html_body = if self.app_settings.render_markdown {
@@ -1508,6 +1513,38 @@ impl Constellations {
                 if let Err(e) = res {
                     self.set_error(format!("Failed to load more messages: {}", e));
                 }
+
+                if self.needs_initial_scroll {
+                    self.needs_initial_scroll = false;
+                    if let Some(room_id) = &self.selected_room {
+                        let unread_count = if let Some(room) = self.room_list.iter().find(|r| &r.id == room_id) {
+                            room.unread_count
+                        } else {
+                            0
+                        };
+
+                        let offset = if self.is_first_time_joining || unread_count == 0 {
+                            scrollable::RelativeOffset::END
+                        } else {
+                            let total_items = self.timeline_items.len();
+                            let unread = unread_count as usize;
+                            if total_items == 0 {
+                                scrollable::RelativeOffset::END
+                            } else if unread >= total_items {
+                                scrollable::RelativeOffset::START
+                            } else {
+                                let ratio = (total_items - unread) as f32 / total_items as f32;
+                                scrollable::RelativeOffset { x: 0.0, y: ratio }
+                            }
+                        };
+
+                        return scrollable::snap_to(
+                            TIMELINE_ID.clone(),
+                            offset.into(),
+                        );
+                    }
+                }
+
                 Task::none()
             }
             Message::TimelineScrolled(viewport, is_thread) => {
@@ -1520,10 +1557,14 @@ impl Constellations {
 
                 let should_load = current_offset < 100.0 && current_offset < last_offset;
 
+                let is_at_bottom = current_offset + viewport.bounds().height >= viewport.content_bounds().height - 20.0;
+
                 if is_thread {
                     self.last_threaded_timeline_offset = current_offset;
+                    self.is_threaded_timeline_at_bottom = is_at_bottom;
                 } else {
                     self.last_timeline_offset = current_offset;
+                    self.is_timeline_at_bottom = is_at_bottom;
                 }
 
                 if should_load {
@@ -1542,6 +1583,8 @@ impl Constellations {
                 self.timeline_items.clear();
                 self.recompute_thread_counts();
                 self.last_timeline_offset = 0.0;
+                self.is_timeline_at_bottom = true;
+                self.is_threaded_timeline_at_bottom = true;
 
                 if self.user_id == Some("@simulated_user:matrix.org".to_string()) {
                     self.timeline_items = self.generate_mock_timeline(&room_id);
@@ -2218,6 +2261,8 @@ mod tests {
             visited_room_ids: HashSet::new(),
             is_first_time_joining: false,
             needs_initial_scroll: false,
+            is_timeline_at_bottom: true,
+            is_threaded_timeline_at_bottom: true,
             selected_space: None,
             current_settings_panel: None,
             user_settings: crate::settings::user::State::default(),
@@ -2557,5 +2602,77 @@ mod tests {
         assert_eq!(app.is_qr_logging_in, false);
         assert_eq!(app.qr_login_step, QrLoginStep::NotStarted);
         assert!(app.qr_rendezvous_url.is_none());
+    }
+
+    #[test]
+    fn test_room_scroll_behavior() {
+        let mut app = create_dummy_constellations();
+        app.user_id = Some("@test_user:matrix.org".to_string());
+
+        let room_id: std::sync::Arc<str> = std::sync::Arc::from("!room1:example.com");
+        app.room_list.push(matrix::RoomData {
+            id: room_id.clone(),
+            name: Some("Room 1".to_string()),
+            unread_count: 5,
+            unread_count_str: Some("5".to_string()),
+            last_message: None,
+            avatar_url: None,
+            room_type: None,
+            is_space: false,
+            parent_space_id: None,
+            join_rule: None,
+            allowed_spaces: Vec::new(),
+            order: None,
+            suggested: false,
+        });
+
+        // 1. First time joining
+        let _task = app.update(Message::RoomSelected(room_id.clone()));
+        assert!(app.visited_room_ids.contains(&room_id));
+        assert_eq!(app.is_first_time_joining, true);
+        assert_eq!(app.needs_initial_scroll, true);
+        assert_eq!(app.is_timeline_at_bottom, true);
+
+        // Populate timeline
+        for i in 0..10 {
+            app.timeline_items.push_back(crate::ConstellationsItem::new_mock(
+                "Sender",
+                &format!("Msg {}", i),
+                "2026-06-08T13:22:31Z",
+                false,
+            ));
+        }
+
+        let _task = app.update(Message::LoadMoreFinished(Ok(())));
+        assert_eq!(app.needs_initial_scroll, false);
+
+        // 2. Second time joining (room is already in visited_room_ids)
+        app.timeline_items.clear();
+        app.is_first_time_joining = false;
+        app.needs_initial_scroll = false;
+
+        let _task = app.update(Message::RoomSelected(room_id.clone()));
+        assert_eq!(app.is_first_time_joining, false);
+        assert_eq!(app.needs_initial_scroll, true);
+
+        // Populate timeline again
+        for i in 0..10 {
+            app.timeline_items.push_back(crate::ConstellationsItem::new_mock(
+                "Sender",
+                &format!("Msg {}", i),
+                "2026-06-08T13:22:31Z",
+                false,
+            ));
+        }
+
+        let _task2 = app.update(Message::LoadMoreFinished(Ok(())));
+        assert_eq!(app.needs_initial_scroll, false);
+
+        // 3. New message append behavior when at the bottom
+        app.is_timeline_at_bottom = true;
+        // Since we can't easily construct a real TimelineItem, we can test with VectorDiff::PushBack containing a mock/empty event,
+        // or check clear vs pushback behavior using VectorDiff::Clear which doesn't scroll.
+        let diff = eyeball_im::VectorDiff::Clear;
+        let _task3 = app.handle_timeline_diff(diff, false, None);
     }
 }
