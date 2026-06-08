@@ -22,6 +22,7 @@ matrix-sdk = { version = "0.18.0", features = ["sqlite", "e2e-encryption", "sso-
 matrix-sdk-ui = "0.18.0"
 matrix-sdk-sqlite = "0.18.0"
 matrix-sdk-base = "0.18.0"
+matrix-sdk-store-encryption = "0.18.0"
 tokio = { version = "1", features = ["full"] }
 oo7 = "0.6"
 serde = { version = "1", features = ["derive"] }

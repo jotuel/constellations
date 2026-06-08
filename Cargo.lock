@@ -1591,6 +1591,7 @@ dependencies = [
  "matrix-sdk",
  "matrix-sdk-base",
  "matrix-sdk-sqlite",
+ "matrix-sdk-store-encryption",
  "matrix-sdk-test 0.17.0",
  "matrix-sdk-ui",
  "mimalloc",

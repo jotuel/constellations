@@ -2611,6 +2611,33 @@ impl MatrixEngine {
 
         let passphrase = Self::get_or_create_store_passphrase().await?;
 
+        let mut key_mismatch = false;
+        if search_index_path.exists() {
+            if let Ok(entries) = std::fs::read_dir(&search_index_path) {
+                for entry in entries.flatten() {
+                    if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                        let key_path = entry.path().join("seshat-index.key");
+                        if key_path.exists() {
+                            if let Ok(bytes) = std::fs::read(&key_path) {
+                                if matrix_sdk_store_encryption::StoreCipher::import(&passphrase, &bytes).is_err() {
+                                    tracing::warn!(
+                                        "Mismatched search index encryption key in room {:?}. Clearing search index.",
+                                        entry.file_name()
+                                    );
+                                    key_mismatch = true;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if key_mismatch {
+            let _ = std::fs::remove_dir_all(&search_index_path);
+        }
+
         let build_client = |path: PathBuf, search_path: PathBuf, pass: String| {
             Client::builder()
                 .homeserver_url(homeserver_url)
