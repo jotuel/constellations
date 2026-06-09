@@ -18,6 +18,40 @@ type PinnedOutput =
     std::pin::Pin<Box<dyn Future<Output = (String, Result<Vec<u8>, String>)> + Send + 'static>>;
 
 impl Constellations {
+    pub fn restore_scroll_task(&self) -> Task<Action<Message>> {
+        if self.active_thread_root.is_some() {
+            if self.is_threaded_timeline_at_bottom {
+                scrollable::snap_to(
+                    THREADED_TIMELINE_ID.clone(),
+                    scrollable::RelativeOffset::END.into(),
+                )
+            } else {
+                scrollable::scroll_to(
+                    THREADED_TIMELINE_ID.clone(),
+                    scrollable::AbsoluteOffset {
+                        x: Some(0.0),
+                        y: Some(self.last_threaded_timeline_offset),
+                    },
+                )
+            }
+        } else {
+            if self.is_timeline_at_bottom {
+                scrollable::snap_to(
+                    TIMELINE_ID.clone(),
+                    scrollable::RelativeOffset::END.into(),
+                )
+            } else {
+                scrollable::scroll_to(
+                    TIMELINE_ID.clone(),
+                    scrollable::AbsoluteOffset {
+                        x: Some(0.0),
+                        y: Some(self.last_timeline_offset),
+                    },
+                )
+            }
+        }
+    }
+
     pub fn recompute_thread_counts(&mut self) {
         self.thread_counts.clear();
         for item in &self.timeline_items {
@@ -1694,7 +1728,7 @@ impl Constellations {
                 self.last_threaded_viewport_height = 0.0;
                 self.needs_threaded_scroll_adjustment = false;
                 self.is_threaded_timeline_initialized = false;
-                Task::none()
+                self.restore_scroll_task()
             }
             Message::LoadMoreFinished(res) => {
                 self.is_loading_more = false;
@@ -2354,26 +2388,29 @@ impl Constellations {
                     }
                 }
 
-                if panel == SettingsPanel::User {
-                    return self
-                        .user_settings
-                        .update(settings::user::Message::LoadProfile, &self.matrix);
+                let task = if panel == SettingsPanel::User {
+                    self.user_settings
+                        .update(settings::user::Message::LoadProfile, &self.matrix)
                 } else if panel == SettingsPanel::Room {
                     if let Some(room_id) = &self.selected_room {
-                        return self.room_settings.update(
+                        self.room_settings.update(
                             settings::room::Message::LoadRoom(room_id.clone()),
                             &self.matrix,
-                        );
+                        )
+                    } else {
+                        Task::none()
                     }
                 } else if panel == SettingsPanel::Space
                     && let Some(space_id) = &self.selected_space
                 {
-                    return self.space_settings.update(
+                    self.space_settings.update(
                         settings::space::Message::LoadSpace(Arc::from(space_id.as_str())),
                         &self.matrix,
-                    );
-                }
-                Task::none()
+                    )
+                } else {
+                    Task::none()
+                };
+                Task::batch(vec![task, self.restore_scroll_task()])
             }
             Message::CloseSettings => {
                 self.needs_layout_scroll_restoration = true;
@@ -2384,7 +2421,7 @@ impl Constellations {
                 self.show_pinned_panel = false;
                 self.room_members.clear();
                 self.pinned_events_details.clear();
-                Task::none()
+                self.restore_scroll_task()
             }
             Message::UserSettings(msg) => self.user_settings.update(msg, &self.matrix),
             Message::RoomSettings(msg) => self.room_settings.update(msg, &self.matrix),
@@ -2486,12 +2523,12 @@ impl Constellations {
                     self.core.set_show_context(true);
                     self.is_loading_members = true;
                     self.room_members.clear();
-                    self.fetch_members_task()
+                    Task::batch(vec![self.fetch_members_task(), self.restore_scroll_task()])
                 } else {
                     self.current_settings_panel = None;
                     self.core.set_show_context(false);
                     self.room_members.clear();
-                    Task::none()
+                    self.restore_scroll_task()
                 }
             }
             Message::MembersFetched(res) => {
@@ -2515,11 +2552,11 @@ impl Constellations {
                     self.current_settings_panel = Some(SettingsPanel::Pinned);
                     self.core.set_show_context(true);
                     self.is_loading_pinned = true;
-                    self.fetch_pinned_events_task()
+                    Task::batch(vec![self.fetch_pinned_events_task(), self.restore_scroll_task()])
                 } else {
                     self.current_settings_panel = None;
                     self.core.set_show_context(false);
-                    Task::none()
+                    self.restore_scroll_task()
                 }
             }
             Message::PinnedEventsFetched(res) => {
