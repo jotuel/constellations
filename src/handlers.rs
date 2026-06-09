@@ -1645,6 +1645,7 @@ impl Constellations {
                 }
             }
             Message::OpenThread(root_id) => {
+                self.needs_layout_scroll_restoration = true;
                 self.active_thread_root = Some(root_id);
                 self.threaded_timeline_items.clear();
                 self.last_threaded_timeline_offset = 0.0;
@@ -1684,6 +1685,7 @@ impl Constellations {
                 Task::none()
             }
             Message::CloseThread => {
+                self.needs_layout_scroll_restoration = true;
                 self.active_thread_root = None;
                 self.threaded_timeline_items.clear();
                 self.last_threaded_timeline_offset = 0.0;
@@ -1715,8 +1717,15 @@ impl Constellations {
                         return Task::none();
                     }
 
+                    tracing::info!(
+                        "TimelineScrolled (thread): offset={}, content_height={}, viewport_w={}, viewport_h={}, last_h={}, last_w={}, last_vh={}",
+                        current_offset, current_height, viewport.bounds().width, viewport.bounds().height,
+                        self.last_threaded_content_height, self.last_threaded_viewport_width, self.last_threaded_viewport_height
+                    );
+
                     let mut is_layout_resize = false;
-                    if (self.last_threaded_content_height > 0.0 && current_height != self.last_threaded_content_height)
+                    if self.needs_threaded_layout_scroll_restoration
+                        || (self.last_threaded_content_height > 0.0 && current_height != self.last_threaded_content_height)
                         || (self.last_threaded_viewport_width > 0.0 && viewport.bounds().width != self.last_threaded_viewport_width)
                         || (self.last_threaded_viewport_height > 0.0 && viewport.bounds().height != self.last_threaded_viewport_height)
                     {
@@ -1724,6 +1733,7 @@ impl Constellations {
                             is_layout_resize = true;
                         }
                     }
+                    self.needs_threaded_layout_scroll_restoration = false;
 
                     let mut task = Task::none();
                     let mut actual_offset = current_offset;
@@ -1761,6 +1771,10 @@ impl Constellations {
                         }
                     }
 
+                    if is_layout_resize {
+                        tracing::info!("TimelineScrolled (thread) layout resize: target_offset={}", actual_offset);
+                    }
+
                     let last_offset = self.last_threaded_timeline_offset;
                     let should_load = !is_layout_resize && actual_offset < 100.0 && actual_offset < last_offset;
                     let is_at_bottom = actual_offset + viewport.bounds().height >= current_height - 20.0;
@@ -1787,8 +1801,15 @@ impl Constellations {
                         return Task::none();
                     }
 
+                    tracing::info!(
+                        "TimelineScrolled: offset={}, content_height={}, viewport_w={}, viewport_h={}, last_h={}, last_w={}, last_vh={}",
+                        current_offset, current_height, viewport.bounds().width, viewport.bounds().height,
+                        self.last_content_height, self.last_viewport_width, self.last_viewport_height
+                    );
+
                     let mut is_layout_resize = false;
-                    if (self.last_content_height > 0.0 && current_height != self.last_content_height)
+                    if self.needs_layout_scroll_restoration
+                        || (self.last_content_height > 0.0 && current_height != self.last_content_height)
                         || (self.last_viewport_width > 0.0 && viewport.bounds().width != self.last_viewport_width)
                         || (self.last_viewport_height > 0.0 && viewport.bounds().height != self.last_viewport_height)
                     {
@@ -1796,6 +1817,7 @@ impl Constellations {
                             is_layout_resize = true;
                         }
                     }
+                    self.needs_layout_scroll_restoration = false;
 
                     let mut task = Task::none();
                     let mut actual_offset = current_offset;
@@ -1831,6 +1853,10 @@ impl Constellations {
                             );
                             actual_offset = target_offset;
                         }
+                    }
+
+                    if is_layout_resize {
+                        tracing::info!("TimelineScrolled layout resize: target_offset={}", actual_offset);
                     }
 
                     let last_offset = self.last_timeline_offset;
@@ -2309,6 +2335,8 @@ impl Constellations {
             Message::Logout => self.handle_logout(),
             Message::LogoutFinished => self.handle_logout_finished(),
             Message::OpenSettings(panel) => {
+                self.needs_layout_scroll_restoration = true;
+                self.needs_threaded_layout_scroll_restoration = true;
                 self.show_members_panel = false;
                 self.show_pinned_panel = false;
                 self.current_settings_panel = Some(panel.clone());
@@ -2348,6 +2376,8 @@ impl Constellations {
                 Task::none()
             }
             Message::CloseSettings => {
+                self.needs_layout_scroll_restoration = true;
+                self.needs_threaded_layout_scroll_restoration = true;
                 self.current_settings_panel = None;
                 self.core.set_show_context(false);
                 self.show_members_panel = false;
@@ -2447,6 +2477,8 @@ impl Constellations {
                 Task::none()
             }
             Message::ToggleMembersPanel => {
+                self.needs_layout_scroll_restoration = true;
+                self.needs_threaded_layout_scroll_restoration = true;
                 self.show_members_panel = !self.show_members_panel;
                 if self.show_members_panel {
                     self.show_pinned_panel = false;
@@ -2475,6 +2507,8 @@ impl Constellations {
                 Task::none()
             }
             Message::TogglePinnedPanel => {
+                self.needs_layout_scroll_restoration = true;
+                self.needs_threaded_layout_scroll_restoration = true;
                 self.show_pinned_panel = !self.show_pinned_panel;
                 if self.show_pinned_panel {
                     self.show_members_panel = false;
@@ -2732,6 +2766,8 @@ mod tests {
             last_viewport_height: 0.0,
             last_threaded_viewport_width: 0.0,
             last_threaded_viewport_height: 0.0,
+            needs_layout_scroll_restoration: false,
+            needs_threaded_layout_scroll_restoration: false,
             needs_scroll_adjustment: false,
             needs_threaded_scroll_adjustment: false,
             selected_space: None,
