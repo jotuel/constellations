@@ -1,0 +1,23 @@
+--- src/view/chat.rs
++++ src/view/chat.rs
+@@ -30,13 +30,13 @@
+ impl LocalizedItemStrings {
+     pub fn new() -> Self {
+         Self {
+-            add_reaction: std::sync::Arc::from(crate::fl!("add-reaction").as_str()),
+-            reply: std::sync::Arc::from(crate::fl!("tooltip-reply").as_str()),
+-            thread: std::sync::Arc::from(crate::fl!("tooltip-thread").as_str()),
+-            edit: std::sync::Arc::from(crate::fl!("tooltip-edit").as_str()),
+-            delete: std::sync::Arc::from(crate::fl!("tooltip-delete").as_str()),
+-            unignore: std::sync::Arc::from(crate::fl!("unignore-user").as_str()),
+-            ignore: std::sync::Arc::from(crate::fl!("ignore").as_str()),
++            add_reaction: crate::fl!("add-reaction"),
++            reply: crate::fl!("tooltip-reply"),
++            thread: crate::fl!("tooltip-thread"),
++            edit: crate::fl!("tooltip-edit"),
++            delete: crate::fl!("tooltip-delete"),
++            unignore: crate::fl!("unignore-user"),
++            ignore: crate::fl!("ignore"),
+         }
+     }
+ }

@@ -1,0 +1,213 @@
+--- src/view/chat.rs
++++ src/view/chat.rs
+@@ -29,13 +29,13 @@
+
+ #[derive(Clone)]
+ pub struct LocalizedItemStrings {
+-    pub add_reaction: std::sync::Arc<str>,
+-    pub reply: std::sync::Arc<str>,
+-    pub thread: std::sync::Arc<str>,
+-    pub edit: std::sync::Arc<str>,
+-    pub delete: std::sync::Arc<str>,
+-    pub unignore: std::sync::Arc<str>,
+-    pub ignore: std::sync::Arc<str>,
++    pub add_reaction: String,
++    pub reply: String,
++    pub thread: String,
++    pub edit: String,
++    pub delete: String,
++    pub unignore: String,
++    pub ignore: String,
+ }
+
+ impl LocalizedItemStrings {
+-    fn new() -> Self {
++    pub fn new() -> Self {
+         Self {
+-            add_reaction: std::sync::Arc::from(crate::fl!("add-reaction").as_str()),
+-            reply: std::sync::Arc::from(crate::fl!("tooltip-reply").as_str()),
+-            thread: std::sync::Arc::from(crate::fl!("tooltip-thread").as_str()),
+-            edit: std::sync::Arc::from(crate::fl!("tooltip-edit").as_str()),
+-            delete: std::sync::Arc::from(crate::fl!("tooltip-delete").as_str()),
+-            unignore: std::sync::Arc::from(crate::fl!("unignore-user").as_str()),
+-            ignore: std::sync::Arc::from(crate::fl!("ignore").as_str()),
++            add_reaction: crate::fl!("add-reaction"),
++            reply: crate::fl!("tooltip-reply"),
++            thread: crate::fl!("tooltip-thread"),
++            edit: crate::fl!("tooltip-edit"),
++            delete: crate::fl!("tooltip-delete"),
++            unignore: crate::fl!("unignore-user"),
++            ignore: crate::fl!("ignore"),
+         }
+     }
+ }
+@@ -42,7 +42,6 @@
+
+ impl<'chat> Constellations {
+     pub fn view_timeline(&self) -> Element<'_, Message> {
+-        let item_strings = LocalizedItemStrings::new();
+         let mut timeline = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
+
+         if self.timeline_items.is_empty() {
+@@ -62,7 +61,7 @@
+                 let item_id = item.item_id.as_ref().unwrap();
+                 pending_date_divider = Some(item.timestamp);
+                 timeline = timeline.push(self.view_date_divider(item.timestamp, item_id));
+-                timeline = timeline.push(self.view_item(item, &self.thread_counts, item_strings.clone()));
++                timeline = timeline.push(self.view_item(item, &self.thread_counts, &self.item_strings));
+             } else if let Some(last_date) = pending_date_divider {
+                 let last_date_dt =
+                     chrono::DateTime::from_timestamp((last_date.0 / 1000).into(), 0).unwrap();
+@@ -76,13 +75,13 @@
+                 if last_date_dt.date_naive() != current_date_dt.date_naive() {
+                     let item_id = item.item_id.as_ref().unwrap();
+                     timeline = timeline.push(self.view_date_divider(item.timestamp, item_id));
+-                    timeline = timeline.push(self.view_item(item, &self.thread_counts, item_strings.clone()));
++                    timeline = timeline.push(self.view_item(item, &self.thread_counts, &self.item_strings));
+                     pending_date_divider = Some(item.timestamp);
+                 } else {
+-                    timeline = timeline.push(self.view_item(item, &self.thread_counts, item_strings.clone()));
++                    timeline = timeline.push(self.view_item(item, &self.thread_counts, &self.item_strings));
+                 }
+             } else {
+-                timeline = timeline.push(self.view_item(item, &self.thread_counts, item_strings.clone()));
++                timeline = timeline.push(self.view_item(item, &self.thread_counts, &self.item_strings));
+             }
+         }
+
+@@ -108,7 +107,7 @@
+             if !item.is_me && is_ignored {
+                 continue;
+             }
+-            timeline = timeline.push(self.view_item(item, &self.thread_counts, item_strings.clone()));
++            timeline = timeline.push(self.view_item(item, &self.thread_counts, &self.item_strings));
+         }
+         content = content.push(timeline);
+
+@@ -439,7 +438,6 @@
+     }
+
+     pub fn view_threaded_timeline(&self) -> Element<'_, Message> {
+-        let item_strings = LocalizedItemStrings::new();
+         let room_id = match self.selected_room.as_ref() {
+             Some(id) => id,
+             None => return text::body("No room selected").into(),
+@@ -474,8 +472,8 @@
+             if pending_date_divider.is_none() {
+                 timeline_col =
+                     timeline_col.push(self.view_date_divider(item.timestamp, item_id));
+                 timeline_col = timeline_col
+-                    .push(self.view_item(item, &self.thread_counts, item_strings.clone()));
++                    .push(self.view_item(item, &self.thread_counts, &self.item_strings));
+             } else if let Some(last_date) = pending_date_divider {
+                 let last_date_dt =
+                     chrono::DateTime::from_timestamp((last_date.0 / 1000).into(), 0)
+@@ -496,12 +494,12 @@
+                     timeline_col =
+                         timeline_col.push(self.view_date_divider(item.timestamp, item_id));
+                     timeline_col = timeline_col
+-                        .push(self.view_item(item, &self.thread_counts, item_strings.clone()));
++                        .push(self.view_item(item, &self.thread_counts, &self.item_strings));
+                     pending_date_divider = Some(item.timestamp);
+                 } else {
+                     timeline_col = timeline_col
+-                        .push(self.view_item(item, &self.thread_counts, item_strings.clone()));
++                        .push(self.view_item(item, &self.thread_counts, &self.item_strings));
+                 }
+             } else {
+                 timeline_col = timeline_col
+-                    .push(self.view_item(item, &self.thread_counts, item_strings.clone()));
++                    .push(self.view_item(item, &self.thread_counts, &self.item_strings));
+             }
+         }
+
+@@ -530,7 +528,7 @@
+     fn view_item<'a>(
+         &'a self,
+         item: &'a crate::ConstellationsItem,
+         thread_counts: &std::collections::HashMap<matrix_sdk::ruma::OwnedEventId, u32>,
+-        item_strings: LocalizedItemStrings,
++        item_strings: &'a LocalizedItemStrings,
+     ) -> Element<'a, Message> {
+         if let Some(timeline_item) = &item.item
+             && let Some(event) = timeline_item.as_event()
+@@ -647,7 +645,7 @@
+                 });
+             let btn_tooltip = tooltip(
+                 btn,
+-                text::body(item_strings.add_reaction.to_string()),
++                text::body(std::borrow::Cow::Borrowed(item_strings.add_reaction.as_str())),
+                 Position::Bottom,
+             );
+             action_row = action_row.push(btn_tooltip);
+@@ -657,7 +655,7 @@
+                 .on_press(Message::StartReply(item_id.clone()));
+             let reply_tooltip = tooltip(
+                 reply_btn,
+-                text::body(item_strings.reply.to_string()),
++                text::body(std::borrow::Cow::Borrowed(item_strings.reply.as_str())),
+                 Position::Bottom,
+             );
+             action_row = action_row.push(reply_tooltip);
+@@ -693,7 +691,7 @@
+                 });
+                 let action_tooltip = tooltip(
+                     start_thread_btn,
+-                    text::body(item_strings.thread.to_string()),
++                    text::body(std::borrow::Cow::Borrowed(item_strings.thread.as_str())),
+                     Position::Bottom,
+                 );
+                 action_row = action_row.push(action_tooltip);
+@@ -704,7 +702,7 @@
+                     .on_press(Message::StartEdit(item_id.clone()));
+                 let edit_tooltip = tooltip(
+                     edit_btn,
+-                    text::body(item_strings.edit.to_string()),
++                    text::body(std::borrow::Cow::Borrowed(item_strings.edit.as_str())),
+                     Position::Bottom,
+                 );
+                 action_row = action_row.push(edit_tooltip);
+@@ -715,7 +713,7 @@
+                         .on_press(Message::RedactMessage(item_id.clone()));
+                 let delete_tooltip = tooltip(
+                     delete_btn,
+-                    text::body(item_strings.delete.to_string()),
++                    text::body(std::borrow::Cow::Borrowed(item_strings.delete.as_str())),
+                     Position::Bottom,
+                 );
+                 action_row = action_row.push(delete_tooltip);
+@@ -727,7 +725,7 @@
+                                 item.sender_id.to_owned(),
+                             ),
+                         ))
+-                        .tooltip(item_strings.unignore.to_string());
++                        .tooltip(std::borrow::Cow::Borrowed(item_strings.unignore.as_str()));
+                     action_row = action_row.push(ignore_btn);
+                 } else {
+                     let ignore_btn = button::icon(Named::new("dialog-error-symbolic"))
+@@ -736,7 +734,7 @@
+                                 item.sender_id.to_owned(),
+                             ),
+                         ))
+-                        .tooltip(item_strings.ignore.to_string());
++                        .tooltip(std::borrow::Cow::Borrowed(item_strings.ignore.as_str()));
+                     action_row = action_row.push(ignore_btn);
+                 }
+             }
+@@ -1268,7 +1266,6 @@
+     }
+
+     pub fn view_search_results(&self) -> Element<'_, Message> {
+-        let item_strings = LocalizedItemStrings::new();
+         let room_id = match self.selected_room.as_ref() {
+             Some(id) => id,
+             None => return text::body("No room selected").into(),
+@@ -1333,7 +1330,7 @@
+                 for item in &self.timeline_items {
+                     if item.item_id.as_ref() == Some(&matrix_sdk_ui::timeline::TimelineEventItemId::EventId(event_id.clone())) {
+                         content = content.push(
+-                            container(self.view_item(item, &thread_counts, item_strings.clone()))
++                            container(self.view_item(item, &self.thread_counts, &self.item_strings))
+                                 .padding(10)
+                                 .style(|theme: &cosmic::Theme| {
+                                     use cosmic::iced::widget::container::Catalog;
