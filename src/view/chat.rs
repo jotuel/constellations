@@ -322,6 +322,7 @@ impl<'chat> Constellations {
         avatar_url: Option<&'a str>,
         sender_name: &'a str,
         timestamp: &'a str,
+        is_pinned: bool,
     ) -> Row<'a, Message, cosmic::Theme> {
         let mut sender_info = Row::new().spacing(5).align_y(Alignment::Center);
 
@@ -345,6 +346,12 @@ impl<'chat> Constellations {
         sender_info = sender_info.push(text::body(sender_name).size(10));
 
         sender_info = sender_info.push(text::body(timestamp).size(10));
+
+        if is_pinned {
+            sender_info = sender_info.push(
+                cosmic::widget::icon::from_name("pin-symbolic").size(12),
+            );
+        }
 
         sender_info
     }
@@ -549,10 +556,19 @@ impl<'chat> Constellations {
             };
             let reaction_row = self.view_reactions(event, item_id);
             let is_ignored = self.user_settings.ignored_users.contains(&item.sender_id);
+            let is_pinned = if let Some(item_id) = &item.item_id {
+                match item_id {
+                    matrix_sdk_ui::timeline::TimelineEventItemId::EventId(id) => self.pinned_events.contains(id),
+                    _ => false,
+                }
+            } else {
+                false
+            };
             let sender_info = self.view_sender_info(
                 item.avatar_url.as_deref(),
                 item.sender_name.as_str(),
                 item.timestamp.as_str(),
+                is_pinned,
             );
 
             let sender_info_wrap = container(sender_info)
@@ -796,10 +812,19 @@ impl<'chat> Constellations {
             bubble_wrap.into()
         } else {
             let is_me = item.is_me;
+            let is_pinned = if let Some(item_id) = &item.item_id {
+                match item_id {
+                    matrix_sdk_ui::timeline::TimelineEventItemId::EventId(id) => self.pinned_events.contains(id),
+                    _ => false,
+                }
+            } else {
+                false
+            };
             let sender_info = self.view_sender_info(
                 item.avatar_url.as_deref(),
                 item.sender_name.as_str(),
                 item.timestamp.as_str(),
+                is_pinned,
             );
 
             let sender_info_wrap = container(sender_info)
@@ -1009,7 +1034,8 @@ impl<'chat> Constellations {
         let mut content = Column::new()
             .spacing(20)
             .padding(20)
-            .width(cosmic::iced::Length::Fill);
+            .width(cosmic::iced::Length::Fill)
+            .height(cosmic::iced::Length::Fill);
 
         if let Some(room_id) = &self.selected_room {
             let room_name = self.get_room_name(room_id).unwrap_or("Room");
@@ -1062,8 +1088,21 @@ impl<'chat> Constellations {
                 .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
                 .push(call_button)
                 .push(
+                    button::icon(Named::new("pin-symbolic"))
+                        .tooltip(crate::fl!("pinned-messages"))
+                        .selected(self.current_settings_panel == Some(crate::SettingsPanel::Pinned))
+                        .on_press(Message::TogglePinnedPanel),
+                )
+                .push(
+                    button::icon(Named::new("system-users-symbolic"))
+                        .tooltip(crate::fl!("room-members"))
+                        .selected(self.current_settings_panel == Some(crate::SettingsPanel::Members))
+                        .on_press(Message::ToggleMembersPanel),
+                )
+                .push(
                     button::icon(Named::new("emblem-system"))
                         .tooltip(crate::fl!("room-settings"))
+                        .selected(self.current_settings_panel == Some(crate::SettingsPanel::Room))
                         .on_press(Message::OpenSettings(crate::SettingsPanel::Room)),
                 );
 
@@ -1072,8 +1111,15 @@ impl<'chat> Constellations {
             } else {
                 content = content.push(room_header);
                 content = content.push(divider::horizontal::default());
-                content = content.push(self.view_timeline());
-                content = content.push(self.view_composer());
+
+                let chat_area = Column::new()
+                    .spacing(10)
+                    .width(cosmic::iced::Length::Fill)
+                    .height(cosmic::iced::Length::Fill)
+                    .push(self.view_timeline())
+                    .push(self.view_composer());
+
+                content = content.push(chat_area);
             }
         } else {
             let empty_state = container(
@@ -1351,6 +1397,173 @@ impl<'chat> Constellations {
         results_col = results_col.push(scrollable(results_list).height(cosmic::iced::Length::Fill));
 
         results_col.into()
+    }
+
+    pub fn view_members_panel(&self) -> Element<'_, Message> {
+        if self.is_loading_members {
+            container(cosmic::widget::progress_bar::indeterminate_circular().size(24.0))
+                .width(cosmic::iced::Length::Fill)
+                .height(cosmic::iced::Length::Fill)
+                .align_x(Alignment::Center)
+                .align_y(Alignment::Center)
+                .into()
+        } else {
+            let mut member_list = Column::new().spacing(5);
+            for member in &self.room_members {
+                let avatar = if let Some(avatar_url) = &member.avatar_url
+                    && let Some(handle) = self.media_cache.get(avatar_url)
+                {
+                    Element::from(cosmic::widget::image(handle.clone()).width(24).height(24))
+                } else {
+                    container(cosmic::widget::icon::from_name("avatar-default-symbolic").size(16))
+                        .padding(4)
+                        .into()
+                };
+
+                let name_text = member.display_name.as_deref().unwrap_or(&member.user_id);
+                let mut member_info_col = Column::new().spacing(2);
+                member_info_col = member_info_col.push(text::body(name_text).size(14));
+                if member.display_name.is_some() {
+                    member_info_col = member_info_col.push(text::body(&member.user_id).size(10));
+                }
+
+                let member_row = Row::new()
+                    .spacing(10)
+                    .align_y(Alignment::Center)
+                    .push(avatar)
+                    .push(member_info_col);
+
+                let member_container = container(member_row)
+                    .padding(8)
+                    .width(cosmic::iced::Length::Fill);
+
+                member_list = member_list.push(member_container);
+            }
+
+            scrollable(member_list)
+                .height(cosmic::iced::Length::Fill)
+                .into()
+        }
+    }
+
+    pub fn view_pinned_panel(&self) -> Element<'_, Message> {
+        if self.is_loading_pinned {
+            container(cosmic::widget::progress_bar::indeterminate_circular().size(24.0))
+                .width(cosmic::iced::Length::Fill)
+                .height(cosmic::iced::Length::Fill)
+                .align_x(Alignment::Center)
+                .align_y(Alignment::Center)
+                .into()
+        } else {
+            let mut pinned_list = Column::new().spacing(10);
+            let mut found_any = false;
+
+            for item in &self.timeline_items {
+                if let Some(item_id) = &item.item_id
+                    && let matrix_sdk_ui::timeline::TimelineEventItemId::EventId(id) = item_id
+                    && self.pinned_events.contains(id)
+                {
+                    found_any = true;
+                    let body = item.body_text();
+
+                    let avatar = if let Some(avatar_url) = &item.avatar_url
+                        && let Some(handle) = self.media_cache.get(avatar_url)
+                    {
+                        Element::from(cosmic::widget::image(handle.clone()).width(20).height(20))
+                    } else {
+                        container(cosmic::widget::icon::from_name("avatar-default-symbolic").size(12))
+                            .padding(2)
+                            .into()
+                    };
+
+                    let message_row = Row::new()
+                        .spacing(10)
+                        .align_y(Alignment::Center)
+                        .push(avatar)
+                        .push(
+                            Column::new()
+                                .spacing(2)
+                                .push(
+                                    Row::new()
+                                        .spacing(5)
+                                        .align_y(Alignment::Center)
+                                        .push(text::title3(&item.sender_name).size(12))
+                                        .push(text::body(&item.timestamp).size(10)),
+                                )
+                                .push(text::body(body).size(12)),
+                        );
+
+                    let card = container(message_row)
+                        .padding(10)
+                        .style(move |theme: &cosmic::Theme| {
+                            use cosmic::iced::widget::container::Catalog;
+                            theme.style(&cosmic::theme::Container::Card)
+                        })
+                        .width(cosmic::iced::Length::Fill);
+
+                    pinned_list = pinned_list.push(card);
+                }
+            }
+
+            // Also show pinned events that aren't currently loaded in timeline
+            for event_id in &self.pinned_events {
+                let is_loaded = self.timeline_items.iter().any(|item| {
+                    if let Some(item_id) = &item.item_id
+                        && let matrix_sdk_ui::timeline::TimelineEventItemId::EventId(id) = item_id
+                    {
+                        id == event_id
+                    } else {
+                        false
+                    }
+                });
+
+                if !is_loaded {
+                    found_any = true;
+                    let mut event_id_str = event_id.to_string();
+                    if event_id_str.len() > 30 {
+                        event_id_str = format!("{}…{}", &event_id_str[..15], &event_id_str[event_id_str.len() - 10..]);
+                    }
+                    let message_row = Row::new()
+                        .spacing(10)
+                        .align_y(Alignment::Start)
+                        .push(cosmic::widget::icon::from_name("dialog-information-symbolic").size(16))
+                        .push(
+                            Column::new()
+                                .spacing(2)
+                                .push(text::title3(crate::fl!("pinned-message-not-loaded")).size(12))
+                                .push(text::body(event_id_str).size(10)),
+                        );
+
+                    let card = container(message_row)
+                        .padding(10)
+                        .style(move |theme: &cosmic::Theme| {
+                            use cosmic::iced::widget::container::Catalog;
+                            theme.style(&cosmic::theme::Container::Card)
+                        })
+                        .width(cosmic::iced::Length::Fill);
+
+                    pinned_list = pinned_list.push(card);
+                }
+            }
+
+            if !found_any {
+                container(
+                    Column::new()
+                        .spacing(10)
+                        .align_x(Alignment::Center)
+                        .push(cosmic::widget::icon::from_name("pin-symbolic").size(48))
+                        .push(text::body(crate::fl!("no-pinned-messages")).size(14)),
+                )
+                .width(cosmic::iced::Length::Fill)
+                .padding(20)
+                .align_x(Alignment::Center)
+                .into()
+            } else {
+                scrollable(pinned_list)
+                    .height(cosmic::iced::Length::Fill)
+                    .into()
+            }
+        }
     }
 }
 

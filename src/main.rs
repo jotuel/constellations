@@ -126,6 +126,12 @@ pub struct Constellations {
     is_composer_emoji_picker_active: bool,
     room_name_cache: std::collections::HashMap<std::sync::Arc<str>, String>,
     pub thread_counts: std::collections::HashMap<matrix_sdk::ruma::OwnedEventId, u32>,
+    show_pinned_panel: bool,
+    is_loading_pinned: bool,
+    pinned_events: std::collections::HashSet<matrix_sdk::ruma::OwnedEventId>,
+    show_members_panel: bool,
+    room_members: Vec<matrix::RoomMemberInfo>,
+    is_loading_members: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -212,6 +218,10 @@ pub enum Message {
     SpaceSettings(settings::space::Message),
     AppSettings(settings::app::Message),
     AppSettingChanged,
+    ToggleMembersPanel,
+    MembersFetched(Result<Vec<matrix::RoomMemberInfo>, String>),
+    TogglePinnedPanel,
+    PinnedEventsFetched(Result<Vec<matrix_sdk::ruma::OwnedEventId>, String>),
     ToggleSearch,
     SearchQueryChanged(String),
     JoinCall,
@@ -229,6 +239,8 @@ pub enum SettingsPanel {
     User,
     Room,
     Space,
+    Members,
+    Pinned,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -947,6 +959,12 @@ impl Application for Constellations {
             is_composer_emoji_picker_active: false,
             room_name_cache: std::collections::HashMap::new(),
             thread_counts: std::collections::HashMap::new(),
+            show_pinned_panel: false,
+            is_loading_pinned: false,
+            pinned_events: std::collections::HashSet::new(),
+            show_members_panel: false,
+            room_members: Vec::new(),
+            is_loading_members: false,
         };
 
         let title_task = app.update_title();
@@ -964,6 +982,8 @@ impl Application for Constellations {
                 SettingsPanel::User => crate::fl!("user-settings"),
                 SettingsPanel::Room => crate::fl!("room-settings"),
                 SettingsPanel::Space => crate::fl!("space-settings"),
+                SettingsPanel::Members => crate::fl!("room-members"),
+                SettingsPanel::Pinned => crate::fl!("pinned-messages"),
             };
 
             let panel_content = match panel {
@@ -971,6 +991,8 @@ impl Application for Constellations {
                 SettingsPanel::Room => self.room_settings.view().map(Message::RoomSettings),
                 SettingsPanel::Space => self.space_settings.view().map(Message::SpaceSettings),
                 SettingsPanel::App => self.app_settings.view().map(Message::AppSettings),
+                SettingsPanel::Members => self.view_members_panel(),
+                SettingsPanel::Pinned => self.view_pinned_panel(),
             };
 
             Some(
@@ -1168,6 +1190,12 @@ mod tests {
             is_composer_emoji_picker_active: false,
             room_name_cache: std::collections::HashMap::new(),
             thread_counts: std::collections::HashMap::new(),
+            show_pinned_panel: false,
+            is_loading_pinned: false,
+            pinned_events: std::collections::HashSet::new(),
+            show_members_panel: false,
+            room_members: Vec::new(),
+            is_loading_members: false,
         }
     }
 

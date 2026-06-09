@@ -1786,6 +1786,15 @@ impl Constellations {
                 }
                 self.selected_room = Some(room_id.clone());
                 self.timeline_items.clear();
+                self.room_members.clear();
+                self.pinned_events.clear();
+                let fetch_members_task = if self.show_members_panel {
+                    self.is_loading_members = true;
+                    self.fetch_members_task()
+                } else {
+                    Task::none()
+                };
+                let fetch_pinned_task = self.fetch_pinned_events_task();
                 self.recompute_thread_counts();
                 self.last_timeline_offset = 0.0;
                 self.last_content_height = 0.0;
@@ -1824,6 +1833,8 @@ impl Constellations {
                             TIMELINE_ID.clone(),
                             offset.into(),
                         ),
+                        fetch_members_task,
+                        fetch_pinned_task,
                     ])
                 } else {
                     self.is_first_time_joining = false;
@@ -1833,6 +1844,8 @@ impl Constellations {
                     Task::batch(vec![
                         self.update_title(),
                         self.handle_load_more(false),
+                        fetch_members_task,
+                        fetch_pinned_task,
                     ])
                 }
             }
@@ -2215,6 +2228,8 @@ impl Constellations {
             Message::Logout => self.handle_logout(),
             Message::LogoutFinished => self.handle_logout_finished(),
             Message::OpenSettings(panel) => {
+                self.show_members_panel = false;
+                self.show_pinned_panel = false;
                 self.current_settings_panel = Some(panel.clone());
                 self.core.set_show_context(true);
 
@@ -2254,6 +2269,9 @@ impl Constellations {
             Message::CloseSettings => {
                 self.current_settings_panel = None;
                 self.core.set_show_context(false);
+                self.show_members_panel = false;
+                self.show_pinned_panel = false;
+                self.room_members.clear();
                 Task::none()
             }
             Message::UserSettings(msg) => self.user_settings.update(msg, &self.matrix),
@@ -2346,6 +2364,60 @@ impl Constellations {
                 self.fullscreen_image = None;
                 Task::none()
             }
+            Message::ToggleMembersPanel => {
+                self.show_members_panel = !self.show_members_panel;
+                if self.show_members_panel {
+                    self.show_pinned_panel = false;
+                    self.current_settings_panel = Some(SettingsPanel::Members);
+                    self.core.set_show_context(true);
+                    self.is_loading_members = true;
+                    self.room_members.clear();
+                    self.fetch_members_task()
+                } else {
+                    self.current_settings_panel = None;
+                    self.core.set_show_context(false);
+                    self.room_members.clear();
+                    Task::none()
+                }
+            }
+            Message::MembersFetched(res) => {
+                self.is_loading_members = false;
+                match res {
+                    Ok(members) => {
+                        self.room_members = members;
+                    }
+                    Err(e) => {
+                        self.set_error(format!("Failed to fetch room members: {}", e));
+                    }
+                }
+                Task::none()
+            }
+            Message::TogglePinnedPanel => {
+                self.show_pinned_panel = !self.show_pinned_panel;
+                if self.show_pinned_panel {
+                    self.show_members_panel = false;
+                    self.current_settings_panel = Some(SettingsPanel::Pinned);
+                    self.core.set_show_context(true);
+                    self.is_loading_pinned = true;
+                    self.fetch_pinned_events_task()
+                } else {
+                    self.current_settings_panel = None;
+                    self.core.set_show_context(false);
+                    Task::none()
+                }
+            }
+            Message::PinnedEventsFetched(res) => {
+                self.is_loading_pinned = false;
+                match res {
+                    Ok(pinned) => {
+                        self.pinned_events = pinned.into_iter().collect();
+                    }
+                    Err(e) => {
+                        self.set_error(format!("Failed to fetch pinned events: {}", e));
+                    }
+                }
+                Task::none()
+            }
         }
     }
 
@@ -2356,12 +2428,16 @@ impl Constellations {
         let mut items = eyeball_im::Vector::new();
         match room_id {
             "!general:matrix.org" => {
-                items.push_back(crate::ConstellationsItem::new_mock(
+                let mut first_item = crate::ConstellationsItem::new_mock(
                     "Alice",
                     "Welcome to the Cosmic Constellations matrix client!",
                     "2026-05-29 22:50:12",
                     false,
+                );
+                first_item.item_id = Some(matrix_sdk_ui::timeline::TimelineEventItemId::EventId(
+                    matrix_sdk::ruma::event_id!("$mock_pinned_1:example.com").to_owned()
                 ));
+                items.push_back(first_item);
                 items.push_back(crate::ConstellationsItem::new_mock(
                     "Bob",
                     "Wow, this interface is super fast and beautiful. The pixel-perfect QR login and dark theme looks fantastic!",
@@ -2424,6 +2500,69 @@ impl Constellations {
             _ => {}
         }
         items
+    }
+
+    fn fetch_members_task(&self) -> Task<Action<Message>> {
+        if self.user_id == Some("@simulated_user:matrix.org".to_string()) {
+            let mock_members = vec![
+                matrix::RoomMemberInfo {
+                    user_id: "@simulated_user:matrix.org".to_string(),
+                    display_name: Some("You".to_string()),
+                    avatar_url: None,
+                },
+                matrix::RoomMemberInfo {
+                    user_id: "@alice:matrix.org".to_string(),
+                    display_name: Some("Alice".to_string()),
+                    avatar_url: None,
+                },
+                matrix::RoomMemberInfo {
+                    user_id: "@bob:matrix.org".to_string(),
+                    display_name: Some("Bob".to_string()),
+                    avatar_url: None,
+                },
+                matrix::RoomMemberInfo {
+                    user_id: "@ferris:matrix.org".to_string(),
+                    display_name: Some("Ferris".to_string()),
+                    avatar_url: None,
+                },
+            ];
+            return Task::done(Action::from(Message::MembersFetched(Ok(mock_members))));
+        }
+
+        let Some(room_id) = self.selected_room.clone() else {
+            return Task::none();
+        };
+        let Some(matrix) = self.matrix.clone() else {
+            return Task::none();
+        };
+        Task::perform(
+            async move {
+                matrix.get_room_members(&room_id).await.map_err(|e| e.to_string())
+            },
+            |res| Action::from(Message::MembersFetched(res))
+        )
+    }
+
+    fn fetch_pinned_events_task(&self) -> Task<Action<Message>> {
+        if self.user_id == Some("@simulated_user:matrix.org".to_string()) {
+            let mock_pinned = vec![
+                matrix_sdk::ruma::event_id!("$mock_pinned_1:example.com").to_owned(),
+            ];
+            return Task::done(Action::from(Message::PinnedEventsFetched(Ok(mock_pinned))));
+        }
+
+        let Some(room_id) = self.selected_room.clone() else {
+            return Task::none();
+        };
+        let Some(matrix) = self.matrix.clone() else {
+            return Task::none();
+        };
+        Task::perform(
+            async move {
+                matrix.get_pinned_events(&room_id).await.map_err(|e| e.to_string())
+            },
+            |res| Action::from(Message::PinnedEventsFetched(res))
+        )
     }
 }
 
@@ -2506,6 +2645,12 @@ mod tests {
             qr_rendezvous_url: None,
             room_name_cache: HashMap::new(),
             thread_counts: HashMap::new(),
+            show_pinned_panel: false,
+            is_loading_pinned: false,
+            pinned_events: HashSet::new(),
+            show_members_panel: false,
+            room_members: Vec::new(),
+            is_loading_members: false,
         }
     }
 
@@ -2530,6 +2675,55 @@ mod tests {
 
         // Ensure nothing was inserted into the cache
         assert!(app.media_cache.is_empty());
+    }
+
+    #[test]
+    fn test_toggle_members_panel() {
+        let mut app = create_dummy_constellations();
+
+        assert_eq!(app.show_members_panel, false);
+        assert!(app.room_members.is_empty());
+
+        let _ = app.update(Message::ToggleMembersPanel);
+        assert_eq!(app.show_members_panel, true);
+        assert_eq!(app.is_loading_members, true);
+
+        // Send simulated fetched members
+        let mock_member = matrix::RoomMemberInfo {
+            user_id: "@user:matrix.org".to_string(),
+            display_name: Some("User".to_string()),
+            avatar_url: None,
+        };
+        let _ = app.update(Message::MembersFetched(Ok(vec![mock_member.clone()])));
+        assert_eq!(app.is_loading_members, false);
+        assert_eq!(app.room_members.len(), 1);
+        assert_eq!(app.room_members[0].user_id, "@user:matrix.org");
+
+        let _ = app.update(Message::ToggleMembersPanel);
+        assert_eq!(app.show_members_panel, false);
+        assert!(app.room_members.is_empty());
+    }
+
+    #[test]
+    fn test_toggle_pinned_panel() {
+        let mut app = create_dummy_constellations();
+
+        assert_eq!(app.show_pinned_panel, false);
+        assert!(app.pinned_events.is_empty());
+
+        let _ = app.update(Message::TogglePinnedPanel);
+        assert_eq!(app.show_pinned_panel, true);
+        assert_eq!(app.is_loading_pinned, true);
+
+        // Send simulated fetched pinned events
+        let mock_id = matrix_sdk::ruma::event_id!("$123:example.com").to_owned();
+        let _ = app.update(Message::PinnedEventsFetched(Ok(vec![mock_id.clone()])));
+        assert_eq!(app.is_loading_pinned, false);
+        assert_eq!(app.pinned_events.len(), 1);
+        assert!(app.pinned_events.contains(&mock_id));
+
+        let _ = app.update(Message::TogglePinnedPanel);
+        assert_eq!(app.show_pinned_panel, false);
     }
 
     #[test]
