@@ -1767,9 +1767,12 @@ impl Constellations {
 
                     let mut is_layout_resize = false;
                     if self.needs_threaded_layout_scroll_restoration
-                        || (self.last_threaded_content_height > 0.0 && current_height != self.last_threaded_content_height)
-                        || (self.last_threaded_viewport_width > 0.0 && viewport.bounds().width != self.last_threaded_viewport_width)
-                        || (self.last_threaded_viewport_height > 0.0 && viewport.bounds().height != self.last_threaded_viewport_height)
+                        || (self.last_threaded_content_height > 0.0
+                            && current_height != self.last_threaded_content_height)
+                        || (self.last_threaded_viewport_width > 0.0
+                            && viewport.bounds().width != self.last_threaded_viewport_width)
+                        || (self.last_threaded_viewport_height > 0.0
+                            && viewport.bounds().height != self.last_threaded_viewport_height)
                     {
                         if !self.needs_threaded_scroll_adjustment {
                             is_layout_resize = true;
