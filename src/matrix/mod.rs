@@ -1746,7 +1746,10 @@ impl MatrixEngine {
         Ok(member_infos)
     }
 
-    pub async fn get_pinned_events(&self, room_id: &str) -> Result<Vec<matrix_sdk::ruma::OwnedEventId>> {
+    pub async fn get_pinned_events(
+        &self,
+        room_id: &str,
+    ) -> Result<Vec<matrix_sdk::ruma::OwnedEventId>> {
         let room_id_parsed = RoomId::parse(room_id)?;
         let client = self.client().await;
         let room = client.get_room(&room_id_parsed).context("Room not found")?;
@@ -1786,39 +1789,39 @@ impl MatrixEngine {
                 let sender = ev.sender().to_owned();
                 let ts = ev.origin_server_ts();
                 let body = match &ev {
-                    matrix_sdk::ruma::events::AnyTimelineEvent::MessageLike(msg) => {
-                        match msg {
-                            matrix_sdk::ruma::events::AnyMessageLikeEvent::RoomMessage(
-                                matrix_sdk::ruma::events::MessageLikeEvent::Original(
-                                    matrix_sdk::ruma::events::OriginalMessageLikeEvent { content, .. }
-                                )
-                            ) => {
-                                content.body().to_string()
-                            }
-                            _ => "Unsupported message event type".to_string(),
-                        }
-                    }
+                    matrix_sdk::ruma::events::AnyTimelineEvent::MessageLike(msg) => match msg {
+                        matrix_sdk::ruma::events::AnyMessageLikeEvent::RoomMessage(
+                            matrix_sdk::ruma::events::MessageLikeEvent::Original(
+                                matrix_sdk::ruma::events::OriginalMessageLikeEvent {
+                                    content, ..
+                                },
+                            ),
+                        ) => content.body().to_string(),
+                        _ => "Unsupported message event type".to_string(),
+                    },
                     _ => "Unsupported state event type".to_string(),
                 };
                 (sender, ts, body)
             }
-            matrix_sdk::deserialized_responses::TimelineEventKind::UnableToDecrypt { event, .. } => {
+            matrix_sdk::deserialized_responses::TimelineEventKind::UnableToDecrypt {
+                event,
+                ..
+            } => {
                 let ev = event.deserialize()?;
                 let sender = ev.sender().to_owned();
                 let ts = ev.origin_server_ts();
                 let body = match &ev {
-                    matrix_sdk::ruma::events::AnySyncTimelineEvent::MessageLike(msg) => {
-                        match msg {
-                            matrix_sdk::ruma::events::AnySyncMessageLikeEvent::RoomMessage(
-                                matrix_sdk::ruma::events::SyncMessageLikeEvent::Original(
-                                    matrix_sdk::ruma::events::OriginalSyncMessageLikeEvent { content, .. }
-                                )
-                            ) => {
-                                content.body().to_string()
-                            }
-                            _ => "Unsupported message event type".to_string(),
-                        }
-                    }
+                    matrix_sdk::ruma::events::AnySyncTimelineEvent::MessageLike(msg) => match msg {
+                        matrix_sdk::ruma::events::AnySyncMessageLikeEvent::RoomMessage(
+                            matrix_sdk::ruma::events::SyncMessageLikeEvent::Original(
+                                matrix_sdk::ruma::events::OriginalSyncMessageLikeEvent {
+                                    content,
+                                    ..
+                                },
+                            ),
+                        ) => content.body().to_string(),
+                        _ => "Unsupported message event type".to_string(),
+                    },
                     _ => "Unsupported state event type".to_string(),
                 };
                 (sender, ts, body)
@@ -1828,18 +1831,17 @@ impl MatrixEngine {
                 let sender = ev.sender().to_owned();
                 let ts = ev.origin_server_ts();
                 let body = match &ev {
-                    matrix_sdk::ruma::events::AnySyncTimelineEvent::MessageLike(msg) => {
-                        match msg {
-                            matrix_sdk::ruma::events::AnySyncMessageLikeEvent::RoomMessage(
-                                matrix_sdk::ruma::events::SyncMessageLikeEvent::Original(
-                                    matrix_sdk::ruma::events::OriginalSyncMessageLikeEvent { content, .. }
-                                )
-                            ) => {
-                                content.body().to_string()
-                            }
-                            _ => "Unsupported message event type".to_string(),
-                        }
-                    }
+                    matrix_sdk::ruma::events::AnySyncTimelineEvent::MessageLike(msg) => match msg {
+                        matrix_sdk::ruma::events::AnySyncMessageLikeEvent::RoomMessage(
+                            matrix_sdk::ruma::events::SyncMessageLikeEvent::Original(
+                                matrix_sdk::ruma::events::OriginalSyncMessageLikeEvent {
+                                    content,
+                                    ..
+                                },
+                            ),
+                        ) => content.body().to_string(),
+                        _ => "Unsupported message event type".to_string(),
+                    },
                     _ => "Unsupported state event type".to_string(),
                 };
                 (sender, ts, body)
@@ -1847,16 +1849,21 @@ impl MatrixEngine {
         };
 
         let ts_millis = u64::from(origin_server_ts.0);
-        let datetime = chrono::DateTime::from_timestamp_millis(ts_millis as i64).unwrap_or_default();
+        let datetime =
+            chrono::DateTime::from_timestamp_millis(ts_millis as i64).unwrap_or_default();
         let timestamp = datetime
             .with_timezone(&chrono::Local)
             .format("%Y-%m-%d %H:%M:%S")
             .to_string();
 
         // Fetch sender member profile details for name and avatar
-        let (sender_name, avatar_url) = if let Ok(Some(member)) = room.get_member(&sender_id).await {
+        let (sender_name, avatar_url) = if let Ok(Some(member)) = room.get_member(&sender_id).await
+        {
             (
-                member.display_name().map(|s| s.to_string()).unwrap_or_else(|| sender_id.to_string()),
+                member
+                    .display_name()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| sender_id.to_string()),
                 member.avatar_url().map(|u| u.to_string()),
             )
         } else {
@@ -2770,7 +2777,12 @@ impl MatrixEngine {
                         let key_path = entry.path().join("seshat-index.key");
                         if key_path.exists() {
                             if let Ok(bytes) = std::fs::read(&key_path) {
-                                if matrix_sdk_store_encryption::StoreCipher::import(&passphrase, &bytes).is_err() {
+                                if matrix_sdk_store_encryption::StoreCipher::import(
+                                    &passphrase,
+                                    &bytes,
+                                )
+                                .is_err()
+                                {
                                     tracing::warn!(
                                         "Mismatched search index encryption key in room {:?}. Clearing search index.",
                                         entry.file_name()

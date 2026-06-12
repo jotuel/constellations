@@ -36,10 +36,7 @@ impl Constellations {
             }
         } else {
             if self.is_timeline_at_bottom {
-                scrollable::snap_to(
-                    TIMELINE_ID.clone(),
-                    scrollable::RelativeOffset::END.into(),
-                )
+                scrollable::snap_to(TIMELINE_ID.clone(), scrollable::RelativeOffset::END.into())
             } else {
                 scrollable::scroll_to(
                     TIMELINE_ID.clone(),
@@ -267,11 +264,12 @@ impl Constellations {
                 return None;
             }
             if let Some(room_id) = &self.selected_room {
-                let unread_count = if let Some(room) = self.room_list.iter().find(|r| &r.id == room_id) {
-                    room.unread_count
-                } else {
-                    0
-                };
+                let unread_count =
+                    if let Some(room) = self.room_list.iter().find(|r| &r.id == room_id) {
+                        room.unread_count
+                    } else {
+                        0
+                    };
 
                 let offset = if self.is_first_time_joining || unread_count == 0 {
                     scrollable::RelativeOffset::END
@@ -288,10 +286,7 @@ impl Constellations {
                     }
                 };
 
-                return Some(scrollable::snap_to(
-                    TIMELINE_ID.clone(),
-                    offset.into(),
-                ));
+                return Some(scrollable::snap_to(TIMELINE_ID.clone(), offset.into()));
             }
         }
         None
@@ -426,13 +421,17 @@ impl Constellations {
                 let is_append = match &mapped_diff {
                     eyeball_im::VectorDiff::PushBack { .. } => true,
                     eyeball_im::VectorDiff::Append { .. } => true,
-                    eyeball_im::VectorDiff::Insert { index, .. } => *index >= self.threaded_timeline_items.len(),
+                    eyeball_im::VectorDiff::Insert { index, .. } => {
+                        *index >= self.threaded_timeline_items.len()
+                    }
                     _ => false,
                 };
 
                 let is_prepend = match &mapped_diff {
                     eyeball_im::VectorDiff::PushFront { .. } => true,
-                    eyeball_im::VectorDiff::Insert { index, .. } => *index < self.threaded_timeline_items.len(),
+                    eyeball_im::VectorDiff::Insert { index, .. } => {
+                        *index < self.threaded_timeline_items.len()
+                    }
                     eyeball_im::VectorDiff::Reset { .. } => self.is_loading_more,
                     _ => false,
                 };
@@ -772,7 +771,7 @@ impl Constellations {
                     .map_err(|e| e.to_string())?;
 
                 let session = proxy
-                    .create_session(None, None, Some(ashpd::desktop::location::Accuracy::Exact))
+                    .create_session(ashpd::desktop::location::CreateSessionOptions::default())
                     .await
                     .map_err(|e| e.to_string())?;
 
@@ -783,7 +782,11 @@ impl Constellations {
 
                 let (_, location_res) = futures::join!(
                     proxy
-                        .start(&session, None)
+                        .start(
+                            &session,
+                            None,
+                            ashpd::desktop::location::StartOptions::default()
+                        )
                         .map(|e| e.map_err(|err| err.to_string())),
                     stream
                         .next()
@@ -1753,15 +1756,23 @@ impl Constellations {
 
                     tracing::info!(
                         "TimelineScrolled (thread): offset={}, content_height={}, viewport_w={}, viewport_h={}, last_h={}, last_w={}, last_vh={}",
-                        current_offset, current_height, viewport.bounds().width, viewport.bounds().height,
-                        self.last_threaded_content_height, self.last_threaded_viewport_width, self.last_threaded_viewport_height
+                        current_offset,
+                        current_height,
+                        viewport.bounds().width,
+                        viewport.bounds().height,
+                        self.last_threaded_content_height,
+                        self.last_threaded_viewport_width,
+                        self.last_threaded_viewport_height
                     );
 
                     let mut is_layout_resize = false;
                     if self.needs_threaded_layout_scroll_restoration
-                        || (self.last_threaded_content_height > 0.0 && current_height != self.last_threaded_content_height)
-                        || (self.last_threaded_viewport_width > 0.0 && viewport.bounds().width != self.last_threaded_viewport_width)
-                        || (self.last_threaded_viewport_height > 0.0 && viewport.bounds().height != self.last_threaded_viewport_height)
+                        || (self.last_threaded_content_height > 0.0
+                            && current_height != self.last_threaded_content_height)
+                        || (self.last_threaded_viewport_width > 0.0
+                            && viewport.bounds().width != self.last_threaded_viewport_width)
+                        || (self.last_threaded_viewport_height > 0.0
+                            && viewport.bounds().height != self.last_threaded_viewport_height)
                     {
                         if !self.needs_threaded_scroll_adjustment {
                             is_layout_resize = true;
@@ -1793,7 +1804,10 @@ impl Constellations {
                                 scrollable::RelativeOffset::END.into(),
                             );
                         } else {
-                            let target_offset = self.last_threaded_timeline_offset.min(current_height - viewport.bounds().height).max(0.0);
+                            let target_offset = self
+                                .last_threaded_timeline_offset
+                                .min(current_height - viewport.bounds().height)
+                                .max(0.0);
                             task = scrollable::scroll_to(
                                 THREADED_TIMELINE_ID.clone(),
                                 scrollable::AbsoluteOffset {
@@ -1806,12 +1820,17 @@ impl Constellations {
                     }
 
                     if is_layout_resize {
-                        tracing::info!("TimelineScrolled (thread) layout resize: target_offset={}", actual_offset);
+                        tracing::info!(
+                            "TimelineScrolled (thread) layout resize: target_offset={}",
+                            actual_offset
+                        );
                     }
 
                     let last_offset = self.last_threaded_timeline_offset;
-                    let should_load = !is_layout_resize && actual_offset < 100.0 && actual_offset < last_offset;
-                    let is_at_bottom = actual_offset + viewport.bounds().height >= current_height - 20.0;
+                    let should_load =
+                        !is_layout_resize && actual_offset < 100.0 && actual_offset < last_offset;
+                    let is_at_bottom =
+                        actual_offset + viewport.bounds().height >= current_height - 20.0;
 
                     if !is_layout_resize {
                         self.last_threaded_timeline_offset = actual_offset;
@@ -1837,15 +1856,23 @@ impl Constellations {
 
                     tracing::info!(
                         "TimelineScrolled: offset={}, content_height={}, viewport_w={}, viewport_h={}, last_h={}, last_w={}, last_vh={}",
-                        current_offset, current_height, viewport.bounds().width, viewport.bounds().height,
-                        self.last_content_height, self.last_viewport_width, self.last_viewport_height
+                        current_offset,
+                        current_height,
+                        viewport.bounds().width,
+                        viewport.bounds().height,
+                        self.last_content_height,
+                        self.last_viewport_width,
+                        self.last_viewport_height
                     );
 
                     let mut is_layout_resize = false;
                     if self.needs_layout_scroll_restoration
-                        || (self.last_content_height > 0.0 && current_height != self.last_content_height)
-                        || (self.last_viewport_width > 0.0 && viewport.bounds().width != self.last_viewport_width)
-                        || (self.last_viewport_height > 0.0 && viewport.bounds().height != self.last_viewport_height)
+                        || (self.last_content_height > 0.0
+                            && current_height != self.last_content_height)
+                        || (self.last_viewport_width > 0.0
+                            && viewport.bounds().width != self.last_viewport_width)
+                        || (self.last_viewport_height > 0.0
+                            && viewport.bounds().height != self.last_viewport_height)
                     {
                         if !self.needs_scroll_adjustment {
                             is_layout_resize = true;
@@ -1877,7 +1904,10 @@ impl Constellations {
                                 scrollable::RelativeOffset::END.into(),
                             );
                         } else {
-                            let target_offset = self.last_timeline_offset.min(current_height - viewport.bounds().height).max(0.0);
+                            let target_offset = self
+                                .last_timeline_offset
+                                .min(current_height - viewport.bounds().height)
+                                .max(0.0);
                             task = scrollable::scroll_to(
                                 TIMELINE_ID.clone(),
                                 scrollable::AbsoluteOffset {
@@ -1890,12 +1920,17 @@ impl Constellations {
                     }
 
                     if is_layout_resize {
-                        tracing::info!("TimelineScrolled layout resize: target_offset={}", actual_offset);
+                        tracing::info!(
+                            "TimelineScrolled layout resize: target_offset={}",
+                            actual_offset
+                        );
                     }
 
                     let last_offset = self.last_timeline_offset;
-                    let should_load = !is_layout_resize && actual_offset < 100.0 && actual_offset < last_offset;
-                    let is_at_bottom = actual_offset + viewport.bounds().height >= current_height - 20.0;
+                    let should_load =
+                        !is_layout_resize && actual_offset < 100.0 && actual_offset < last_offset;
+                    let is_at_bottom =
+                        actual_offset + viewport.bounds().height >= current_height - 20.0;
 
                     if !is_layout_resize {
                         self.last_timeline_offset = actual_offset;
@@ -1948,11 +1983,12 @@ impl Constellations {
                     self.timeline_items = self.generate_mock_timeline(&room_id);
                     self.visited_room_ids.insert(room_id.clone());
 
-                    let unread_count = if let Some(room) = self.room_list.iter().find(|r| r.id == room_id) {
-                        room.unread_count
-                    } else {
-                        0
-                    };
+                    let unread_count =
+                        if let Some(room) = self.room_list.iter().find(|r| r.id == room_id) {
+                            room.unread_count
+                        } else {
+                            0
+                        };
 
                     let offset = if unread_count == 0 {
                         scrollable::RelativeOffset::END
@@ -1970,10 +2006,7 @@ impl Constellations {
                     self.needs_initial_scroll = false;
                     Task::batch(vec![
                         self.update_title(),
-                        scrollable::snap_to(
-                            TIMELINE_ID.clone(),
-                            offset.into(),
-                        ),
+                        scrollable::snap_to(TIMELINE_ID.clone(), offset.into()),
                         fetch_members_task,
                         fetch_pinned_task,
                     ])
@@ -2552,7 +2585,10 @@ impl Constellations {
                     self.current_settings_panel = Some(SettingsPanel::Pinned);
                     self.core.set_show_context(true);
                     self.is_loading_pinned = true;
-                    Task::batch(vec![self.fetch_pinned_events_task(), self.restore_scroll_task()])
+                    Task::batch(vec![
+                        self.fetch_pinned_events_task(),
+                        self.restore_scroll_task(),
+                    ])
                 } else {
                     self.current_settings_panel = None;
                     self.core.set_show_context(false);
@@ -2592,7 +2628,7 @@ impl Constellations {
                     false,
                 );
                 first_item.item_id = Some(matrix_sdk_ui::timeline::TimelineEventItemId::EventId(
-                    matrix_sdk::ruma::event_id!("$mock_pinned_1:example.com").to_owned()
+                    matrix_sdk::ruma::event_id!("$mock_pinned_1:example.com").to_owned(),
                 ));
                 items.push_back(first_item);
                 items.push_back(crate::ConstellationsItem::new_mock(
@@ -2694,24 +2730,25 @@ impl Constellations {
         };
         Task::perform(
             async move {
-                matrix.get_room_members(&room_id).await.map_err(|e| e.to_string())
+                matrix
+                    .get_room_members(&room_id)
+                    .await
+                    .map_err(|e| e.to_string())
             },
-            |res| Action::from(Message::MembersFetched(res))
+            |res| Action::from(Message::MembersFetched(res)),
         )
     }
 
     fn fetch_pinned_events_task(&self) -> Task<Action<Message>> {
         if self.user_id == Some("@simulated_user:matrix.org".to_string()) {
-            let mock_pinned = vec![
-                matrix::PinnedEventInfo {
-                    event_id: "$mock_pinned_1:example.com".to_string(),
-                    sender_id: "@mock_sender:example.com".to_string(),
-                    sender_name: "Mock Sender".to_string(),
-                    avatar_url: None,
-                    timestamp: "2026-06-09 12:00:00".to_string(),
-                    body: "This is a mock pinned message that is always loaded!".to_string(),
-                }
-            ];
+            let mock_pinned = vec![matrix::PinnedEventInfo {
+                event_id: "$mock_pinned_1:example.com".to_string(),
+                sender_id: "@mock_sender:example.com".to_string(),
+                sender_name: "Mock Sender".to_string(),
+                avatar_url: None,
+                timestamp: "2026-06-09 12:00:00".to_string(),
+                body: "This is a mock pinned message that is always loaded!".to_string(),
+            }];
             return Task::done(Action::from(Message::PinnedEventsFetched(Ok(mock_pinned))));
         }
 
@@ -2723,13 +2760,20 @@ impl Constellations {
         };
         Task::perform(
             async move {
-                let ids = matrix.get_pinned_events(&room_id).await.map_err(|e| e.to_string())?;
+                let ids = matrix
+                    .get_pinned_events(&room_id)
+                    .await
+                    .map_err(|e| e.to_string())?;
                 let mut details = Vec::new();
                 for id in ids {
                     match matrix.fetch_pinned_event_details(&room_id, &id).await {
                         Ok(detail) => details.push(detail),
                         Err(e) => {
-                            tracing::error!("Failed to fetch details for pinned event {}: {}", id, e);
+                            tracing::error!(
+                                "Failed to fetch details for pinned event {}: {}",
+                                id,
+                                e
+                            );
                             details.push(matrix::PinnedEventInfo {
                                 event_id: id.to_string(),
                                 sender_id: "@unknown:example.com".to_string(),
@@ -2743,7 +2787,7 @@ impl Constellations {
                 }
                 Ok(details)
             },
-            |res| Action::from(Message::PinnedEventsFetched(res))
+            |res| Action::from(Message::PinnedEventsFetched(res)),
         )
     }
 }
@@ -3248,12 +3292,13 @@ mod tests {
 
         // Populate timeline
         for i in 0..10 {
-            app.timeline_items.push_back(crate::ConstellationsItem::new_mock(
-                "Sender",
-                &format!("Msg {}", i),
-                "2026-06-08T13:22:31Z",
-                false,
-            ));
+            app.timeline_items
+                .push_back(crate::ConstellationsItem::new_mock(
+                    "Sender",
+                    &format!("Msg {}", i),
+                    "2026-06-08T13:22:31Z",
+                    false,
+                ));
         }
 
         // Simulate TimelineInitFinished
@@ -3274,12 +3319,13 @@ mod tests {
 
         // Populate timeline again
         for i in 0..10 {
-            app.timeline_items.push_back(crate::ConstellationsItem::new_mock(
-                "Sender",
-                &format!("Msg {}", i),
-                "2026-06-08T13:22:31Z",
-                false,
-            ));
+            app.timeline_items
+                .push_back(crate::ConstellationsItem::new_mock(
+                    "Sender",
+                    &format!("Msg {}", i),
+                    "2026-06-08T13:22:31Z",
+                    false,
+                ));
         }
 
         // Simulate TimelineInitFinished
@@ -3300,12 +3346,13 @@ mod tests {
         assert!(app.check_and_perform_initial_scroll().is_none()); // still none because is_timeline_initialized is false
 
         app.is_timeline_initialized = true;
-        app.timeline_items.push_back(crate::ConstellationsItem::new_mock(
-            "Sender",
-            "Msg",
-            "2026-06-08T13:22:31Z",
-            false,
-        ));
+        app.timeline_items
+            .push_back(crate::ConstellationsItem::new_mock(
+                "Sender",
+                "Msg",
+                "2026-06-08T13:22:31Z",
+                false,
+            ));
         assert!(app.check_and_perform_initial_scroll().is_some());
         assert_eq!(app.needs_initial_scroll, false);
 
