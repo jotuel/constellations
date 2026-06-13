@@ -167,10 +167,7 @@ impl Constellations {
                 content = content.push(text::body(crate::fl!("login-qr-scanning")));
 
                 if let Some(ref url) = self.qr_rendezvous_url {
-                    content = content.push(
-                        container(QrCodeWidget::new(url.clone()))
-                            .padding(15),
-                    );
+                    content = content.push(container(QrCodeWidget::new(url.clone())).padding(15));
                 }
             }
             QrLoginStep::RendezvousEstablished => {
@@ -218,12 +215,16 @@ impl QrCodeWidget {
     }
 }
 
-impl<Message, Renderer> cosmic::iced::advanced::Widget<Message, cosmic::Theme, Renderer> for QrCodeWidget
+impl<Message, Renderer> cosmic::iced::advanced::Widget<Message, cosmic::Theme, Renderer>
+    for QrCodeWidget
 where
     Renderer: cosmic::iced::advanced::Renderer,
 {
     fn size(&self) -> cosmic::iced::Size<cosmic::iced::Length> {
-        cosmic::iced::Size::new(cosmic::iced::Length::Fixed(200.0), cosmic::iced::Length::Fixed(200.0))
+        cosmic::iced::Size::new(
+            cosmic::iced::Length::Fixed(200.0),
+            cosmic::iced::Length::Fixed(200.0),
+        )
     }
 
     fn layout(

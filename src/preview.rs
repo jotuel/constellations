@@ -14,16 +14,21 @@ pub enum PreviewEvent {
 
 fn split_text_by_urls(text: &str, events: &mut Vec<PreviewEvent>) {
     let mut current_idx = 0;
-    
+
     while current_idx < text.len() {
         let remaining = &text[current_idx..];
-        if let Some(pos) = remaining.find("http://").or_else(|| remaining.find("https://")) {
+        if let Some(pos) = remaining
+            .find("http://")
+            .or_else(|| remaining.find("https://"))
+        {
             let start_of_url = current_idx + pos;
-            
+
             if start_of_url > current_idx {
-                events.push(PreviewEvent::Text(text[current_idx..start_of_url].to_string()));
+                events.push(PreviewEvent::Text(
+                    text[current_idx..start_of_url].to_string(),
+                ));
             }
-            
+
             let mut end_of_url = start_of_url;
             while end_of_url < text.len() {
                 let c = text.as_bytes()[end_of_url];
@@ -32,23 +37,26 @@ fn split_text_by_urls(text: &str, events: &mut Vec<PreviewEvent>) {
                 }
                 end_of_url += 1;
             }
-            
+
             while end_of_url > start_of_url {
                 let last_char = text.as_bytes()[end_of_url - 1];
-                if matches!(last_char, b'.' | b',' | b'?' | b'!' | b':' | b';' | b')' | b']' | b'>') {
+                if matches!(
+                    last_char,
+                    b'.' | b',' | b'?' | b'!' | b':' | b';' | b')' | b']' | b'>'
+                ) {
                     end_of_url -= 1;
                 } else {
                     break;
                 }
             }
-            
+
             let url = &text[start_of_url..end_of_url];
             if !url.is_empty() {
                 events.push(PreviewEvent::StartLink(url.to_string()));
                 events.push(PreviewEvent::Text(url.to_string()));
                 events.push(PreviewEvent::EndLink);
             }
-            
+
             current_idx = end_of_url;
         } else {
             events.push(PreviewEvent::Text(remaining.to_string()));
@@ -130,7 +138,6 @@ pub fn parse_plain_text(text: &str) -> Vec<PreviewEvent> {
     split_text_by_urls(text, &mut events);
     events
 }
-
 
 #[cfg(test)]
 mod tests {

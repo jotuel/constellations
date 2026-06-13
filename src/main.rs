@@ -8,9 +8,9 @@ mod handlers;
 pub mod i18n;
 mod ipc;
 mod matrix;
-pub mod unified_push;
 pub mod rich_text;
 pub mod settings;
+pub mod unified_push;
 mod view;
 
 pub use item::ConstellationsItem;

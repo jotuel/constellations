@@ -1307,15 +1307,16 @@ impl State {
                                     if let Some(params_box) = &info.params
                                         && let Ok(params) =
                                             serde_json::from_str::<UiaaParams>(params_box.get())
-                                            && let Some(oauth) = params.oauth {
-                                                if let Err(err) = open::that(&oauth.url) {
-                                                    return Err(format!(
-                                                        "Failed to open authentication link: {err}. Please open: {}",
-                                                        oauth.url
-                                                    ));
-                                                }
-                                                return Err("Authentication required in web browser. Please complete the cross-signing reset in the browser, then try bootstrapping again.".to_string());
-                                            }
+                                        && let Some(oauth) = params.oauth
+                                    {
+                                        if let Err(err) = open::that(&oauth.url) {
+                                            return Err(format!(
+                                                "Failed to open authentication link: {err}. Please open: {}",
+                                                oauth.url
+                                            ));
+                                        }
+                                        return Err("Authentication required in web browser. Please complete the cross-signing reset in the browser, then try bootstrapping again.".to_string());
+                                    }
 
                                     if password.is_empty() {
                                         return Err(
@@ -1769,8 +1770,12 @@ impl State {
             let mut r = Row::new().spacing(10);
             for mode in modes {
                 let label = match mode {
-                    RoomNotificationMode::AllMessages => crate::fl!("notification-mode-all-messages"),
-                    RoomNotificationMode::MentionsAndKeywordsOnly => crate::fl!("notification-mode-mentions-only"),
+                    RoomNotificationMode::AllMessages => {
+                        crate::fl!("notification-mode-all-messages")
+                    }
+                    RoomNotificationMode::MentionsAndKeywordsOnly => {
+                        crate::fl!("notification-mode-mentions-only")
+                    }
                     RoomNotificationMode::Mute => crate::fl!("notification-mode-muted"),
                 };
 

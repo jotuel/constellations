@@ -1,8 +1,8 @@
 use std::sync::mpsc;
 use tokio::runtime::Handle;
+use tracing::{error, info, warn};
 use unifiedpush::{PushEvent, UnifiedPush};
-use unifiedpush_storage_preferences::{preferences::AppInfo, UnifiedPushStoragePreferences};
-use tracing::{info, warn, error};
+use unifiedpush_storage_preferences::{UnifiedPushStoragePreferences, preferences::AppInfo};
 
 pub async fn run_headless_notification_handler() -> Result<(), Box<dyn std::error::Error>> {
     info!("Starting UnifiedPush headless handler...");
@@ -20,7 +20,9 @@ pub async fn run_headless_notification_handler() -> Result<(), Box<dyn std::erro
         storage,
         tx,
         handle,
-    ).await.map_err(|e| anyhow::anyhow!("Failed to initialize UnifiedPush client: {:?}", e))?;
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!("Failed to initialize UnifiedPush client: {:?}", e))?;
 
     // Wait briefly for incoming D-Bus message calls routed by KUnifiedPush.
     // Since KUnifiedPush activated us, we expect the Message call immediately.
@@ -35,9 +37,15 @@ pub async fn run_headless_notification_handler() -> Result<(), Box<dyn std::erro
                     break;
                 }
                 PushEvent::NewEndpoint { endpoint, .. } => {
-                    info!("UnifiedPush received new endpoint in headless mode: {}", endpoint.endpoint);
+                    info!(
+                        "UnifiedPush received new endpoint in headless mode: {}",
+                        endpoint.endpoint
+                    );
                     if let Err(e) = register_endpoint_if_logged_in(&endpoint.endpoint).await {
-                        warn!("Could not register new endpoint on homeserver (headless): {:?}", e);
+                        warn!(
+                            "Could not register new endpoint on homeserver (headless): {:?}",
+                            e
+                        );
                     }
                 }
                 PushEvent::Unregistered { .. } => {
@@ -46,10 +54,14 @@ pub async fn run_headless_notification_handler() -> Result<(), Box<dyn std::erro
                 _ => {}
             }
         }
-    }).await {
+    })
+    .await
+    {
         Ok(_) => info!("Headless push processing completed."),
         Err(_) => {
-            warn!("Headless push processing timed out waiting for event; trying generic fallback sync.");
+            warn!(
+                "Headless push processing timed out waiting for event; trying generic fallback sync."
+            );
             // Even if we timeout, let's try a background sync anyway in case D-Bus was activated
             // but the message event wasn't delivered on this channel in time.
             if let Err(e) = perform_background_sync_and_notify().await {
@@ -114,14 +126,15 @@ pub async fn register_pusher_internal(
     engine: &crate::matrix::MatrixEngine,
     endpoint: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    use matrix_sdk::ruma::api::client::push::{Pusher, PusherIds, PusherInit, PusherKind};
     use matrix_sdk::ruma::push::HttpPusherData;
-    use matrix_sdk::ruma::api::client::push::{
-        Pusher, PusherInit, PusherIds, PusherKind,
-    };
 
     let client = engine.client().await;
-    
-    let ids = PusherIds::new(endpoint.to_string(), "fi.joonastuomi.CosmicExtConstellations".to_string());
+
+    let ids = PusherIds::new(
+        endpoint.to_string(),
+        "fi.joonastuomi.CosmicExtConstellations".to_string(),
+    );
     let kind = PusherKind::Http(HttpPusherData::new(endpoint.to_string()));
     let init = PusherInit {
         ids,
@@ -160,7 +173,9 @@ pub fn start_unified_push_listener(engine: crate::matrix::MatrixEngine) {
                 storage,
                 tx,
                 handle,
-            ).await {
+            )
+            .await
+            {
                 Ok(u) => u,
                 Err(e) => {
                     error!("Failed to initialize UnifiedPush: {:?}", e);
@@ -172,13 +187,15 @@ pub fn start_unified_push_listener(engine: crate::matrix::MatrixEngine) {
                 warn!("No default UnifiedPush distributor found on the system.");
             }
 
-            _up.register("default", Some("Matrix Push Notification Connector"), None).await;
+            _up.register("default", Some("Matrix Push Notification Connector"), None)
+                .await;
 
             while let Ok(event) = rx.recv() {
                 match event {
                     PushEvent::NewEndpoint { endpoint, .. } => {
                         info!("UnifiedPush received new endpoint: {}", endpoint.endpoint);
-                        if let Err(e) = register_pusher_internal(&engine, &endpoint.endpoint).await {
+                        if let Err(e) = register_pusher_internal(&engine, &endpoint.endpoint).await
+                        {
                             error!("Failed to register pusher on Matrix homeserver: {:?}", e);
                         }
                     }
