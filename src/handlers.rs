@@ -18,6 +18,37 @@ type PinnedOutput =
     std::pin::Pin<Box<dyn Future<Output = (String, Result<Vec<u8>, String>)> + Send + 'static>>;
 
 impl Constellations {
+    pub fn restore_scroll_task(&self) -> Task<Action<Message>> {
+        if self.active_thread_root.is_some() {
+            if self.is_threaded_timeline_at_bottom {
+                scrollable::snap_to(
+                    THREADED_TIMELINE_ID.clone(),
+                    scrollable::RelativeOffset::END.into(),
+                )
+            } else {
+                scrollable::scroll_to(
+                    THREADED_TIMELINE_ID.clone(),
+                    scrollable::AbsoluteOffset {
+                        x: Some(0.0),
+                        y: Some(self.last_threaded_timeline_offset),
+                    },
+                )
+            }
+        } else {
+            if self.is_timeline_at_bottom {
+                scrollable::snap_to(TIMELINE_ID.clone(), scrollable::RelativeOffset::END.into())
+            } else {
+                scrollable::scroll_to(
+                    TIMELINE_ID.clone(),
+                    scrollable::AbsoluteOffset {
+                        x: Some(0.0),
+                        y: Some(self.last_timeline_offset),
+                    },
+                )
+            }
+        }
+    }
+
     pub fn recompute_thread_counts(&mut self) {
         self.thread_counts.clear();
         for item in &self.timeline_items {
@@ -224,6 +255,43 @@ impl Constellations {
         }
     }
 
+    fn check_and_perform_initial_scroll(
+        &mut self,
+    ) -> Option<Task<Action<<Constellations as Application>::Message>>> {
+        if self.needs_initial_scroll && !self.is_loading_more && self.is_timeline_initialized {
+            self.needs_initial_scroll = false;
+            if self.timeline_items.is_empty() {
+                return None;
+            }
+            if let Some(room_id) = &self.selected_room {
+                let unread_count =
+                    if let Some(room) = self.room_list.iter().find(|r| &r.id == room_id) {
+                        room.unread_count
+                    } else {
+                        0
+                    };
+
+                let offset = if self.is_first_time_joining || unread_count == 0 {
+                    scrollable::RelativeOffset::END
+                } else {
+                    let total_items = self.timeline_items.len();
+                    let unread = unread_count as usize;
+                    if total_items == 0 {
+                        scrollable::RelativeOffset::END
+                    } else if unread >= total_items {
+                        scrollable::RelativeOffset::START
+                    } else {
+                        let ratio = (total_items - unread) as f32 / total_items as f32;
+                        scrollable::RelativeOffset { x: 0.0, y: ratio }
+                    }
+                };
+
+                return Some(scrollable::snap_to(TIMELINE_ID.clone(), offset.into()));
+            }
+        }
+        None
+    }
+
     pub fn handle_timeline_diff(
         &mut self,
         diff: eyeball_im::VectorDiff<Arc<TimelineItem>>,
@@ -350,37 +418,106 @@ impl Constellations {
             if let Some(root_id) = root_id
                 && self.active_thread_root == Some(root_id)
             {
+                let is_append = match &mapped_diff {
+                    eyeball_im::VectorDiff::PushBack { .. } => true,
+                    eyeball_im::VectorDiff::Append { .. } => true,
+                    eyeball_im::VectorDiff::Insert { index, .. } => {
+                        *index >= self.threaded_timeline_items.len()
+                    }
+                    _ => false,
+                };
+
+                let is_prepend = match &mapped_diff {
+                    eyeball_im::VectorDiff::PushFront { .. } => true,
+                    eyeball_im::VectorDiff::Insert { index, .. } => {
+                        *index < self.threaded_timeline_items.len()
+                    }
+                    eyeball_im::VectorDiff::Reset { .. } => self.is_loading_more,
+                    _ => false,
+                };
+
+                let is_reset = match &mapped_diff {
+                    eyeball_im::VectorDiff::Reset { .. } => true,
+                    eyeball_im::VectorDiff::Clear => true,
+                    _ => false,
+                };
+
+                if is_prepend {
+                    self.needs_threaded_scroll_adjustment = true;
+                }
+
                 self.threaded_timeline_items.apply_diff(mapped_diff);
+
+                if is_append && self.is_threaded_timeline_at_bottom {
+                    tasks.push(scrollable::snap_to(
+                        THREADED_TIMELINE_ID.clone(),
+                        scrollable::RelativeOffset::END.into(),
+                    ));
+                } else if is_reset {
+                    if self.is_threaded_timeline_at_bottom {
+                        tasks.push(scrollable::snap_to(
+                            THREADED_TIMELINE_ID.clone(),
+                            scrollable::RelativeOffset::END.into(),
+                        ));
+                    } else {
+                        tasks.push(scrollable::scroll_to(
+                            THREADED_TIMELINE_ID.clone(),
+                            scrollable::AbsoluteOffset {
+                                x: Some(0.0),
+                                y: Some(self.last_threaded_timeline_offset),
+                            },
+                        ));
+                    }
+                }
             }
         } else {
+            let is_append = match &mapped_diff {
+                eyeball_im::VectorDiff::PushBack { .. } => true,
+                eyeball_im::VectorDiff::Append { .. } => true,
+                eyeball_im::VectorDiff::Insert { index, .. } => *index >= self.timeline_items.len(),
+                _ => false,
+            };
+
+            let is_prepend = match &mapped_diff {
+                eyeball_im::VectorDiff::PushFront { .. } => true,
+                eyeball_im::VectorDiff::Insert { index, .. } => *index < self.timeline_items.len(),
+                eyeball_im::VectorDiff::Reset { .. } => self.is_loading_more,
+                _ => false,
+            };
+
+            let is_reset = match &mapped_diff {
+                eyeball_im::VectorDiff::Reset { .. } => true,
+                eyeball_im::VectorDiff::Clear => true,
+                _ => false,
+            };
+
+            if is_prepend {
+                self.needs_scroll_adjustment = true;
+            }
+
             self.timeline_items.apply_diff(mapped_diff);
             self.recompute_thread_counts();
 
-            if self.needs_initial_scroll && !self.timeline_items.is_empty() {
-                self.needs_initial_scroll = false;
-                if let Some(room_id) = &self.selected_room {
-                    let unread_count = if let Some(room) = self.room_list.iter().find(|r| &r.id == room_id) {
-                        room.unread_count
-                    } else {
-                        0
-                    };
-
-                    let offset = if self.is_first_time_joining || unread_count == 0 {
-                        scrollable::RelativeOffset::END
-                    } else {
-                        let total_items = self.timeline_items.len();
-                        let unread = unread_count as usize;
-                        if unread >= total_items {
-                            scrollable::RelativeOffset::START
-                        } else {
-                            let ratio = (total_items - unread) as f32 / total_items as f32;
-                            scrollable::RelativeOffset { x: 0.0, y: ratio }
-                        }
-                    };
-
+            if let Some(task) = self.check_and_perform_initial_scroll() {
+                tasks.push(task);
+            } else if is_append && self.is_timeline_at_bottom {
+                tasks.push(scrollable::snap_to(
+                    TIMELINE_ID.clone(),
+                    scrollable::RelativeOffset::END.into(),
+                ));
+            } else if is_reset {
+                if self.is_timeline_at_bottom {
                     tasks.push(scrollable::snap_to(
                         TIMELINE_ID.clone(),
-                        offset.into(),
+                        scrollable::RelativeOffset::END.into(),
+                    ));
+                } else {
+                    tasks.push(scrollable::scroll_to(
+                        TIMELINE_ID.clone(),
+                        scrollable::AbsoluteOffset {
+                            x: Some(0.0),
+                            y: Some(self.last_timeline_offset),
+                        },
                     ));
                 }
             }
@@ -460,9 +597,45 @@ impl Constellations {
             }
             matrix::MatrixEvent::TimelineDiff(diff) => self.handle_timeline_diff(diff, false, None),
             matrix::MatrixEvent::TimelineReset => {
+                let is_background_reset = self.is_timeline_initialized;
                 self.timeline_items.clear();
                 self.recompute_thread_counts();
+                self.needs_initial_scroll = !is_background_reset;
+                self.needs_scroll_restoration = is_background_reset;
+                self.last_content_height = 0.0;
+                self.last_viewport_width = 0.0;
+                self.last_viewport_height = 0.0;
+                self.needs_scroll_adjustment = false;
+                if !is_background_reset {
+                    self.is_timeline_at_bottom = true;
+                    self.is_threaded_timeline_at_bottom = true;
+                }
+                self.is_timeline_initialized = false;
                 Task::none()
+            }
+            matrix::MatrixEvent::TimelineInitFinished => {
+                self.is_timeline_initialized = true;
+                if self.needs_scroll_restoration {
+                    self.needs_scroll_restoration = false;
+                    if self.is_timeline_at_bottom {
+                        scrollable::snap_to(
+                            TIMELINE_ID.clone(),
+                            scrollable::RelativeOffset::END.into(),
+                        )
+                    } else {
+                        scrollable::scroll_to(
+                            TIMELINE_ID.clone(),
+                            scrollable::AbsoluteOffset {
+                                x: Some(0.0),
+                                y: Some(self.last_timeline_offset),
+                            },
+                        )
+                    }
+                } else if let Some(task) = self.check_and_perform_initial_scroll() {
+                    task
+                } else {
+                    Task::none()
+                }
             }
             matrix::MatrixEvent::ReactionAdded { .. } => {
                 // For now, we don't do anything specific as reactions are handled via TimelineDiff
@@ -598,7 +771,7 @@ impl Constellations {
                     .map_err(|e| e.to_string())?;
 
                 let session = proxy
-                    .create_session(None, None, Some(ashpd::desktop::location::Accuracy::Exact))
+                    .create_session(ashpd::desktop::location::CreateSessionOptions::default())
                     .await
                     .map_err(|e| e.to_string())?;
 
@@ -609,7 +782,11 @@ impl Constellations {
 
                 let (_, location_res) = futures::join!(
                     proxy
-                        .start(&session, None)
+                        .start(
+                            &session,
+                            None,
+                            ashpd::desktop::location::StartOptions::default()
+                        )
                         .map(|e| e.map_err(|err| err.to_string())),
                     stream
                         .next()
@@ -749,6 +926,12 @@ impl Constellations {
             }
 
             let mut tasks = Vec::new();
+
+            if self.active_thread_root.is_some() {
+                self.is_threaded_timeline_at_bottom = true;
+            } else {
+                self.is_timeline_at_bottom = true;
+            }
 
             if !body.is_empty() {
                 let html_body = if self.app_settings.render_markdown {
@@ -1461,14 +1644,53 @@ impl Constellations {
             }
             Message::MatrixThreadReset(root_id) => {
                 if self.active_thread_root.as_ref() == Some(&root_id) {
+                    let is_background_reset = !self.threaded_timeline_items.is_empty();
                     self.threaded_timeline_items.clear();
+                    self.needs_threaded_scroll_restoration = is_background_reset;
+                    self.last_threaded_content_height = 0.0;
+                    self.last_threaded_viewport_width = 0.0;
+                    self.last_threaded_viewport_height = 0.0;
+                    self.needs_threaded_scroll_adjustment = false;
+                    self.is_threaded_timeline_initialized = false;
                 }
                 Task::none()
             }
+            Message::MatrixThreadInitFinished(root_id) => {
+                if self.active_thread_root.as_ref() == Some(&root_id) {
+                    self.is_threaded_timeline_initialized = true;
+                    if self.needs_threaded_scroll_restoration {
+                        self.needs_threaded_scroll_restoration = false;
+                        if self.is_threaded_timeline_at_bottom {
+                            scrollable::snap_to(
+                                THREADED_TIMELINE_ID.clone(),
+                                scrollable::RelativeOffset::END.into(),
+                            )
+                        } else {
+                            scrollable::scroll_to(
+                                THREADED_TIMELINE_ID.clone(),
+                                scrollable::AbsoluteOffset {
+                                    x: Some(0.0),
+                                    y: Some(self.last_threaded_timeline_offset),
+                                },
+                            )
+                        }
+                    } else {
+                        Task::none()
+                    }
+                } else {
+                    Task::none()
+                }
+            }
             Message::OpenThread(root_id) => {
+                self.needs_layout_scroll_restoration = true;
                 self.active_thread_root = Some(root_id);
                 self.threaded_timeline_items.clear();
                 self.last_threaded_timeline_offset = 0.0;
+                self.last_threaded_content_height = 0.0;
+                self.last_threaded_viewport_width = 0.0;
+                self.last_threaded_viewport_height = 0.0;
+                self.needs_threaded_scroll_adjustment = false;
+                self.is_threaded_timeline_initialized = false;
                 Task::batch(vec![
                     self.handle_load_more(true),
                     scrollable::snap_to(
@@ -1500,37 +1722,230 @@ impl Constellations {
                 Task::none()
             }
             Message::CloseThread => {
+                self.needs_layout_scroll_restoration = true;
                 self.active_thread_root = None;
                 self.threaded_timeline_items.clear();
-                Task::none()
+                self.last_threaded_timeline_offset = 0.0;
+                self.last_threaded_content_height = 0.0;
+                self.last_threaded_viewport_width = 0.0;
+                self.last_threaded_viewport_height = 0.0;
+                self.needs_threaded_scroll_adjustment = false;
+                self.is_threaded_timeline_initialized = false;
+                self.restore_scroll_task()
             }
             Message::LoadMoreFinished(res) => {
                 self.is_loading_more = false;
                 if let Err(e) = res {
                     self.set_error(format!("Failed to load more messages: {}", e));
                 }
-                Task::none()
+
+                if let Some(task) = self.check_and_perform_initial_scroll() {
+                    task
+                } else {
+                    Task::none()
+                }
             }
             Message::TimelineScrolled(viewport, is_thread) => {
                 let current_offset = viewport.absolute_offset().y;
-                let last_offset = if is_thread {
-                    self.last_threaded_timeline_offset
-                } else {
-                    self.last_timeline_offset
-                };
-
-                let should_load = current_offset < 100.0 && current_offset < last_offset;
+                let current_height = viewport.content_bounds().height;
 
                 if is_thread {
-                    self.last_threaded_timeline_offset = current_offset;
-                } else {
-                    self.last_timeline_offset = current_offset;
-                }
+                    if !self.is_threaded_timeline_initialized {
+                        return Task::none();
+                    }
 
-                if should_load {
-                    self.handle_load_more(is_thread)
+                    tracing::info!(
+                        "TimelineScrolled (thread): offset={}, content_height={}, viewport_w={}, viewport_h={}, last_h={}, last_w={}, last_vh={}",
+                        current_offset,
+                        current_height,
+                        viewport.bounds().width,
+                        viewport.bounds().height,
+                        self.last_threaded_content_height,
+                        self.last_threaded_viewport_width,
+                        self.last_threaded_viewport_height
+                    );
+
+                    let mut is_layout_resize = false;
+                    if self.needs_threaded_layout_scroll_restoration
+                        || (self.last_threaded_content_height > 0.0 && current_height != self.last_threaded_content_height)
+                        || (self.last_threaded_viewport_width > 0.0 && viewport.bounds().width != self.last_threaded_viewport_width)
+                        || (self.last_threaded_viewport_height > 0.0 && viewport.bounds().height != self.last_threaded_viewport_height)
+                    {
+                        if !self.needs_threaded_scroll_adjustment {
+                            is_layout_resize = true;
+                        }
+                    }
+                    self.needs_threaded_layout_scroll_restoration = false;
+
+                    let mut task = Task::none();
+                    let mut actual_offset = current_offset;
+
+                    if self.needs_threaded_scroll_adjustment
+                        && self.last_threaded_content_height > 0.0
+                        && current_height > self.last_threaded_content_height
+                    {
+                        self.needs_threaded_scroll_adjustment = false;
+                        let diff_height = current_height - self.last_threaded_content_height;
+                        actual_offset = current_offset + diff_height;
+                        task = scrollable::scroll_to(
+                            THREADED_TIMELINE_ID.clone(),
+                            scrollable::AbsoluteOffset {
+                                x: Some(0.0),
+                                y: Some(actual_offset),
+                            },
+                        );
+                    } else if is_layout_resize {
+                        if self.is_threaded_timeline_at_bottom {
+                            task = scrollable::snap_to(
+                                THREADED_TIMELINE_ID.clone(),
+                                scrollable::RelativeOffset::END.into(),
+                            );
+                        } else {
+                            let target_offset = self
+                                .last_threaded_timeline_offset
+                                .min(current_height - viewport.bounds().height)
+                                .max(0.0);
+                            task = scrollable::scroll_to(
+                                THREADED_TIMELINE_ID.clone(),
+                                scrollable::AbsoluteOffset {
+                                    x: Some(0.0),
+                                    y: Some(target_offset),
+                                },
+                            );
+                            actual_offset = target_offset;
+                        }
+                    }
+
+                    if is_layout_resize {
+                        tracing::info!(
+                            "TimelineScrolled (thread) layout resize: target_offset={}",
+                            actual_offset
+                        );
+                    }
+
+                    let last_offset = self.last_threaded_timeline_offset;
+                    let should_load =
+                        !is_layout_resize && actual_offset < 100.0 && actual_offset < last_offset;
+                    let is_at_bottom =
+                        actual_offset + viewport.bounds().height >= current_height - 20.0;
+
+                    if !is_layout_resize {
+                        self.last_threaded_timeline_offset = actual_offset;
+                        self.last_threaded_content_height = current_height;
+                        self.last_threaded_viewport_width = viewport.bounds().width;
+                        self.last_threaded_viewport_height = viewport.bounds().height;
+                        self.is_threaded_timeline_at_bottom = is_at_bottom;
+                    } else {
+                        self.last_threaded_content_height = current_height;
+                        self.last_threaded_viewport_width = viewport.bounds().width;
+                        self.last_threaded_viewport_height = viewport.bounds().height;
+                    }
+
+                    if should_load {
+                        Task::batch(vec![task, self.handle_load_more(true)])
+                    } else {
+                        task
+                    }
                 } else {
-                    Task::none()
+                    if !self.is_timeline_initialized {
+                        return Task::none();
+                    }
+
+                    tracing::info!(
+                        "TimelineScrolled: offset={}, content_height={}, viewport_w={}, viewport_h={}, last_h={}, last_w={}, last_vh={}",
+                        current_offset,
+                        current_height,
+                        viewport.bounds().width,
+                        viewport.bounds().height,
+                        self.last_content_height,
+                        self.last_viewport_width,
+                        self.last_viewport_height
+                    );
+
+                    let mut is_layout_resize = false;
+                    if self.needs_layout_scroll_restoration
+                        || (self.last_content_height > 0.0
+                            && current_height != self.last_content_height)
+                        || (self.last_viewport_width > 0.0
+                            && viewport.bounds().width != self.last_viewport_width)
+                        || (self.last_viewport_height > 0.0
+                            && viewport.bounds().height != self.last_viewport_height)
+                    {
+                        if !self.needs_scroll_adjustment {
+                            is_layout_resize = true;
+                        }
+                    }
+                    self.needs_layout_scroll_restoration = false;
+
+                    let mut task = Task::none();
+                    let mut actual_offset = current_offset;
+
+                    if self.needs_scroll_adjustment
+                        && self.last_content_height > 0.0
+                        && current_height > self.last_content_height
+                    {
+                        self.needs_scroll_adjustment = false;
+                        let diff_height = current_height - self.last_content_height;
+                        actual_offset = current_offset + diff_height;
+                        task = scrollable::scroll_to(
+                            TIMELINE_ID.clone(),
+                            scrollable::AbsoluteOffset {
+                                x: Some(0.0),
+                                y: Some(actual_offset),
+                            },
+                        );
+                    } else if is_layout_resize {
+                        if self.is_timeline_at_bottom {
+                            task = scrollable::snap_to(
+                                TIMELINE_ID.clone(),
+                                scrollable::RelativeOffset::END.into(),
+                            );
+                        } else {
+                            let target_offset = self
+                                .last_timeline_offset
+                                .min(current_height - viewport.bounds().height)
+                                .max(0.0);
+                            task = scrollable::scroll_to(
+                                TIMELINE_ID.clone(),
+                                scrollable::AbsoluteOffset {
+                                    x: Some(0.0),
+                                    y: Some(target_offset),
+                                },
+                            );
+                            actual_offset = target_offset;
+                        }
+                    }
+
+                    if is_layout_resize {
+                        tracing::info!(
+                            "TimelineScrolled layout resize: target_offset={}",
+                            actual_offset
+                        );
+                    }
+
+                    let last_offset = self.last_timeline_offset;
+                    let should_load =
+                        !is_layout_resize && actual_offset < 100.0 && actual_offset < last_offset;
+                    let is_at_bottom =
+                        actual_offset + viewport.bounds().height >= current_height - 20.0;
+
+                    if !is_layout_resize {
+                        self.last_timeline_offset = actual_offset;
+                        self.last_content_height = current_height;
+                        self.last_viewport_width = viewport.bounds().width;
+                        self.last_viewport_height = viewport.bounds().height;
+                        self.is_timeline_at_bottom = is_at_bottom;
+                    } else {
+                        self.last_content_height = current_height;
+                        self.last_viewport_width = viewport.bounds().width;
+                        self.last_viewport_height = viewport.bounds().height;
+                    }
+
+                    if should_load {
+                        Task::batch(vec![task, self.handle_load_more(false)])
+                    } else {
+                        task
+                    }
                 }
             }
             Message::RoomSelected(room_id) => {
@@ -1541,21 +1956,38 @@ impl Constellations {
                 }
                 self.selected_room = Some(room_id.clone());
                 self.timeline_items.clear();
+                self.room_members.clear();
+                self.pinned_events.clear();
+                self.pinned_events_details.clear();
+                let fetch_members_task = if self.show_members_panel {
+                    self.is_loading_members = true;
+                    self.fetch_members_task()
+                } else {
+                    Task::none()
+                };
+                let fetch_pinned_task = self.fetch_pinned_events_task();
                 self.recompute_thread_counts();
                 self.last_timeline_offset = 0.0;
+                self.last_content_height = 0.0;
+                self.last_viewport_width = 0.0;
+                self.last_viewport_height = 0.0;
+                self.needs_scroll_adjustment = false;
+                self.is_timeline_at_bottom = true;
+                self.is_threaded_timeline_at_bottom = true;
+                self.is_timeline_initialized = false;
 
                 if self.user_id == Some("@simulated_user:matrix.org".to_string()) {
                     self.timeline_items = self.generate_mock_timeline(&room_id);
-                    let is_first_time = !self.visited_room_ids.contains(&room_id);
                     self.visited_room_ids.insert(room_id.clone());
 
-                    let unread_count = if let Some(room) = self.room_list.iter().find(|r| r.id == room_id) {
-                        room.unread_count
-                    } else {
-                        0
-                    };
+                    let unread_count =
+                        if let Some(room) = self.room_list.iter().find(|r| r.id == room_id) {
+                            room.unread_count
+                        } else {
+                            0
+                        };
 
-                    let offset = if is_first_time || unread_count == 0 {
+                    let offset = if unread_count == 0 {
                         scrollable::RelativeOffset::END
                     } else {
                         let total_items = self.timeline_items.len();
@@ -1571,19 +2003,20 @@ impl Constellations {
                     self.needs_initial_scroll = false;
                     Task::batch(vec![
                         self.update_title(),
-                        scrollable::snap_to(
-                            TIMELINE_ID.clone(),
-                            offset.into(),
-                        ),
+                        scrollable::snap_to(TIMELINE_ID.clone(), offset.into()),
+                        fetch_members_task,
+                        fetch_pinned_task,
                     ])
                 } else {
-                    self.is_first_time_joining = !self.visited_room_ids.contains(&room_id);
+                    self.is_first_time_joining = false;
                     self.visited_room_ids.insert(room_id.clone());
                     self.needs_initial_scroll = true;
 
                     Task::batch(vec![
                         self.update_title(),
                         self.handle_load_more(false),
+                        fetch_members_task,
+                        fetch_pinned_task,
                     ])
                 }
             }
@@ -1937,6 +2370,8 @@ impl Constellations {
                 match res {
                     Ok(room_id) => {
                         self.selected_room = Some(room_id.as_str().into());
+                        self.is_first_time_joining = true;
+                        self.visited_room_ids.insert(room_id.as_str().into());
                         // Refresh both lists
                         self.update_filtered_rooms();
                         if let (Some(matrix), Some(space_id)) = (&self.matrix, &self.selected_space)
@@ -1964,6 +2399,10 @@ impl Constellations {
             Message::Logout => self.handle_logout(),
             Message::LogoutFinished => self.handle_logout_finished(),
             Message::OpenSettings(panel) => {
+                self.needs_layout_scroll_restoration = true;
+                self.needs_threaded_layout_scroll_restoration = true;
+                self.show_members_panel = false;
+                self.show_pinned_panel = false;
                 self.current_settings_panel = Some(panel.clone());
                 self.core.set_show_context(true);
 
@@ -1979,31 +2418,40 @@ impl Constellations {
                     }
                 }
 
-                if panel == SettingsPanel::User {
-                    return self
-                        .user_settings
-                        .update(settings::user::Message::LoadProfile, &self.matrix);
+                let task = if panel == SettingsPanel::User {
+                    self.user_settings
+                        .update(settings::user::Message::LoadProfile, &self.matrix)
                 } else if panel == SettingsPanel::Room {
                     if let Some(room_id) = &self.selected_room {
-                        return self.room_settings.update(
+                        self.room_settings.update(
                             settings::room::Message::LoadRoom(room_id.clone()),
                             &self.matrix,
-                        );
+                        )
+                    } else {
+                        Task::none()
                     }
                 } else if panel == SettingsPanel::Space
                     && let Some(space_id) = &self.selected_space
                 {
-                    return self.space_settings.update(
+                    self.space_settings.update(
                         settings::space::Message::LoadSpace(Arc::from(space_id.as_str())),
                         &self.matrix,
-                    );
-                }
-                Task::none()
+                    )
+                } else {
+                    Task::none()
+                };
+                Task::batch(vec![task, self.restore_scroll_task()])
             }
             Message::CloseSettings => {
+                self.needs_layout_scroll_restoration = true;
+                self.needs_threaded_layout_scroll_restoration = true;
                 self.current_settings_panel = None;
                 self.core.set_show_context(false);
-                Task::none()
+                self.show_members_panel = false;
+                self.show_pinned_panel = false;
+                self.room_members.clear();
+                self.pinned_events_details.clear();
+                self.restore_scroll_task()
             }
             Message::UserSettings(msg) => self.user_settings.update(msg, &self.matrix),
             Message::RoomSettings(msg) => self.room_settings.update(msg, &self.matrix),
@@ -2095,6 +2543,71 @@ impl Constellations {
                 self.fullscreen_image = None;
                 Task::none()
             }
+            Message::ToggleMembersPanel => {
+                self.needs_layout_scroll_restoration = true;
+                self.needs_threaded_layout_scroll_restoration = true;
+                self.show_members_panel = !self.show_members_panel;
+                if self.show_members_panel {
+                    self.show_pinned_panel = false;
+                    self.current_settings_panel = Some(SettingsPanel::Members);
+                    self.core.set_show_context(true);
+                    self.is_loading_members = true;
+                    self.room_members.clear();
+                    Task::batch(vec![self.fetch_members_task(), self.restore_scroll_task()])
+                } else {
+                    self.current_settings_panel = None;
+                    self.core.set_show_context(false);
+                    self.room_members.clear();
+                    self.restore_scroll_task()
+                }
+            }
+            Message::MembersFetched(res) => {
+                self.is_loading_members = false;
+                match res {
+                    Ok(members) => {
+                        self.room_members = members;
+                    }
+                    Err(e) => {
+                        self.set_error(format!("Failed to fetch room members: {}", e));
+                    }
+                }
+                Task::none()
+            }
+            Message::TogglePinnedPanel => {
+                self.needs_layout_scroll_restoration = true;
+                self.needs_threaded_layout_scroll_restoration = true;
+                self.show_pinned_panel = !self.show_pinned_panel;
+                if self.show_pinned_panel {
+                    self.show_members_panel = false;
+                    self.current_settings_panel = Some(SettingsPanel::Pinned);
+                    self.core.set_show_context(true);
+                    self.is_loading_pinned = true;
+                    Task::batch(vec![
+                        self.fetch_pinned_events_task(),
+                        self.restore_scroll_task(),
+                    ])
+                } else {
+                    self.current_settings_panel = None;
+                    self.core.set_show_context(false);
+                    self.restore_scroll_task()
+                }
+            }
+            Message::PinnedEventsFetched(res) => {
+                self.is_loading_pinned = false;
+                match res {
+                    Ok(pinned_details) => {
+                        self.pinned_events = pinned_details
+                            .iter()
+                            .filter_map(|d| matrix_sdk::ruma::EventId::parse(&d.event_id).ok())
+                            .collect();
+                        self.pinned_events_details = pinned_details;
+                    }
+                    Err(e) => {
+                        self.set_error(format!("Failed to fetch pinned events: {}", e));
+                    }
+                }
+                Task::none()
+            }
         }
     }
 
@@ -2105,12 +2618,16 @@ impl Constellations {
         let mut items = eyeball_im::Vector::new();
         match room_id {
             "!general:matrix.org" => {
-                items.push_back(crate::ConstellationsItem::new_mock(
+                let mut first_item = crate::ConstellationsItem::new_mock(
                     "Alice",
                     "Welcome to the Cosmic Constellations matrix client!",
                     "2026-05-29 22:50:12",
                     false,
+                );
+                first_item.item_id = Some(matrix_sdk_ui::timeline::TimelineEventItemId::EventId(
+                    matrix_sdk::ruma::event_id!("$mock_pinned_1:example.com").to_owned(),
                 ));
+                items.push_back(first_item);
                 items.push_back(crate::ConstellationsItem::new_mock(
                     "Bob",
                     "Wow, this interface is super fast and beautiful. The pixel-perfect QR login and dark theme looks fantastic!",
@@ -2174,6 +2691,102 @@ impl Constellations {
         }
         items
     }
+
+    fn fetch_members_task(&self) -> Task<Action<Message>> {
+        if self.user_id == Some("@simulated_user:matrix.org".to_string()) {
+            let mock_members = vec![
+                matrix::RoomMemberInfo {
+                    user_id: "@simulated_user:matrix.org".to_string(),
+                    display_name: Some("You".to_string()),
+                    avatar_url: None,
+                },
+                matrix::RoomMemberInfo {
+                    user_id: "@alice:matrix.org".to_string(),
+                    display_name: Some("Alice".to_string()),
+                    avatar_url: None,
+                },
+                matrix::RoomMemberInfo {
+                    user_id: "@bob:matrix.org".to_string(),
+                    display_name: Some("Bob".to_string()),
+                    avatar_url: None,
+                },
+                matrix::RoomMemberInfo {
+                    user_id: "@ferris:matrix.org".to_string(),
+                    display_name: Some("Ferris".to_string()),
+                    avatar_url: None,
+                },
+            ];
+            return Task::done(Action::from(Message::MembersFetched(Ok(mock_members))));
+        }
+
+        let Some(room_id) = self.selected_room.clone() else {
+            return Task::none();
+        };
+        let Some(matrix) = self.matrix.clone() else {
+            return Task::none();
+        };
+        Task::perform(
+            async move {
+                matrix
+                    .get_room_members(&room_id)
+                    .await
+                    .map_err(|e| e.to_string())
+            },
+            |res| Action::from(Message::MembersFetched(res)),
+        )
+    }
+
+    fn fetch_pinned_events_task(&self) -> Task<Action<Message>> {
+        if self.user_id == Some("@simulated_user:matrix.org".to_string()) {
+            let mock_pinned = vec![matrix::PinnedEventInfo {
+                event_id: "$mock_pinned_1:example.com".to_string(),
+                sender_id: "@mock_sender:example.com".to_string(),
+                sender_name: "Mock Sender".to_string(),
+                avatar_url: None,
+                timestamp: "2026-06-09 12:00:00".to_string(),
+                body: "This is a mock pinned message that is always loaded!".to_string(),
+            }];
+            return Task::done(Action::from(Message::PinnedEventsFetched(Ok(mock_pinned))));
+        }
+
+        let Some(room_id) = self.selected_room.clone() else {
+            return Task::none();
+        };
+        let Some(matrix) = self.matrix.clone() else {
+            return Task::none();
+        };
+        Task::perform(
+            async move {
+                let ids = matrix
+                    .get_pinned_events(&room_id)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                let mut details = Vec::new();
+                for id in ids {
+                    match matrix.fetch_pinned_event_details(&room_id, &id).await {
+                        Ok(detail) => details.push(detail),
+                        Err(e) => {
+                            tracing::error!(
+                                "Failed to fetch details for pinned event {}: {}",
+                                id,
+                                e
+                            );
+                            details.push(matrix::PinnedEventInfo {
+                                event_id: id.to_string(),
+                                sender_id: "@unknown:example.com".to_string(),
+                                sender_name: "Unknown".to_string(),
+                                avatar_url: None,
+                                timestamp: "Unknown time".to_string(),
+                                body: format!("[Failed to load message content: {}]", e),
+                            });
+                        }
+                    }
+                }
+                Ok(details)
+            },
+            |res| Action::from(Message::PinnedEventsFetched(res)),
+        )
+    }
 }
 
 #[cfg(test)]
@@ -2219,6 +2832,22 @@ mod tests {
             visited_room_ids: HashSet::new(),
             is_first_time_joining: false,
             needs_initial_scroll: false,
+            needs_scroll_restoration: false,
+            needs_threaded_scroll_restoration: false,
+            is_timeline_at_bottom: true,
+            is_threaded_timeline_at_bottom: true,
+            is_timeline_initialized: false,
+            is_threaded_timeline_initialized: false,
+            last_content_height: 0.0,
+            last_threaded_content_height: 0.0,
+            last_viewport_width: 0.0,
+            last_viewport_height: 0.0,
+            last_threaded_viewport_width: 0.0,
+            last_threaded_viewport_height: 0.0,
+            needs_layout_scroll_restoration: false,
+            needs_threaded_layout_scroll_restoration: false,
+            needs_scroll_adjustment: false,
+            needs_threaded_scroll_adjustment: false,
             selected_space: None,
             current_settings_panel: None,
             user_settings: crate::settings::user::State::default(),
@@ -2245,6 +2874,13 @@ mod tests {
             qr_rendezvous_url: None,
             room_name_cache: HashMap::new(),
             thread_counts: HashMap::new(),
+            show_pinned_panel: false,
+            is_loading_pinned: false,
+            pinned_events: HashSet::new(),
+            pinned_events_details: Vec::new(),
+            show_members_panel: false,
+            room_members: Vec::new(),
+            is_loading_members: false,
         }
     }
 
@@ -2269,6 +2905,64 @@ mod tests {
 
         // Ensure nothing was inserted into the cache
         assert!(app.media_cache.is_empty());
+    }
+
+    #[test]
+    fn test_toggle_members_panel() {
+        let mut app = create_dummy_constellations();
+
+        assert_eq!(app.show_members_panel, false);
+        assert!(app.room_members.is_empty());
+
+        let _ = app.update(Message::ToggleMembersPanel);
+        assert_eq!(app.show_members_panel, true);
+        assert_eq!(app.is_loading_members, true);
+
+        // Send simulated fetched members
+        let mock_member = matrix::RoomMemberInfo {
+            user_id: "@user:matrix.org".to_string(),
+            display_name: Some("User".to_string()),
+            avatar_url: None,
+        };
+        let _ = app.update(Message::MembersFetched(Ok(vec![mock_member.clone()])));
+        assert_eq!(app.is_loading_members, false);
+        assert_eq!(app.room_members.len(), 1);
+        assert_eq!(app.room_members[0].user_id, "@user:matrix.org");
+
+        let _ = app.update(Message::ToggleMembersPanel);
+        assert_eq!(app.show_members_panel, false);
+        assert!(app.room_members.is_empty());
+    }
+
+    #[test]
+    fn test_toggle_pinned_panel() {
+        let mut app = create_dummy_constellations();
+
+        assert_eq!(app.show_pinned_panel, false);
+        assert!(app.pinned_events.is_empty());
+
+        let _ = app.update(Message::TogglePinnedPanel);
+        assert_eq!(app.show_pinned_panel, true);
+        assert_eq!(app.is_loading_pinned, true);
+
+        // Send simulated fetched pinned events
+        let mock_id = matrix_sdk::ruma::event_id!("$123:example.com").to_owned();
+        let mock_info = matrix::PinnedEventInfo {
+            event_id: mock_id.to_string(),
+            sender_id: "@user:matrix.org".to_string(),
+            sender_name: "User".to_string(),
+            avatar_url: None,
+            timestamp: "2026-06-09 12:00:00".to_string(),
+            body: "Pinned message content".to_string(),
+        };
+        let _ = app.update(Message::PinnedEventsFetched(Ok(vec![mock_info])));
+        assert_eq!(app.is_loading_pinned, false);
+        assert_eq!(app.pinned_events.len(), 1);
+        assert!(app.pinned_events.contains(&mock_id));
+        assert_eq!(app.pinned_events_details.len(), 1);
+
+        let _ = app.update(Message::TogglePinnedPanel);
+        assert_eq!(app.show_pinned_panel, false);
     }
 
     #[test]
@@ -2558,5 +3252,127 @@ mod tests {
         assert_eq!(app.is_qr_logging_in, false);
         assert_eq!(app.qr_login_step, QrLoginStep::NotStarted);
         assert!(app.qr_rendezvous_url.is_none());
+    }
+
+    #[test]
+    fn test_room_scroll_behavior() {
+        let mut app = create_dummy_constellations();
+        app.user_id = Some("@test_user:matrix.org".to_string());
+
+        let room_id: std::sync::Arc<str> = std::sync::Arc::from("!room1:example.com");
+        app.room_list.push(matrix::RoomData {
+            id: room_id.clone(),
+            name: Some("Room 1".to_string()),
+            unread_count: 5,
+            unread_count_str: Some("5".to_string()),
+            last_message: None,
+            avatar_url: None,
+            room_type: None,
+            is_space: false,
+            parent_space_id: None,
+            join_rule: None,
+            allowed_spaces: Vec::new(),
+            order: None,
+            suggested: false,
+        });
+
+        // 1. Just joined the room
+        let owned_room_id = matrix_sdk::ruma::RoomId::parse(room_id.as_ref()).unwrap();
+        let _ = app.update(Message::RoomJoined(Ok(owned_room_id)));
+        assert!(app.visited_room_ids.contains(&room_id));
+        assert_eq!(app.is_first_time_joining, true);
+
+        // Simulate timeline reset when subscription starts
+        let _ = app.update(Message::Matrix(matrix::MatrixEvent::TimelineReset));
+        assert_eq!(app.needs_initial_scroll, true);
+        assert_eq!(app.is_timeline_at_bottom, true);
+
+        // Populate timeline
+        for i in 0..10 {
+            app.timeline_items
+                .push_back(crate::ConstellationsItem::new_mock(
+                    "Sender",
+                    &format!("Msg {}", i),
+                    "2026-06-08T13:22:31Z",
+                    false,
+                ));
+        }
+
+        // Simulate TimelineInitFinished
+        let _ = app.update(Message::Matrix(matrix::MatrixEvent::TimelineInitFinished));
+        assert_eq!(app.is_timeline_initialized, true);
+
+        let _task = app.update(Message::LoadMoreFinished(Ok(())));
+        assert_eq!(app.needs_initial_scroll, false);
+
+        // 2. Normal room selection
+        app.timeline_items.clear();
+        app.is_first_time_joining = true; // set to true to verify RoomSelected sets it to false
+        app.needs_initial_scroll = false;
+
+        let _task = app.update(Message::RoomSelected(room_id.clone()));
+        assert_eq!(app.is_first_time_joining, false);
+        assert_eq!(app.needs_initial_scroll, true);
+
+        // Populate timeline again
+        for i in 0..10 {
+            app.timeline_items
+                .push_back(crate::ConstellationsItem::new_mock(
+                    "Sender",
+                    &format!("Msg {}", i),
+                    "2026-06-08T13:22:31Z",
+                    false,
+                ));
+        }
+
+        // Simulate TimelineInitFinished
+        let _ = app.update(Message::Matrix(matrix::MatrixEvent::TimelineInitFinished));
+        assert_eq!(app.is_timeline_initialized, true);
+
+        let _task2 = app.update(Message::LoadMoreFinished(Ok(())));
+        assert_eq!(app.needs_initial_scroll, false);
+
+        // 3. Directly test check_and_perform_initial_scroll helper
+        app.timeline_items.clear();
+        app.needs_initial_scroll = true;
+        app.is_loading_more = true;
+        app.is_timeline_initialized = false;
+        assert!(app.check_and_perform_initial_scroll().is_none());
+
+        app.is_loading_more = false;
+        assert!(app.check_and_perform_initial_scroll().is_none()); // still none because is_timeline_initialized is false
+
+        app.is_timeline_initialized = true;
+        app.timeline_items
+            .push_back(crate::ConstellationsItem::new_mock(
+                "Sender",
+                "Msg",
+                "2026-06-08T13:22:31Z",
+                false,
+            ));
+        assert!(app.check_and_perform_initial_scroll().is_some());
+        assert_eq!(app.needs_initial_scroll, false);
+
+        // 4. Test timeline reset scroll behavior (initial reset)
+        app.is_timeline_initialized = false;
+        let _ = app.update(Message::Matrix(matrix::MatrixEvent::TimelineReset));
+        assert_eq!(app.needs_initial_scroll, true);
+        assert_eq!(app.is_timeline_at_bottom, true);
+        assert_eq!(app.is_timeline_initialized, false);
+
+        // 5. Test background timeline reset scroll behavior (when already initialized)
+        app.is_timeline_initialized = true;
+        app.is_timeline_at_bottom = false;
+        app.last_timeline_offset = 150.0;
+        let _ = app.update(Message::Matrix(matrix::MatrixEvent::TimelineReset));
+        assert_eq!(app.needs_initial_scroll, false);
+        assert_eq!(app.needs_scroll_restoration, true);
+        assert_eq!(app.is_timeline_at_bottom, false); // preserved!
+        assert_eq!(app.is_timeline_initialized, false);
+
+        // Simulate TimelineInitFinished for background reset
+        let _ = app.update(Message::Matrix(matrix::MatrixEvent::TimelineInitFinished));
+        assert_eq!(app.is_timeline_initialized, true);
+        assert_eq!(app.needs_scroll_restoration, false);
     }
 }

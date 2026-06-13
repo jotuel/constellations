@@ -14,6 +14,7 @@ libcosmic = { git = "https://github.com/pop-os/libcosmic", features = [
     "winit",
     "wayland",
     "tokio",
+    "wgpu",
     "single-instance",
     "desktop-systemd-scope",
     "xdg-portal",
@@ -37,7 +38,6 @@ eyeball-im = "0.8"
 url = "2"
 dirs = "6.0.0"
 tempfile = "3"
-rusqlite = { version = "0.37", features = ["bundled"] }
 chrono = "0.4"
 cosmic-text = "0.19"
 pulldown-cmark = "0.13"
@@ -55,7 +55,7 @@ rust-embed = "8"
 unic-langid = "0.9"
 mimalloc = { version = "0.1.50", features = ["secure"] }
 livekit = { version = "0.7", features = ["rustls-tls-native-roots"] }
-ashpd = "0.10"
+ashpd =  { version = "0.13", features = ["location"] }
 reqwest = { version = "0.13", features = ["json"] }
 emojis = "0.8"
 rustls = { version = "0.23", features = ["ring"] }
@@ -67,7 +67,7 @@ unifiedpush_storage_preferences = "0.1.0"
 
 
 [dev-dependencies]
-matrix-sdk-test = "0.17.0"
+matrix-sdk-test = "0.18.0"
 serial_test = "3.4.0"
 tempfile = "3"
 wiremock = "0.6.5"

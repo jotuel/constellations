@@ -40,7 +40,8 @@ impl Constellations {
             .push(divider::vertical::default())
             .push(sidebar)
             .push(divider::vertical::default())
-            .push(content);
+            .push(content)
+            .padding(4);
 
         let mut final_view: Element<'_, Message> = main_view.into();
         if self.app_settings.show_sync_indicator && self.is_sync_indicator_active {

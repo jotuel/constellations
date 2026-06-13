@@ -101,6 +101,22 @@ pub struct Constellations {
     visited_room_ids: std::collections::HashSet<std::sync::Arc<str>>,
     is_first_time_joining: bool,
     needs_initial_scroll: bool,
+    needs_scroll_restoration: bool,
+    needs_threaded_scroll_restoration: bool,
+    is_timeline_at_bottom: bool,
+    is_threaded_timeline_at_bottom: bool,
+    is_timeline_initialized: bool,
+    is_threaded_timeline_initialized: bool,
+    last_content_height: f32,
+    last_threaded_content_height: f32,
+    last_viewport_width: f32,
+    last_viewport_height: f32,
+    last_threaded_viewport_width: f32,
+    last_threaded_viewport_height: f32,
+    needs_layout_scroll_restoration: bool,
+    needs_threaded_layout_scroll_restoration: bool,
+    needs_scroll_adjustment: bool,
+    needs_threaded_scroll_adjustment: bool,
     replying_to: Option<ConstellationsItem>,
     editing_item: Option<ConstellationsItem>,
     selected_space: Option<OwnedRoomId>,
@@ -116,6 +132,13 @@ pub struct Constellations {
     is_composer_emoji_picker_active: bool,
     room_name_cache: std::collections::HashMap<std::sync::Arc<str>, String>,
     pub thread_counts: std::collections::HashMap<matrix_sdk::ruma::OwnedEventId, u32>,
+    show_pinned_panel: bool,
+    is_loading_pinned: bool,
+    pinned_events: std::collections::HashSet<matrix_sdk::ruma::OwnedEventId>,
+    pinned_events_details: Vec<matrix::PinnedEventInfo>,
+    show_members_panel: bool,
+    room_members: Vec<matrix::RoomMemberInfo>,
+    is_loading_members: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -181,6 +204,7 @@ pub enum Message {
         eyeball_im::VectorDiff<std::sync::Arc<matrix::TimelineItem>>,
     ),
     MatrixThreadReset(matrix_sdk::ruma::OwnedEventId),
+    MatrixThreadInitFinished(matrix_sdk::ruma::OwnedEventId),
     SpaceFilterUpdated,
     NoOp,
     SubmitOidcLogin,
@@ -201,6 +225,10 @@ pub enum Message {
     SpaceSettings(settings::space::Message),
     AppSettings(settings::app::Message),
     AppSettingChanged,
+    ToggleMembersPanel,
+    MembersFetched(Result<Vec<matrix::RoomMemberInfo>, String>),
+    TogglePinnedPanel,
+    PinnedEventsFetched(Result<Vec<matrix::PinnedEventInfo>, String>),
     ToggleSearch,
     SearchQueryChanged(String),
     JoinCall,
@@ -218,6 +246,8 @@ pub enum SettingsPanel {
     User,
     Room,
     Space,
+    Members,
+    Pinned,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -670,6 +700,7 @@ impl Constellations {
                             eyeball_im::VectorDiff::Insert { index, value: item },
                         )));
                     }
+                    let _ = tx.send(Message::Matrix(matrix::MatrixEvent::TimelineInitFinished));
 
                     use cosmic::iced::futures::StreamExt;
                     while let Some(diff) = stream.next().await {
@@ -719,6 +750,7 @@ impl Constellations {
                             eyeball_im::VectorDiff::Insert { index, value: item },
                         ));
                     }
+                    let _ = tx.send(Message::MatrixThreadInitFinished(root_id.clone()));
 
                     use cosmic::iced::futures::StreamExt;
                     while let Some(diff) = stream.next().await {
@@ -909,6 +941,22 @@ impl Application for Constellations {
             visited_room_ids: std::collections::HashSet::new(),
             is_first_time_joining: false,
             needs_initial_scroll: false,
+            needs_scroll_restoration: false,
+            needs_threaded_scroll_restoration: false,
+            is_timeline_at_bottom: true,
+            is_threaded_timeline_at_bottom: true,
+            is_timeline_initialized: false,
+            is_threaded_timeline_initialized: false,
+            last_content_height: 0.0,
+            last_threaded_content_height: 0.0,
+            last_viewport_width: 0.0,
+            last_viewport_height: 0.0,
+            last_threaded_viewport_width: 0.0,
+            last_threaded_viewport_height: 0.0,
+            needs_layout_scroll_restoration: false,
+            needs_threaded_layout_scroll_restoration: false,
+            needs_scroll_adjustment: false,
+            needs_threaded_scroll_adjustment: false,
             replying_to: None,
             editing_item: None,
             selected_space: None,
@@ -924,6 +972,13 @@ impl Application for Constellations {
             is_composer_emoji_picker_active: false,
             room_name_cache: std::collections::HashMap::new(),
             thread_counts: std::collections::HashMap::new(),
+            show_pinned_panel: false,
+            is_loading_pinned: false,
+            pinned_events: std::collections::HashSet::new(),
+            pinned_events_details: Vec::new(),
+            show_members_panel: false,
+            room_members: Vec::new(),
+            is_loading_members: false,
         };
 
         let title_task = app.update_title();
@@ -941,6 +996,8 @@ impl Application for Constellations {
                 SettingsPanel::User => crate::fl!("user-settings"),
                 SettingsPanel::Room => crate::fl!("room-settings"),
                 SettingsPanel::Space => crate::fl!("space-settings"),
+                SettingsPanel::Members => crate::fl!("room-members"),
+                SettingsPanel::Pinned => crate::fl!("pinned-messages"),
             };
 
             let panel_content = match panel {
@@ -948,6 +1005,8 @@ impl Application for Constellations {
                 SettingsPanel::Room => self.room_settings.view().map(Message::RoomSettings),
                 SettingsPanel::Space => self.space_settings.view().map(Message::SpaceSettings),
                 SettingsPanel::App => self.app_settings.view().map(Message::AppSettings),
+                SettingsPanel::Members => self.view_members_panel(),
+                SettingsPanel::Pinned => self.view_pinned_panel(),
             };
 
             Some(
@@ -1115,6 +1174,22 @@ mod tests {
             visited_room_ids: std::collections::HashSet::new(),
             is_first_time_joining: false,
             needs_initial_scroll: false,
+            needs_scroll_restoration: false,
+            needs_threaded_scroll_restoration: false,
+            is_timeline_at_bottom: true,
+            is_threaded_timeline_at_bottom: true,
+            is_timeline_initialized: false,
+            is_threaded_timeline_initialized: false,
+            last_content_height: 0.0,
+            last_threaded_content_height: 0.0,
+            last_viewport_width: 0.0,
+            last_viewport_height: 0.0,
+            last_threaded_viewport_width: 0.0,
+            last_threaded_viewport_height: 0.0,
+            needs_layout_scroll_restoration: false,
+            needs_threaded_layout_scroll_restoration: false,
+            needs_scroll_adjustment: false,
+            needs_threaded_scroll_adjustment: false,
             selected_space: None,
             current_settings_panel: None,
             user_settings: settings::user::State::default(),
@@ -1135,6 +1210,13 @@ mod tests {
             is_composer_emoji_picker_active: false,
             room_name_cache: std::collections::HashMap::new(),
             thread_counts: std::collections::HashMap::new(),
+            show_pinned_panel: false,
+            is_loading_pinned: false,
+            pinned_events: std::collections::HashSet::new(),
+            pinned_events_details: Vec::new(),
+            show_members_panel: false,
+            room_members: Vec::new(),
+            is_loading_members: false,
         }
     }
 

@@ -33,12 +33,12 @@ pub trait Ipc {
 
 pub async fn start_server(tx: mpsc::UnboundedSender<String>) -> Result<Connection, Box<dyn Error>> {
     let connection = Connection::session().await?;
-    let name = WellKnownName::try_from(DBUS_NAME)?;
-    connection.request_name(name).await?;
     connection
         .object_server()
         .at(DBUS_PATH, IpcInterface { tx })
         .await?;
+    let name = WellKnownName::try_from(DBUS_NAME)?;
+    connection.request_name(name).await?;
     Ok(connection)
 }
 

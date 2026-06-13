@@ -2,6 +2,8 @@ use cosmic::{Action, Task};
 
 use crate::{Constellations, Message};
 
+use std::sync::LazyLock;
+
 pub mod app;
 pub mod chat;
 pub mod error;
@@ -13,6 +15,44 @@ const SPACE_AVATAR_HEIGHT: i32 = 32;
 const ROOM_AVATAR_WIDTH: i32 = 24;
 const ROOM_AVATAR_HEIGHT: i32 = 24;
 const AVATAR_RADIUS: i32 = 15;
+const ROOM_SWITCHER_WIDTH: i32 = 250;
+
+// chat.rs
+static ADD_REACTION: LazyLock<String> = LazyLock::new(|| crate::fl!("add-reaction"));
+static TOOLTIP_REPLY: LazyLock<String> = LazyLock::new(|| crate::fl!("tooltip-reply"));
+static TOOLTIP_THREAD: LazyLock<String> = LazyLock::new(|| crate::fl!("tooltip-thread"));
+static TOOLTIP_EDIT: LazyLock<String> = LazyLock::new(|| crate::fl!("tooltip-edit"));
+static TOOLTIP_DELETE: LazyLock<String> = LazyLock::new(|| crate::fl!("tooltip-delete"));
+static TOOLTIP_ATTACH: LazyLock<String> = LazyLock::new(|| crate::fl!("tooltip-attach"));
+static TOOLTIP_LOCATION: LazyLock<String> = LazyLock::new(|| crate::fl!("tooltip-share-location"));
+static TOOLTIP_FIND: LazyLock<String> = LazyLock::new(|| crate::fl!("tooltip-preview"));
+static TOOLTIP_EMOJIS: LazyLock<String> = LazyLock::new(|| crate::fl!("tooltip-emojis"));
+static UNIGNORE_USER: LazyLock<String> = LazyLock::new(|| crate::fl!("unignore-user"));
+static IGNORE: LazyLock<String> = LazyLock::new(|| crate::fl!("ignore"));
+static REPLY: LazyLock<String> = LazyLock::new(|| crate::fl!("reply"));
+static REPLIES: LazyLock<String> = LazyLock::new(|| crate::fl!("replies"));
+static DOWNLOAD_IMAGE: LazyLock<String> = LazyLock::new(|| crate::fl!("download-image"));
+static DOWNLOAD_FILE: LazyLock<String> = LazyLock::new(|| crate::fl!("download-file"));
+static DOWNLOADED: LazyLock<String> = LazyLock::new(|| crate::fl!("downloaded"));
+static OPEN_THREAD: LazyLock<String> = LazyLock::new(|| crate::fl!("thread"));
+static CLOSE_THREAD: LazyLock<String> = LazyLock::new(|| crate::fl!("close-thread"));
+// switcher.rs
+static ALL_ROOMS: LazyLock<String> = LazyLock::new(|| crate::fl!("all-rooms"));
+static ROOM_NAME: LazyLock<String> = LazyLock::new(|| crate::fl!("room-name"));
+static SPACE_NAME: LazyLock<String> = LazyLock::new(|| crate::fl!("space-name"));
+static CREATE: LazyLock<String> = LazyLock::new(|| crate::fl!("create"));
+static ENTER_ROOM_NAME: LazyLock<String> = LazyLock::new(|| crate::fl!("enter-room-name"));
+static ENTER_SPACE_NAME: LazyLock<String> = LazyLock::new(|| crate::fl!("enter-space-name"));
+static CANCEL: LazyLock<String> = LazyLock::new(|| crate::fl!("cancel"));
+static UNKNOWN_SPACE: LazyLock<String> = LazyLock::new(|| crate::fl!("unknown-space"));
+static SPACE_SETTINGS: LazyLock<String> = LazyLock::new(|| crate::fl!("space-settings"));
+static JOINED_ROOMS: LazyLock<String> = LazyLock::new(|| crate::fl!("joined-rooms"));
+static OTHER_ROOMS: LazyLock<String> = LazyLock::new(|| crate::fl!("other-rooms"));
+static JOIN: LazyLock<String> = LazyLock::new(|| crate::fl!("join"));
+static UNKNOWN_ROOM: LazyLock<String> = LazyLock::new(|| crate::fl!("unknown-room"));
+static ROOM_HAS_NO_AVATAR: LazyLock<String> = LazyLock::new(|| crate::fl!("room-has-no-avatar"));
+static CREATE_ROOM: LazyLock<String> = LazyLock::new(|| crate::fl!("create-room"));
+static CREATE_SPACE: LazyLock<String> = LazyLock::new(|| crate::fl!("create-space"));
 
 impl Constellations {
     pub fn get_room_name(&self, room_id: &str) -> Option<&str> {

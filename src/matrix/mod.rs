@@ -121,6 +121,13 @@ pub type RoomListDiff = VectorDiff<RoomData>;
 pub type TimelineDiff<T> = VectorDiff<Arc<T>>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoomMemberInfo {
+    pub user_id: String,
+    pub display_name: Option<String>,
+    pub avatar_url: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChildData {
     pub order: Option<String>,
     pub suggested: bool,
@@ -239,6 +246,7 @@ pub enum MatrixEvent {
     RoomDiff(Box<RoomListDiff>),
     TimelineDiff(TimelineDiff<TimelineItem>),
     TimelineReset,
+    TimelineInitFinished,
     ReactionAdded {
         room_id: String,
         event_id: String,
@@ -1722,6 +1730,156 @@ impl MatrixEngine {
         Ok(())
     }
 
+    pub async fn get_room_members(&self, room_id: &str) -> Result<Vec<RoomMemberInfo>> {
+        let room_id_parsed = RoomId::parse(room_id)?;
+        let client = self.client().await;
+        let room = client.get_room(&room_id_parsed).context("Room not found")?;
+        let members = room.members(matrix_sdk::RoomMemberships::ACTIVE).await?;
+        let mut member_infos = Vec::new();
+        for m in members {
+            member_infos.push(RoomMemberInfo {
+                user_id: m.user_id().to_string(),
+                display_name: m.display_name().map(|s| s.to_string()),
+                avatar_url: m.avatar_url().map(|u| u.to_string()),
+            });
+        }
+        Ok(member_infos)
+    }
+
+    pub async fn get_pinned_events(
+        &self,
+        room_id: &str,
+    ) -> Result<Vec<matrix_sdk::ruma::OwnedEventId>> {
+        let room_id_parsed = RoomId::parse(room_id)?;
+        let client = self.client().await;
+        let room = client.get_room(&room_id_parsed).context("Room not found")?;
+        let pinned = room
+            .get_state_event_static::<matrix_sdk::ruma::events::room::pinned_events::RoomPinnedEventsEventContent>()
+            .await
+            .ok()
+            .flatten()
+            .and_then(|e| e.deserialize().ok())
+            .map(|ev| match ev {
+                matrix_sdk_base::deserialized_responses::SyncOrStrippedState::Sync(
+                    matrix_sdk::ruma::events::SyncStateEvent::Original(ev),
+                ) => Some(ev.content.pinned),
+                matrix_sdk_base::deserialized_responses::SyncOrStrippedState::Stripped(
+                    ev,
+                ) => ev.content.pinned,
+                _ => None,
+            })
+            .flatten()
+            .unwrap_or_default();
+        Ok(pinned)
+    }
+
+    pub async fn fetch_pinned_event_details(
+        &self,
+        room_id: &str,
+        event_id: &matrix_sdk::ruma::EventId,
+    ) -> Result<PinnedEventInfo> {
+        let room_id_parsed = RoomId::parse(room_id)?;
+        let client = self.client().await;
+        let room = client.get_room(&room_id_parsed).context("Room not found")?;
+
+        let timeline_event = room.event(event_id, None).await?;
+        let (sender_id, origin_server_ts, body) = match timeline_event.kind {
+            matrix_sdk::deserialized_responses::TimelineEventKind::Decrypted(decrypted) => {
+                let ev = decrypted.event.deserialize()?;
+                let sender = ev.sender().to_owned();
+                let ts = ev.origin_server_ts();
+                let body = match &ev {
+                    matrix_sdk::ruma::events::AnyTimelineEvent::MessageLike(msg) => match msg {
+                        matrix_sdk::ruma::events::AnyMessageLikeEvent::RoomMessage(
+                            matrix_sdk::ruma::events::MessageLikeEvent::Original(
+                                matrix_sdk::ruma::events::OriginalMessageLikeEvent {
+                                    content, ..
+                                },
+                            ),
+                        ) => content.body().to_string(),
+                        _ => "Unsupported message event type".to_string(),
+                    },
+                    _ => "Unsupported state event type".to_string(),
+                };
+                (sender, ts, body)
+            }
+            matrix_sdk::deserialized_responses::TimelineEventKind::UnableToDecrypt {
+                event,
+                ..
+            } => {
+                let ev = event.deserialize()?;
+                let sender = ev.sender().to_owned();
+                let ts = ev.origin_server_ts();
+                let body = match &ev {
+                    matrix_sdk::ruma::events::AnySyncTimelineEvent::MessageLike(msg) => match msg {
+                        matrix_sdk::ruma::events::AnySyncMessageLikeEvent::RoomMessage(
+                            matrix_sdk::ruma::events::SyncMessageLikeEvent::Original(
+                                matrix_sdk::ruma::events::OriginalSyncMessageLikeEvent {
+                                    content,
+                                    ..
+                                },
+                            ),
+                        ) => content.body().to_string(),
+                        _ => "Unsupported message event type".to_string(),
+                    },
+                    _ => "Unsupported state event type".to_string(),
+                };
+                (sender, ts, body)
+            }
+            matrix_sdk::deserialized_responses::TimelineEventKind::PlainText { event, .. } => {
+                let ev = event.deserialize()?;
+                let sender = ev.sender().to_owned();
+                let ts = ev.origin_server_ts();
+                let body = match &ev {
+                    matrix_sdk::ruma::events::AnySyncTimelineEvent::MessageLike(msg) => match msg {
+                        matrix_sdk::ruma::events::AnySyncMessageLikeEvent::RoomMessage(
+                            matrix_sdk::ruma::events::SyncMessageLikeEvent::Original(
+                                matrix_sdk::ruma::events::OriginalSyncMessageLikeEvent {
+                                    content,
+                                    ..
+                                },
+                            ),
+                        ) => content.body().to_string(),
+                        _ => "Unsupported message event type".to_string(),
+                    },
+                    _ => "Unsupported state event type".to_string(),
+                };
+                (sender, ts, body)
+            }
+        };
+
+        let ts_millis = u64::from(origin_server_ts.0);
+        let datetime =
+            chrono::DateTime::from_timestamp_millis(ts_millis as i64).unwrap_or_default();
+        let timestamp = datetime
+            .with_timezone(&chrono::Local)
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
+
+        // Fetch sender member profile details for name and avatar
+        let (sender_name, avatar_url) = if let Ok(Some(member)) = room.get_member(&sender_id).await
+        {
+            (
+                member
+                    .display_name()
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| sender_id.to_string()),
+                member.avatar_url().map(|u| u.to_string()),
+            )
+        } else {
+            (sender_id.to_string(), None)
+        };
+
+        Ok(PinnedEventInfo {
+            event_id: event_id.to_string(),
+            sender_id: sender_id.to_string(),
+            sender_name,
+            avatar_url,
+            timestamp,
+            body,
+        })
+    }
+
     pub async fn get_space_children(&self, space_id: &str) -> Result<Vec<RoomData>> {
         let space_id_parsed = RoomId::parse(space_id)?;
         let client = self.client().await;
@@ -2619,7 +2777,12 @@ impl MatrixEngine {
                         let key_path = entry.path().join("seshat-index.key");
                         if key_path.exists() {
                             if let Ok(bytes) = std::fs::read(&key_path) {
-                                if matrix_sdk_store_encryption::StoreCipher::import(&passphrase, &bytes).is_err() {
+                                if matrix_sdk_store_encryption::StoreCipher::import(
+                                    &passphrase,
+                                    &bytes,
+                                )
+                                .is_err()
+                                {
                                     tracing::warn!(
                                         "Mismatched search index encryption key in room {:?}. Clearing search index.",
                                         entry.file_name()
@@ -2691,6 +2854,16 @@ pub fn markdown_to_html(markdown: &str) -> String {
     pulldown_cmark::html::push_html(&mut html_output, parser);
 
     html_output
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PinnedEventInfo {
+    pub event_id: String,
+    pub sender_id: String,
+    pub sender_name: String,
+    pub avatar_url: Option<String>,
+    pub timestamp: String,
+    pub body: String,
 }
 
 #[cfg(test)]

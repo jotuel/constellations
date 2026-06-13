@@ -1,8 +1,10 @@
 use crate::{
     Constellations, MenuAct, Message,
     view::{
-        AVATAR_RADIUS, ROOM_AVATAR_HEIGHT, ROOM_AVATAR_WIDTH, SPACE_AVATAR_HEIGHT,
-        SPACE_AVATAR_WIDTH,
+        ALL_ROOMS, AVATAR_RADIUS, CANCEL, CREATE, CREATE_ROOM, CREATE_SPACE, ENTER_ROOM_NAME,
+        ENTER_SPACE_NAME, JOIN, JOINED_ROOMS, OTHER_ROOMS, ROOM_AVATAR_HEIGHT, ROOM_AVATAR_WIDTH,
+        ROOM_HAS_NO_AVATAR, ROOM_NAME, ROOM_SWITCHER_WIDTH, SPACE_AVATAR_HEIGHT,
+        SPACE_AVATAR_WIDTH, SPACE_NAME, SPACE_SETTINGS, UNKNOWN_ROOM, UNKNOWN_SPACE,
     },
 };
 use cosmic::{
@@ -49,11 +51,7 @@ impl<'switcher> Constellations {
             global_btn = global_btn.on_press(Message::SelectSpace(None));
         }
 
-        let global_tooltip = tooltip(
-            global_btn,
-            text::body(crate::fl!("all-rooms")),
-            Position::Right,
-        );
+        let global_tooltip = tooltip(global_btn, text::body(ALL_ROOMS.as_str()), Position::Right);
 
         content = content.push(global_tooltip);
 
@@ -97,7 +95,6 @@ impl<'switcher> Constellations {
         let scrollable_spaces = scrollable(content).height(cosmic::iced::Length::Fill);
 
         let bottom_content = Column::new()
-            .push(divider::horizontal::default())
             .push(view_menu_create())
             .spacing(10)
             .align_x(Alignment::Center);
@@ -132,8 +129,8 @@ impl<'switcher> Constellations {
         let avatar_element: Element<'switcher, Message> = if let Some(url) = &space.avatar_url {
             if let Some(handle) = self.media_cache.get(url) {
                 cosmic::widget::image(handle.clone())
-                    .width(32)
-                    .height(32)
+                    .width(SPACE_AVATAR_WIDTH)
+                    .height(SPACE_AVATAR_WIDTH)
                     .into()
             } else {
                 default_avatar.into()
@@ -149,9 +146,9 @@ impl<'switcher> Constellations {
 
         if self.creating_room || self.creating_space {
             let label = if self.creating_room {
-                crate::fl!("room-name")
+                ROOM_NAME.as_str()
             } else {
-                crate::fl!("space-name")
+                SPACE_NAME.as_str()
             };
 
             let mut name_input =
@@ -159,7 +156,7 @@ impl<'switcher> Constellations {
 
             let is_empty = self.new_room_name.trim().is_empty();
 
-            let mut create_btn = button::text(crate::fl!("create"));
+            let mut create_btn = button::text(CREATE.as_str());
             if !is_empty {
                 if self.creating_room {
                     name_input =
@@ -178,9 +175,9 @@ impl<'switcher> Constellations {
                 tooltip(
                     create_btn,
                     text::body(if self.creating_room {
-                        crate::fl!("enter-room-name")
+                        ENTER_ROOM_NAME.as_str()
                     } else {
-                        crate::fl!("enter-space-name")
+                        ENTER_SPACE_NAME.as_str()
                     }),
                     Position::Top,
                 )
@@ -199,7 +196,7 @@ impl<'switcher> Constellations {
                 Row::new()
                     .spacing(5)
                     .push(create_btn_widget)
-                    .push(button::text(crate::fl!("cancel")).on_press(cancel_msg)),
+                    .push(button::text(CANCEL.as_str()).on_press(cancel_msg)),
             );
 
             room_list = room_list.push(container(create_ui).padding(5));
@@ -214,7 +211,7 @@ impl<'switcher> Constellations {
             let space_name = space_room
                 .and_then(|r| r.name.as_deref())
                 .map(std::borrow::Cow::Borrowed)
-                .unwrap_or_else(|| std::borrow::Cow::Owned(crate::fl!("unknown-space")));
+                .unwrap_or_else(|| std::borrow::Cow::Borrowed(UNKNOWN_SPACE.as_str()));
 
             let avatar = if let Some(space) = space_room {
                 let default_avatar = container(
@@ -230,8 +227,8 @@ impl<'switcher> Constellations {
                     )
                     .size(14),
                 )
-                .width(24)
-                .height(24)
+                .width(ROOM_AVATAR_WIDTH)
+                .height(ROOM_AVATAR_HEIGHT)
                 .align_x(Alignment::Center)
                 .align_y(Alignment::Center);
 
@@ -239,8 +236,8 @@ impl<'switcher> Constellations {
                     if let Some(handle) = self.media_cache.get(url) {
                         Element::from(
                             cosmic::widget::image(handle.clone())
-                                .width(24)
-                                .height(24)
+                                .width(ROOM_AVATAR_WIDTH)
+                                .height(ROOM_AVATAR_HEIGHT)
                                 .border_radius(AVATAR_RADIUS),
                         )
                     } else {
@@ -252,8 +249,8 @@ impl<'switcher> Constellations {
             } else {
                 Element::from(
                     container(text::body("S").size(14))
-                        .width(24)
-                        .height(24)
+                        .width(ROOM_AVATAR_WIDTH)
+                        .height(ROOM_AVATAR_HEIGHT)
                         .align_x(Alignment::Center)
                         .align_y(Alignment::Center),
                 )
@@ -268,7 +265,7 @@ impl<'switcher> Constellations {
                 .push(
                     button::icon(Named::new("emblem-system"))
                         .extra_small()
-                        .tooltip(crate::fl!("space-settings"))
+                        .tooltip(SPACE_SETTINGS.as_str())
                         .on_press(Message::OpenSettings(crate::SettingsPanel::Space)),
                 );
             room_list = room_list.push(container(space_header).padding(5).align_top(50));
@@ -276,8 +273,7 @@ impl<'switcher> Constellations {
 
             if !self.other_rooms.is_empty() {
                 room_list = room_list.push(
-                    container(text::title3(crate::fl!("joined-rooms")).size(14))
-                        .padding([10, 5, 5, 5]),
+                    container(text::title3(JOINED_ROOMS.as_str()).size(14)).padding([10, 5, 5, 5]),
                 );
             }
         }
@@ -322,7 +318,7 @@ impl<'switcher> Constellations {
         if !self.filtered_other_rooms.is_empty() {
             room_list = room_list.push(divider::horizontal::default());
             room_list = room_list.push(
-                container(text::title3(crate::fl!("other-rooms")).size(14)).padding([10, 5, 5, 5]),
+                container(text::title3(OTHER_ROOMS.as_str()).size(14)).padding([10, 5, 5, 5]),
             );
 
             for &idx in &self.filtered_other_rooms {
@@ -357,7 +353,7 @@ impl<'switcher> Constellations {
                 .width(cosmic::iced::Length::Fill);
 
                 let join_btn =
-                    button::text(crate::fl!("join")).on_press(Message::JoinRoom(room.id.clone()));
+                    button::text(JOIN.as_str()).on_press(Message::JoinRoom(room.id.clone()));
 
                 room_list = room_list.push(
                     Row::new()
@@ -369,7 +365,7 @@ impl<'switcher> Constellations {
         }
 
         container(scrollable(room_list))
-            .width(250)
+            .width(ROOM_SWITCHER_WIDTH)
             .padding(10)
             .into()
     }
@@ -382,7 +378,7 @@ impl<'switcher> Constellations {
         let name = text::body(
             name_str
                 .map(std::borrow::Cow::Borrowed)
-                .unwrap_or_else(|| std::borrow::Cow::Owned(crate::fl!("unknown-room"))),
+                .unwrap_or_else(|| std::borrow::Cow::Borrowed(UNKNOWN_ROOM.as_str())),
         )
         .width(cosmic::iced::Length::Fill);
         let mut header = Row::new()
@@ -391,7 +387,7 @@ impl<'switcher> Constellations {
             .width(cosmic::iced::Length::Fill);
 
         let view_default_avatar = || {
-            container(text::body(crate::fl!("room-has-no-avatar")))
+            container(text::body(ROOM_HAS_NO_AVATAR.as_str()))
                 .width(ROOM_AVATAR_WIDTH)
                 .height(ROOM_AVATAR_HEIGHT)
                 .align_x(Alignment::Center)
@@ -418,7 +414,7 @@ impl<'switcher> Constellations {
 
 fn view_menu_create() -> menu::MenuBar<Message> {
     let plus_btn = button::icon(Named::new("list-add-symbolic"));
-    let plus_tooltip = tooltip(plus_btn, text::body(crate::fl!("create")), Position::Right);
+    let plus_tooltip = tooltip(plus_btn, text::body(CREATE.as_str()), Position::Right);
     let key_binds = std::collections::HashMap::new();
 
     let menu_tree = menu::Tree::with_children(
@@ -427,14 +423,14 @@ fn view_menu_create() -> menu::MenuBar<Message> {
             &key_binds,
             vec![
                 menu::Item::Button(
-                    crate::fl!("create-room"),
+                    CREATE_ROOM.as_str().to_string(),
                     Some(cosmic::widget::icon::Handle::from(Named::new(
                         "chat-symbolic",
                     ))),
                     MenuAct::CreateRoom,
                 ),
                 menu::Item::Button(
-                    crate::fl!("create-space"),
+                    CREATE_SPACE.as_str().to_string(),
                     Some(cosmic::widget::icon::Handle::from(Named::new(
                         "network-workgroup-symbolic",
                     ))),
