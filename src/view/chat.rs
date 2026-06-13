@@ -11,6 +11,7 @@ use cosmic::{
     },
 };
 use matrix_sdk::ruma::events::room::{MediaSource, message::MessageType};
+use matrix_sdk_ui::timeline::{TimelineDetails, TimelineEventItemId};
 
 use crate::{
     Constellations, Message, PreviewEvent, matrix,
@@ -533,13 +534,8 @@ impl<'chat> Constellations {
             };
             let reaction_row = self.view_reactions(event, item_id);
             let is_ignored = self.user_settings.ignored_users.contains(&item.sender_id);
-            let is_pinned = if let Some(item_id) = &item.item_id {
-                match item_id {
-                    matrix_sdk_ui::timeline::TimelineEventItemId::EventId(id) => {
-                        self.pinned_events.contains(id)
-                    }
-                    _ => false,
-                }
+            let is_pinned = if let Some(TimelineEventItemId::EventId(id)) = &item.item_id {
+                self.pinned_events.contains(id)
             } else {
                 false
             };
@@ -566,9 +562,7 @@ impl<'chat> Constellations {
                 let mut reply_sender = "";
                 let mut reply_body = "";
 
-                if let matrix_sdk_ui::timeline::TimelineDetails::Ready(replied_ev) =
-                    &in_reply_to.event
-                {
+                if let TimelineDetails::Ready(replied_ev) = &in_reply_to.event {
                     reply_sender = replied_ev.sender.as_str();
                     if let Some(msg) = replied_ev.content.as_message() {
                         reply_body = msg.body();
@@ -681,9 +675,7 @@ impl<'chat> Constellations {
                     "view-list-symbolic",
                 ))
                 .on_press(match root_id {
-                    matrix_sdk_ui::timeline::TimelineEventItemId::EventId(id) => {
-                        Message::OpenThread(id.to_owned())
-                    }
+                    TimelineEventItemId::EventId(id) => Message::OpenThread(id.to_owned()),
                     _ => Message::NoOp,
                 });
                 let action_tooltip = tooltip(
@@ -788,16 +780,12 @@ impl<'chat> Constellations {
             bubble_wrap.into()
         } else {
             let is_me = item.is_me;
-            let is_pinned = if let Some(item_id) = &item.item_id {
-                match item_id {
-                    matrix_sdk_ui::timeline::TimelineEventItemId::EventId(id) => {
-                        self.pinned_events.contains(id)
-                    }
-                    _ => false,
-                }
+            let is_pinned = if let Some(TimelineEventItemId::EventId(id)) = &item.item_id {
+                self.pinned_events.contains(id)
             } else {
                 false
             };
+
             let sender_info = self.view_sender_info(
                 item.avatar_url.as_deref(),
                 item.sender_name.as_str(),
@@ -880,8 +868,7 @@ impl<'chat> Constellations {
             let mut fallback_body_buf = String::new();
 
             if let Some(summary) = event.content().thread_summary()
-                && let matrix_sdk_ui::timeline::TimelineDetails::Ready(latest_ev) =
-                    &summary.latest_event
+                && let TimelineDetails::Ready(latest_ev) = &summary.latest_event
             {
                 // Try to find in timeline_items for better profile info
                 if let Some(item) = self.timeline_items.iter().rfind(|i| {
@@ -890,7 +877,7 @@ impl<'chat> Constellations {
                         .and_then(|timeline_item| timeline_item.as_event())
                         .and_then(|e| e.event_id())
                         .map(|id| match &latest_ev.identifier {
-                            matrix_sdk_ui::timeline::TimelineEventItemId::EventId(eid) => id == eid,
+                            TimelineEventItemId::EventId(eid) => id == eid,
                             _ => false,
                         })
                         .unwrap_or(false)
@@ -999,9 +986,7 @@ impl<'chat> Constellations {
                     &fallback_id
                 };
                 match id_to_use {
-                    matrix_sdk_ui::timeline::TimelineEventItemId::EventId(id) => {
-                        Message::OpenThread(id.to_owned())
-                    }
+                    TimelineEventItemId::EventId(id) => Message::OpenThread(id.to_owned()),
                     _ => Message::NoOp,
                 }
             });

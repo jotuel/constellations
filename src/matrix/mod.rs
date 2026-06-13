@@ -2770,28 +2770,26 @@ impl MatrixEngine {
 
         let mut key_mismatch = false;
         if search_index_path.exists()
-            && let Ok(entries) = std::fs::read_dir(&search_index_path) {
-                for entry in entries.flatten() {
-                    if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                        let key_path = entry.path().join("seshat-index.key");
-                        if key_path.exists()
-                            && let Ok(bytes) = std::fs::read(&key_path)
-                                && matrix_sdk_store_encryption::StoreCipher::import(
-                                    &passphrase,
-                                    &bytes,
-                                )
-                                .is_err()
-                                {
-                                    tracing::warn!(
-                                        "Mismatched search index encryption key in room {:?}. Clearing search index.",
-                                        entry.file_name()
-                                    );
-                                    key_mismatch = true;
-                                    break;
-                                }
+            && let Ok(entries) = std::fs::read_dir(&search_index_path)
+        {
+            for entry in entries.flatten() {
+                if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                    let key_path = entry.path().join("seshat-index.key");
+                    if key_path.exists()
+                        && let Ok(bytes) = std::fs::read(&key_path)
+                        && matrix_sdk_store_encryption::StoreCipher::import(&passphrase, &bytes)
+                            .is_err()
+                    {
+                        tracing::warn!(
+                            "Mismatched search index encryption key in room {:?}. Clearing search index.",
+                            entry.file_name()
+                        );
+                        key_mismatch = true;
+                        break;
                     }
                 }
             }
+        }
 
         if key_mismatch {
             let _ = std::fs::remove_dir_all(&search_index_path);

@@ -436,11 +436,10 @@ impl Constellations {
                     _ => false,
                 };
 
-                let is_reset = match &mapped_diff {
-                    eyeball_im::VectorDiff::Reset { .. } => true,
-                    eyeball_im::VectorDiff::Clear => true,
-                    _ => false,
-                };
+                let is_reset = matches!(
+                    &mapped_diff,
+                    eyeball_im::VectorDiff::Reset { .. } | eyeball_im::VectorDiff::Clear
+                );
 
                 if is_prepend {
                     self.needs_threaded_scroll_adjustment = true;
@@ -485,11 +484,10 @@ impl Constellations {
                 _ => false,
             };
 
-            let is_reset = match &mapped_diff {
-                eyeball_im::VectorDiff::Reset { .. } => true,
-                eyeball_im::VectorDiff::Clear => true,
-                _ => false,
-            };
+            let is_reset = matches!(
+                &mapped_diff,
+                eyeball_im::VectorDiff::Reset { .. } | eyeball_im::VectorDiff::Clear
+            );
 
             if is_prepend {
                 self.needs_scroll_adjustment = true;
@@ -1773,9 +1771,10 @@ impl Constellations {
                             && viewport.bounds().width != self.last_threaded_viewport_width)
                         || (self.last_threaded_viewport_height > 0.0
                             && viewport.bounds().height != self.last_threaded_viewport_height))
-                        && !self.needs_threaded_scroll_adjustment {
-                            is_layout_resize = true;
-                        }
+                        && !self.needs_threaded_scroll_adjustment
+                    {
+                        is_layout_resize = true;
+                    }
                     self.needs_threaded_layout_scroll_restoration = false;
 
                     let mut task = Task::none();
@@ -1871,9 +1870,10 @@ impl Constellations {
                             && viewport.bounds().width != self.last_viewport_width)
                         || (self.last_viewport_height > 0.0
                             && viewport.bounds().height != self.last_viewport_height))
-                        && !self.needs_scroll_adjustment {
-                            is_layout_resize = true;
-                        }
+                        && !self.needs_scroll_adjustment
+                    {
+                        is_layout_resize = true;
+                    }
                     self.needs_layout_scroll_restoration = false;
 
                     let mut task = Task::none();
