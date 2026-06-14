@@ -39,3 +39,13 @@ libcosmic (and iced) follows the Model-View-Update (MVU) pattern:
 * **"Component not found"**: Ensure you have libcosmic features enabled in `Cargo.toml`.
 * **Theming issues**: Verify you are taking Theme as an argument in your view function and passing it correctly.
 * **Decryption Key Mismatches in Lazy Stores**: If your app uses multiple encrypted stores (e.g., matrix-rust-sdk SQLite store and search index directory), the SQLite store is typically verified/initialized at startup while other directories may be loaded lazily in background threads or tasks. If the passphrase regenerates or changes (e.g. keyring reset/lock), the main store might initialize from scratch successfully, but lazy stores will fail later with decryption/MAC errors (e.g., `invalid MAC of the store key`). Always ensure that if the main store database is cleared or created fresh, all associated lazy cache directories are cleared alongside it.
+
+## 5. Related Skills
+These companion skills extend COSMIC development with specialized guidance. Load them when their domain is relevant to your task:
+
+| Skill | Trigger it when… |
+|---|---|
+| **bolt** — Performance optimization | You are profiling, reducing allocations, fixing render-loop hotspots, or addressing `RwLock` / async concurrency bottlenecks. |
+| **palette** — UI/UX & Accessibility | You are building or reviewing widgets, empty states, tooltips, disabled buttons, destructive actions, or localized copy. |
+| **sentinel** — Security & Stability | You are handling user input parsing, cryptographic key/passphrase generation, or blocking I/O inside async tasks. |
+| **testing** — Unit Testing | You are writing or debugging tests, verifying state-machine update flows, or isolating compilation issues in test packages. |
