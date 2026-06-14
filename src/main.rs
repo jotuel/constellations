@@ -1,16 +1,16 @@
 #![recursion_limit = "256"]
 
 pub mod constellations;
+mod matrix;
 pub mod settings;
 pub mod utils;
-mod matrix;
 mod view;
 
-pub use constellations::{Constellations, Message, QrLoginStep, SettingsPanel, MenuAct};
-pub use matrix_sdk::ruma::events::room::MediaSource;
-pub use matrix_sdk::ruma::OwnedRoomId;
-pub use url::Url;
+pub use constellations::{Constellations, MenuAct, Message, QrLoginStep, SettingsPanel};
 pub use cosmic::Core;
+pub use matrix_sdk::ruma::OwnedRoomId;
+pub use matrix_sdk::ruma::events::room::MediaSource;
+pub use url::Url;
 pub use utils::item::ConstellationsItem;
 pub use utils::preview::{PreviewEvent, parse_markdown, parse_plain_text};
 pub use utils::{
