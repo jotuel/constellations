@@ -2,27 +2,26 @@ use super::Constellations;
 use crate::matrix;
 use crate::utils::contains_ignore_ascii_case;
 
+fn build_error_notification(body: &str) -> notify_rust::Notification {
+    let mut notification = notify_rust::Notification::new();
+    notification
+        .appname("Constellations")
+        .summary("Constellations Error")
+        .body(body)
+        .icon("dialog-error");
+    notification
+}
+
 impl Constellations {
     pub fn set_error(&mut self, error: String) {
         tracing::error!("Error occurred: {}", error);
         let error_clone = error.clone();
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             handle.spawn(async move {
-                let _ = notify_rust::Notification::new()
-                    .appname("Constellations")
-                    .summary("Constellations Error")
-                    .body(&error_clone)
-                    .icon("dialog-error")
-                    .show_async()
-                    .await;
+                let _ = build_error_notification(&error_clone).show_async().await;
             });
         } else {
-            let _ = notify_rust::Notification::new()
-                .appname("Constellations")
-                .summary("Constellations Error")
-                .body(&error_clone)
-                .icon("dialog-error")
-                .show();
+            let _ = build_error_notification(&error_clone).show();
         }
         self.error = Some(error);
     }

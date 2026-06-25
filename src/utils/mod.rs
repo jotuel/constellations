@@ -59,15 +59,20 @@ pub fn fuzzy_match_ignore_case(haystack: &str, query: &str) -> bool {
     query_chars.peek().is_none()
 }
 
+/// Redacts the values of sensitive query params and the entire URL fragment,
+/// intended for safely logging URLs.
 pub fn redact_url(url: &Url) -> String {
     let mut redacted = url.clone();
+    if redacted.fragment().is_some() {
+        redacted.set_fragment(Some("REDACTED"));
+    }
     let pairs: Vec<(String, String)> = redacted
         .query_pairs()
         .map(|(k, v)| (k.into_owned(), v.into_owned()))
         .collect();
     redacted.set_query(None);
     for (k, mut v) in pairs {
-        if k == "code" || k == "state" {
+        if k == "code" || k == "state" || k == "access_token" || k == "login_token" {
             v = "[REDACTED]".to_string();
         }
         redacted.query_pairs_mut().append_pair(&k, &v);
@@ -229,3 +234,40 @@ pub mod item;
 pub mod preview;
 pub mod rich_text;
 pub mod unified_push;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_redact_url() {
+        // query params `code` and `state` redacted to "[REDACTED]", while a normal param (e.g. `room`) is preserved
+        let url = Url::parse("https://example.com/oauth?code=secret_code&state=secret_state&room=123").unwrap();
+        let redacted_str = redact_url(&url);
+        let redacted_url = Url::parse(&redacted_str).unwrap();
+        let query_map: std::collections::HashMap<_, _> = redacted_url.query_pairs().into_owned().collect();
+        assert_eq!(query_map.get("code").map(|s| s.as_str()), Some("[REDACTED]"));
+        assert_eq!(query_map.get("state").map(|s| s.as_str()), Some("[REDACTED]"));
+        assert_eq!(query_map.get("room").map(|s| s.as_str()), Some("123"));
+
+        // access_token and login_token redacted
+        let url = Url::parse("https://example.com/login?access_token=secret_access&login_token=secret_login").unwrap();
+        let redacted_str = redact_url(&url);
+        let redacted_url = Url::parse(&redacted_str).unwrap();
+        let query_map: std::collections::HashMap<_, _> = redacted_url.query_pairs().into_owned().collect();
+        assert_eq!(query_map.get("access_token").map(|s| s.as_str()), Some("[REDACTED]"));
+        assert_eq!(query_map.get("login_token").map(|s| s.as_str()), Some("[REDACTED]"));
+
+        // fragment redacted: build a matrix.to-style URL with a fragment secret and assert the returned string does NOT contain the secret text and DOES contain "#REDACTED"
+        let secret_text = "SECRET_RENDEZVOUS_123456";
+        let url = Url::parse(&format!("https://matrix.to/#/login?rendezvous={}", secret_text)).unwrap();
+        let redacted_str = redact_url(&url);
+        assert!(!redacted_str.contains(secret_text));
+        assert!(redacted_str.contains("#REDACTED"));
+
+        // a URL with no query and no fragment round-trips unchanged
+        let url = Url::parse("https://example.com/plain/path").unwrap();
+        let redacted_str = redact_url(&url);
+        assert_eq!(redacted_str, "https://example.com/plain/path");
+    }
+}
