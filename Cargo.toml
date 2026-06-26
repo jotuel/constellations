@@ -48,7 +48,7 @@ mime_guess = "2.0.5"
 rand = { version = "0.10.1", features = ["std_rng"] }
 notify-rust = "4.15.0"
 futures = "0.3.32"
-ruma-events = "0.33"
+ruma-events = "0.34"
 i18n-embed = { version = "0.16", features = ["fluent-system", "desktop-requester"] }
 i18n-embed-fl = "0.10"
 rust-embed = "8"
@@ -57,14 +57,11 @@ mimalloc = { version = "0.1.50", features = ["secure"] }
 livekit = { version = "0.7", features = ["rustls-tls-native-roots"] }
 ashpd =  { version = "0.13", features = ["location"] }
 reqwest = { version = "0.13", features = ["json"] }
-emojis = "0.8"
+emojis = "0.9"
 rustls = { version = "0.23", features = ["ring"] }
 qrcode = "0.14.0"
 unifiedpush = "0.1.0"
 unifiedpush_storage_preferences = "0.1.0"
-
-
-
 
 [dev-dependencies]
 matrix-sdk-test = "0.18.0"
