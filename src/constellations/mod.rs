@@ -31,6 +31,19 @@ pub enum QrLoginStep {
     Error,
 }
 
+/// Which login flow (if any) is currently in progress.
+///
+/// Replaces three booleans (`is_logging_in`, `is_oidc_logging_in`,
+/// `is_qr_logging_in` + `qr_login_step`) that had to be kept mutually exclusive
+/// by hand. With this enum, two flows being active at once is unrepresentable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AuthFlow {
+    Idle,
+    Password,
+    Oidc,
+    Qr { step: QrLoginStep },
+}
+
 pub struct Constellations {
     pub(crate) core: Core,
     pub(crate) matrix: Option<matrix::MatrixEngine>,
@@ -54,10 +67,7 @@ pub struct Constellations {
     pub(crate) login_homeserver: String,
     pub(crate) login_username: String,
     pub(crate) login_password: String,
-    pub(crate) is_logging_in: bool,
-    pub(crate) is_oidc_logging_in: bool,
-    pub(crate) is_qr_logging_in: bool,
-    pub(crate) qr_login_step: QrLoginStep,
+    pub(crate) auth_flow: AuthFlow,
     pub(crate) qr_rendezvous_url: Option<String>,
     pub(crate) is_registering_mode: bool,
     pub(crate) is_registering: bool,

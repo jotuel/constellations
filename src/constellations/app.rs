@@ -1,4 +1,4 @@
-use super::{Constellations, MenuAct, Message, QrLoginStep, SettingsPanel};
+use super::{AuthFlow, Constellations, MenuAct, Message, SettingsPanel};
 use crate::matrix;
 use crate::settings;
 
@@ -164,10 +164,7 @@ impl Application for Constellations {
             login_homeserver: "https://matrix.org".to_string(),
             login_username: String::new(),
             login_password: String::new(),
-            is_logging_in: false,
-            is_oidc_logging_in: false,
-            is_qr_logging_in: false,
-            qr_login_step: QrLoginStep::NotStarted,
+            auth_flow: AuthFlow::Idle,
             qr_rendezvous_url: None,
             is_registering_mode: false,
             is_registering: false,

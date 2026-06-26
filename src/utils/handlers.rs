@@ -2,8 +2,9 @@ use crate::matrix::TimelineItem;
 use crate::preview::parse_markdown;
 use crate::settings;
 use crate::{
-    ApplyVectorDiffExt, Constellations, ConstellationsItem, MediaSource, Message, OwnedRoomId,
-    QrLoginStep, SettingsPanel, THREADED_TIMELINE_ID, TIMELINE_ID, Url, matrix, redact_url,
+    ApplyVectorDiffExt, AuthFlow, Constellations, ConstellationsItem, MediaSource, Message,
+    OwnedRoomId, QrLoginStep, SettingsPanel, THREADED_TIMELINE_ID, TIMELINE_ID, Url, matrix,
+    redact_url,
 };
 use cosmic::iced::widget::scrollable;
 use cosmic::{Action, Application, Task};
@@ -1351,7 +1352,7 @@ impl Constellations {
         &mut self,
     ) -> Task<Action<<Constellations as Application>::Message>> {
         if let Some(matrix) = &self.matrix {
-            self.is_logging_in = true;
+            self.auth_flow = AuthFlow::Password;
             self.error = None;
             self.sync_status = matrix::SyncStatus::Disconnected;
             let matrix = matrix.clone();
@@ -1384,8 +1385,7 @@ impl Constellations {
         &mut self,
         res: Result<String, matrix::SyncError>,
     ) -> Task<Action<<Constellations as Application>::Message>> {
-        self.is_logging_in = false;
-        self.is_oidc_logging_in = false;
+        self.auth_flow = AuthFlow::Idle;
         match res {
             Ok(user_id) => {
                 self.user_id = Some(user_id.clone());
@@ -1461,7 +1461,7 @@ impl Constellations {
         &mut self,
     ) -> Task<Action<<Constellations as Application>::Message>> {
         if let Some(matrix) = &self.matrix {
-            self.is_oidc_logging_in = true;
+            self.auth_flow = AuthFlow::Oidc;
             self.error = None;
             let matrix = matrix.clone();
             let homeserver = self.login_homeserver.clone();
@@ -1489,7 +1489,7 @@ impl Constellations {
                 let _ = open::that(url.as_str());
             }
             Err(e) => {
-                self.is_oidc_logging_in = false;
+                self.auth_flow = AuthFlow::Idle;
                 self.set_error(format!("OIDC login failed to start: {}", e));
             }
         }
@@ -1501,7 +1501,7 @@ impl Constellations {
         url: Url,
     ) -> Task<Action<<Constellations as Application>::Message>> {
         if let Some(matrix) = &self.matrix {
-            self.is_oidc_logging_in = true;
+            self.auth_flow = AuthFlow::Oidc;
             self.error = None;
             let matrix = matrix.clone();
             Task::perform(
@@ -1548,8 +1548,7 @@ impl Constellations {
         self.selected_room = None;
         self.timeline_items.clear();
         self.recompute_thread_counts();
-        self.is_logging_in = false;
-        self.is_oidc_logging_in = false;
+        self.auth_flow = AuthFlow::Idle;
         self.login_password.clear();
         self.error = None;
         self.selected_space = None;
@@ -1562,8 +1561,7 @@ impl Constellations {
     pub fn handle_start_qr_login(
         &mut self,
     ) -> Task<Action<<Constellations as Application>::Message>> {
-        self.is_qr_logging_in = true;
-        self.qr_login_step = QrLoginStep::Initiating;
+        self.auth_flow = AuthFlow::Qr { step: QrLoginStep::Initiating };
         self.error = None;
 
         let mut hs = self.login_homeserver.trim().to_string();
@@ -1599,8 +1597,7 @@ impl Constellations {
     pub fn handle_cancel_qr_login(
         &mut self,
     ) -> Task<Action<<Constellations as Application>::Message>> {
-        self.is_qr_logging_in = false;
-        self.qr_login_step = QrLoginStep::NotStarted;
+        self.auth_flow = AuthFlow::Idle;
         self.qr_rendezvous_url = None;
         Task::none()
     }
@@ -1609,7 +1606,7 @@ impl Constellations {
         &mut self,
         step: QrLoginStep,
     ) -> Task<Action<<Constellations as Application>::Message>> {
-        self.qr_login_step = step;
+        self.auth_flow = AuthFlow::Qr { step };
         match step {
             QrLoginStep::ShowingQr => Task::none(),
             QrLoginStep::Authenticating => {
@@ -1623,8 +1620,7 @@ impl Constellations {
             }
             QrLoginStep::Success => {
                 // Step 4: Login complete!
-                self.is_qr_logging_in = false;
-                self.qr_login_step = QrLoginStep::NotStarted;
+                self.auth_flow = AuthFlow::Idle;
                 self.qr_rendezvous_url = None;
 
                 // Complete login with simulated user session
@@ -2342,7 +2338,7 @@ impl Constellations {
             Message::NoOp => Task::none(),
             Message::SubmitOidcLogin => self.handle_submit_oidc_login(),
             Message::CancelOidcLogin => {
-                self.is_oidc_logging_in = false;
+                self.auth_flow = AuthFlow::Idle;
                 Task::none()
             }
             Message::OidcLoginStarted(res) => self.handle_oidc_login_started(res),
@@ -2822,8 +2818,7 @@ mod tests {
             login_homeserver: String::new(),
             login_username: String::new(),
             login_password: String::new(),
-            is_logging_in: false,
-            is_oidc_logging_in: false,
+            auth_flow: AuthFlow::Idle,
             is_registering: false,
             is_registering_mode: false,
             is_initializing: false,
@@ -2871,8 +2866,6 @@ mod tests {
             emoji_search_query: String::new(),
             selected_emoji_group: None,
             is_composer_emoji_picker_active: false,
-            is_qr_logging_in: false,
-            qr_login_step: QrLoginStep::NotStarted,
             qr_rendezvous_url: None,
             room_name_cache: HashMap::new(),
             thread_counts: HashMap::new(),
@@ -2988,26 +2981,26 @@ mod tests {
     #[test]
     fn test_handle_login_finished_ok() {
         let mut app = create_dummy_constellations();
-        app.is_logging_in = true;
-        app.is_oidc_logging_in = true;
+        app.auth_flow = AuthFlow::Password;
+        app.auth_flow = AuthFlow::Oidc;
 
         let _task = app.handle_login_finished(Ok("test_user_id".to_string()));
 
-        assert!(!app.is_logging_in);
-        assert!(!app.is_oidc_logging_in);
+        assert!(app.auth_flow != AuthFlow::Password);
+        assert!(app.auth_flow != AuthFlow::Oidc);
         assert_eq!(app.user_id, Some("test_user_id".to_string()));
     }
 
     #[test]
     fn test_handle_login_finished_err_sliding_sync() {
         let mut app = create_dummy_constellations();
-        app.is_logging_in = true;
-        app.is_oidc_logging_in = true;
+        app.auth_flow = AuthFlow::Password;
+        app.auth_flow = AuthFlow::Oidc;
 
         let _task = app.handle_login_finished(Err(matrix::SyncError::MissingSlidingSyncSupport));
 
-        assert!(!app.is_logging_in);
-        assert!(!app.is_oidc_logging_in);
+        assert!(app.auth_flow != AuthFlow::Password);
+        assert!(app.auth_flow != AuthFlow::Oidc);
         assert_eq!(
             app.sync_status,
             matrix::SyncStatus::MissingSlidingSyncSupport
@@ -3017,14 +3010,14 @@ mod tests {
     #[test]
     fn test_handle_login_finished_err_generic() {
         let mut app = create_dummy_constellations();
-        app.is_logging_in = true;
-        app.is_oidc_logging_in = true;
+        app.auth_flow = AuthFlow::Password;
+        app.auth_flow = AuthFlow::Oidc;
 
         let _task =
             app.handle_login_finished(Err(matrix::SyncError::Generic("network error".to_string())));
 
-        assert!(!app.is_logging_in);
-        assert!(!app.is_oidc_logging_in);
+        assert!(app.auth_flow != AuthFlow::Password);
+        assert!(app.auth_flow != AuthFlow::Oidc);
         assert_eq!(app.error, Some("Login failed: network error".to_string()));
     }
 
@@ -3135,8 +3128,8 @@ mod tests {
         // Set up state that should be cleared by logout_finished
         app.user_id = Some("test_user".to_string());
         app.sync_status = matrix::SyncStatus::Syncing;
-        app.is_logging_in = true;
-        app.is_oidc_logging_in = true;
+        app.auth_flow = AuthFlow::Password;
+        app.auth_flow = AuthFlow::Oidc;
         app.login_password = "password123".to_string();
         app.error = Some("some error".to_string());
         app.selected_space = Some(RoomId::parse("!space:example.com").unwrap());
@@ -3153,8 +3146,8 @@ mod tests {
         assert!(app.room_list.is_empty());
         assert_eq!(app.selected_room, None);
         assert!(app.timeline_items.is_empty());
-        assert!(!app.is_logging_in);
-        assert!(!app.is_oidc_logging_in);
+        assert!(app.auth_flow != AuthFlow::Password);
+        assert!(app.auth_flow != AuthFlow::Oidc);
         assert!(app.login_password.is_empty());
         assert_eq!(app.error, None);
         assert_eq!(app.selected_space, None);
@@ -3210,14 +3203,14 @@ mod tests {
         let mut app = create_dummy_constellations();
 
         // 1. Initial State
-        assert!(!app.is_qr_logging_in);
-        assert_eq!(app.qr_login_step, QrLoginStep::NotStarted);
+        assert!(!matches!(app.auth_flow, AuthFlow::Qr { .. }));
+        assert_eq!(app.auth_flow, AuthFlow::Idle);
         assert!(app.qr_rendezvous_url.is_none());
 
         // 2. Start QR Login
         let _task = app.handle_start_qr_login();
-        assert!(app.is_qr_logging_in);
-        assert_eq!(app.qr_login_step, QrLoginStep::Initiating);
+        assert!(matches!(app.auth_flow, AuthFlow::Qr { .. }));
+        assert_eq!(app.auth_flow, AuthFlow::Qr { step: QrLoginStep::Initiating });
         assert!(app.qr_rendezvous_url.is_some());
 
         let url = app.qr_rendezvous_url.clone().unwrap();
@@ -3225,34 +3218,34 @@ mod tests {
 
         // 3. Step Changed to ShowingQr
         let _task = app.handle_qr_login_step_changed(QrLoginStep::ShowingQr);
-        assert_eq!(app.qr_login_step, QrLoginStep::ShowingQr);
+        assert_eq!(app.auth_flow, AuthFlow::Qr { step: QrLoginStep::ShowingQr });
 
         // 4. Rendezvous Established
         let _task = app.handle_qr_login_step_changed(QrLoginStep::RendezvousEstablished);
-        assert_eq!(app.qr_login_step, QrLoginStep::RendezvousEstablished);
+        assert_eq!(app.auth_flow, AuthFlow::Qr { step: QrLoginStep::RendezvousEstablished });
 
         // 5. Step Changed to Authenticating
         let _task = app.handle_qr_login_step_changed(QrLoginStep::Authenticating);
-        assert_eq!(app.qr_login_step, QrLoginStep::Authenticating);
+        assert_eq!(app.auth_flow, AuthFlow::Qr { step: QrLoginStep::Authenticating });
 
         // 6. Step Changed to Success
         // Calling handle_qr_login_step_changed(Success) will trigger handle_login_finished,
         // which cleans up QR state and sets the user session.
         let _task = app.handle_qr_login_step_changed(QrLoginStep::Success);
-        assert!(!app.is_qr_logging_in);
-        assert_eq!(app.qr_login_step, QrLoginStep::NotStarted);
+        assert!(!matches!(app.auth_flow, AuthFlow::Qr { .. }));
+        assert_eq!(app.auth_flow, AuthFlow::Idle);
         assert!(app.qr_rendezvous_url.is_none());
         assert_eq!(app.user_id, Some("@simulated_user:matrix.org".to_string()));
 
         // 7. Cancel QR Login
         let mut app = create_dummy_constellations();
         let _task = app.handle_start_qr_login();
-        assert!(app.is_qr_logging_in);
+        assert!(matches!(app.auth_flow, AuthFlow::Qr { .. }));
         assert!(app.qr_rendezvous_url.is_some());
 
         let _task = app.handle_cancel_qr_login();
-        assert!(!app.is_qr_logging_in);
-        assert_eq!(app.qr_login_step, QrLoginStep::NotStarted);
+        assert!(!matches!(app.auth_flow, AuthFlow::Qr { .. }));
+        assert_eq!(app.auth_flow, AuthFlow::Idle);
         assert!(app.qr_rendezvous_url.is_none());
     }
 

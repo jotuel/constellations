@@ -1,4 +1,4 @@
-use crate::{Constellations, Message, QrLoginStep};
+use crate::{AuthFlow, Constellations, Message, QrLoginStep};
 use cosmic::{
     Element,
     iced::Alignment,
@@ -7,7 +7,7 @@ use cosmic::{
 
 impl Constellations {
     pub fn view_login(&self) -> Element<'_, Message> {
-        if self.is_qr_logging_in {
+        if matches!(self.auth_flow, AuthFlow::Qr { .. }) {
             return self.view_qr_login();
         }
         let title = if self.is_registering_mode {
@@ -27,7 +27,7 @@ impl Constellations {
         let password_input = text_input(crate::fl!("password"), &self.login_password).password();
 
         let (homeserver_input, username_input, password_input) =
-            if self.is_logging_in || self.is_oidc_logging_in || self.is_registering {
+            if (self.auth_flow == AuthFlow::Password || self.auth_flow == AuthFlow::Oidc) || self.is_registering {
                 (homeserver_input, username_input, password_input)
             } else {
                 (
@@ -73,11 +73,11 @@ impl Constellations {
                     btn.into()
                 }
             }
-        } else if self.is_logging_in {
+        } else if self.auth_flow == AuthFlow::Password {
             button::text(crate::fl!("logging-in")).into()
         } else {
             let mut btn = button::text(crate::fl!("login-button"));
-            if !is_missing_fields && !self.is_oidc_logging_in {
+            if !is_missing_fields && self.auth_flow != AuthFlow::Oidc {
                 btn = btn.on_press(Message::SubmitLogin);
             }
             if is_missing_fields {
@@ -92,7 +92,7 @@ impl Constellations {
             }
         };
 
-        let oidc_button: Element<'_, Message> = if self.is_oidc_logging_in {
+        let oidc_button: Element<'_, Message> = if self.auth_flow == AuthFlow::Oidc {
             let oidc_col = Column::new()
                 .spacing(5)
                 .align_x(Alignment::Center)
@@ -101,7 +101,7 @@ impl Constellations {
             oidc_col.into()
         } else {
             let mut btn = button::text(crate::fl!("oidc-login-button"));
-            if !self.login_homeserver.is_empty() && !self.is_logging_in && !self.is_registering_mode
+            if !self.login_homeserver.is_empty() && self.auth_flow != AuthFlow::Password && !self.is_registering_mode
             {
                 btn = btn.on_press(Message::SubmitOidcLogin);
             }
@@ -110,7 +110,7 @@ impl Constellations {
 
         let qr_login_button = {
             let mut btn = button::text(crate::fl!("login-qr-button"));
-            if !self.is_logging_in && !self.is_registering_mode && !self.is_oidc_logging_in {
+            if self.auth_flow != AuthFlow::Password && !self.is_registering_mode && self.auth_flow != AuthFlow::Oidc {
                 btn = btn.on_press(Message::StartQrLogin);
             }
             btn
@@ -123,7 +123,7 @@ impl Constellations {
         };
 
         let toggle_mode_button =
-            if self.is_logging_in || self.is_registering || self.is_oidc_logging_in {
+            if (self.auth_flow == AuthFlow::Password || self.auth_flow == AuthFlow::Oidc) || self.is_registering {
                 toggle_mode_button
             } else {
                 toggle_mode_button.on_press(Message::ToggleLoginMode)
@@ -148,6 +148,10 @@ impl Constellations {
 
     pub fn view_qr_login(&self) -> Element<'_, Message> {
         let title = crate::fl!("login-qr-title");
+        let step = match self.auth_flow {
+            AuthFlow::Qr { step } => step,
+            _ => QrLoginStep::NotStarted,
+        };
         let mut content = Column::new()
             .spacing(15)
             .padding(20)
@@ -155,7 +159,7 @@ impl Constellations {
             .align_x(Alignment::Center)
             .push(text::title1(title));
 
-        match self.qr_login_step {
+        match step {
             QrLoginStep::Initiating => {
                 content = content
                     .push(container(

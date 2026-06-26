@@ -6,7 +6,7 @@ pub mod settings;
 pub mod utils;
 mod view;
 
-pub use constellations::{Constellations, MenuAct, Message, QrLoginStep, SettingsPanel};
+pub use constellations::{AuthFlow, Constellations, MenuAct, Message, QrLoginStep, SettingsPanel};
 pub use cosmic::Core;
 pub use matrix_sdk::ruma::OwnedRoomId;
 pub use matrix_sdk::ruma::events::room::MediaSource;
@@ -98,7 +98,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
 
-    let rt = tokio::runtime::Runtime::new().unwrap();
     let _guard = rt.enter();
 
     cosmic::app::run::<Constellations>(cosmic::app::Settings::default(), uri)?;
