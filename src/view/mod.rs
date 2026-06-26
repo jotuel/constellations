@@ -45,7 +45,6 @@ static ENTER_ROOM_NAME: LazyLock<String> = LazyLock::new(|| crate::fl!("enter-ro
 static ENTER_SPACE_NAME: LazyLock<String> = LazyLock::new(|| crate::fl!("enter-space-name"));
 static CANCEL: LazyLock<String> = LazyLock::new(|| crate::fl!("cancel"));
 static UNKNOWN_SPACE: LazyLock<String> = LazyLock::new(|| crate::fl!("unknown-space"));
-static SPACE_SETTINGS: LazyLock<String> = LazyLock::new(|| crate::fl!("space-settings"));
 static JOINED_ROOMS: LazyLock<String> = LazyLock::new(|| crate::fl!("joined-rooms"));
 static OTHER_ROOMS: LazyLock<String> = LazyLock::new(|| crate::fl!("other-rooms"));
 static JOIN: LazyLock<String> = LazyLock::new(|| crate::fl!("join"));

@@ -19,7 +19,7 @@ use crate::{
         ADD_REACTION, CLOSE_THREAD, DOWNLOAD_FILE, DOWNLOAD_IMAGE, DOWNLOADED, IGNORE, OPEN_THREAD,
         REPLIES, REPLY, TOOLTIP_ATTACH, TOOLTIP_DELETE, TOOLTIP_EDIT, TOOLTIP_EMOJIS, TOOLTIP_FIND,
         TOOLTIP_LOCATION, TOOLTIP_REPLY, TOOLTIP_THREAD, UNIGNORE_USER,
-        switcher::view_settings_name_menu,
+        switcher::view_settings_name_button,
     },
 };
 
@@ -1023,10 +1023,9 @@ impl<'chat> Constellations {
                 Row::new()
                     .spacing(10)
                     .align_y(Alignment::Center)
-                    .push(view_settings_name_menu(
+                    .push(view_settings_name_button(
                         room_name,
-                        &crate::fl!("room-settings"),
-                        crate::MenuAct::RoomSettings,
+                        crate::SettingsPanel::Room,
                     ));
 
             if participant_count > 0 {
