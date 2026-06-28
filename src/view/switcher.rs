@@ -454,6 +454,41 @@ impl<'switcher> Constellations {
             .into()
     }
 
+    pub(crate) fn view_create_form(&self) -> Element<'_, Message> {
+        let is_room = self.creating_room;
+        let (label, empty_hint) = if is_room {
+            (ROOM_NAME.as_str(), ENTER_ROOM_NAME.as_str())
+        } else {
+            (SPACE_NAME.as_str(), ENTER_SPACE_NAME.as_str())
+        };
+
+        let mut name_input =
+            text_input(label, &self.new_room_name).on_input(Message::NewRoomNameChanged);
+
+        let is_empty = self.new_room_name.trim().is_empty();
+
+        let mut create_btn = button::text(CREATE.as_str());
+        if !is_empty {
+            if is_room {
+                name_input =
+                    name_input.on_submit(|_| Message::CreateRoom(self.new_room_name.clone()));
+                create_btn = create_btn.on_press(Message::CreateRoom(self.new_room_name.clone()));
+            } else {
+                name_input =
+                    name_input.on_submit(|_| Message::CreateSpace(self.new_room_name.clone()));
+                create_btn = create_btn.on_press(Message::CreateSpace(self.new_room_name.clone()));
+            }
+        }
+
+        let create_btn_widget: Element<'_, Message> = if is_empty {
+            tooltip(create_btn, text::body(empty_hint), Position::Top).into()
+        } else {
+            create_btn.into()
+        };
+
+        Column::new().spacing(10).push(name_input).push(create_btn_widget).into()
+    }
+
     fn view_avatar_room(
         &self,
         room: &'switcher crate::matrix::RoomData,
