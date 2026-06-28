@@ -160,7 +160,6 @@ unignore = Unignore
 mod = Mod
 admin = Admin
 default = Default
-invite-promote = Invite & Promote
 user-id = User ID
 invite = Invite
 enter-user-id-to-invite = Enter a User ID to invite/promote

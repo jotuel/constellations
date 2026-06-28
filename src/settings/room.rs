@@ -1729,8 +1729,8 @@ impl State {
         }
     }
 
-    fn view_invite_promote(&self) -> Element<'_, Message> {
-        let mut section = settings::section().title(crate::fl!("invite-promote"));
+    fn view_invite(&self) -> Element<'_, Message> {
+        let mut section = settings::section().title(crate::fl!("invite"));
 
         section = section.add(settings::item(
             crate::fl!("user-id"),
@@ -1740,7 +1740,7 @@ impl State {
 
         let is_empty = self.invite_user_id.trim().is_empty();
 
-        let mut promote_row = Row::new().spacing(10);
+        let mut invite_row = Row::new().spacing(10);
 
         if self.my_power_level >= self.invite_level {
             let mut invite_btn = button::text(crate::fl!("invite"));
@@ -1758,41 +1758,8 @@ impl State {
             } else {
                 invite_btn.into()
             };
-            promote_row = promote_row.push(invite_widget);
+            invite_row = invite_row.push(invite_widget);
         }
-
-        let mut mod_btn = button::text(crate::fl!("mod"));
-        let mut admin_btn = button::text(crate::fl!("admin"));
-
-        if !is_empty {
-            mod_btn = mod_btn.on_press(Message::UpdatePowerLevel(self.invite_user_id.clone(), 50));
-            admin_btn =
-                admin_btn.on_press(Message::UpdatePowerLevel(self.invite_user_id.clone(), 100));
-        }
-
-        let mod_widget: Element<'_, Message> = if is_empty {
-            tooltip(
-                mod_btn,
-                text::body(crate::fl!("enter-user-id-to-invite")),
-                Position::Top,
-            )
-            .into()
-        } else {
-            mod_btn.into()
-        };
-
-        let admin_widget: Element<'_, Message> = if is_empty {
-            tooltip(
-                admin_btn,
-                text::body(crate::fl!("enter-user-id-to-invite")),
-                Position::Top,
-            )
-            .into()
-        } else {
-            admin_btn.into()
-        };
-
-        promote_row = promote_row.push(mod_widget).push(admin_widget);
 
         section
             .add(settings::item_row(vec![promote_row.wrap().into()]))
@@ -1853,7 +1820,7 @@ impl State {
             col = col.push(text::body(crate::fl!("loading-members")));
         }
 
-        col = col.push(self.view_invite_promote());
+        col = col.push(self.view_invite());
 
         if let Some(actions_view) = self.view_membership_actions() {
             col = col.push(actions_view);
