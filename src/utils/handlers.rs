@@ -1959,6 +1959,8 @@ impl Constellations {
                 self.room_members.clear();
                 self.pinned_events.clear();
                 self.pinned_events_details.clear();
+                self.inviting_to_room = false;
+                self.invite_to_room_id.clear();
                 let fetch_members_task = if self.show_members_panel {
                     self.is_loading_members = true;
                     self.fetch_members_task()
@@ -2313,6 +2315,47 @@ impl Constellations {
                     Ok(_) => {
                         self.inviting_to_space = false;
                         self.invite_to_space_id.clear();
+                    }
+                    Err(e) => {
+                        self.set_error(format!("Failed to invite: {}", e));
+                    }
+                }
+                Task::none()
+            }
+            Message::ToggleInviteToRoom => {
+                self.inviting_to_room = !self.inviting_to_room;
+                self.invite_to_room_id.clear();
+                Task::none()
+            }
+            Message::InviteToRoomIdChanged(id) => {
+                self.invite_to_room_id = id;
+                Task::none()
+            }
+            Message::InviteToRoom => {
+                if let Some(matrix) = &self.matrix
+                    && let Some(room_id) = &self.selected_room
+                {
+                    let matrix = matrix.clone();
+                    let room_id = room_id.to_string();
+                    let user_id = self.invite_to_room_id.clone();
+                    Task::perform(
+                        async move {
+                            matrix
+                                .invite_user(&room_id, &user_id)
+                                .await
+                                .map_err(|e| e.to_string())
+                        },
+                        |res| Action::from(Message::RoomUserInvited(res)),
+                    )
+                } else {
+                    Task::none()
+                }
+            }
+            Message::RoomUserInvited(res) => {
+                match res {
+                    Ok(_) => {
+                        self.inviting_to_room = false;
+                        self.invite_to_room_id.clear();
                     }
                     Err(e) => {
                         self.set_error(format!("Failed to invite: {}", e));
@@ -2903,6 +2946,8 @@ mod tests {
             creating_space: false,
             inviting_to_space: false,
             invite_to_space_id: String::new(),
+            inviting_to_room: false,
+            invite_to_room_id: String::new(),
             active_thread_root: None,
             threaded_timeline_items: eyeball_im::Vector::new(),
             is_loading_more: false,

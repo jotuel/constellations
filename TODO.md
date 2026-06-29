@@ -9,9 +9,9 @@
 [ ] Add Invite into Space option to Space menu 
 
 **Rooms**
-[ ] Make Rooms name button a menu that has Room Settings as one option
+[x] Make Rooms name button a menu that has Room Settings as one option
 [x] Make messages wider
-[ ] Invito into Room option for Room menu
+[x] Invito into Room option for Room menu
 [ ] Implement Video Rooms
 
 **Settings**

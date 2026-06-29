@@ -19,11 +19,9 @@ use crate::{
         ADD_REACTION, CLOSE_THREAD, DOWNLOAD_FILE, DOWNLOAD_IMAGE, DOWNLOADED, IGNORE, OPEN_THREAD,
         REPLIES, REPLY, TOOLTIP_ATTACH, TOOLTIP_DELETE, TOOLTIP_EDIT, TOOLTIP_EMOJIS, TOOLTIP_FIND,
         TOOLTIP_LOCATION, TOOLTIP_REPLY, TOOLTIP_THREAD, UNIGNORE_USER,
-        switcher::view_settings_name_button,
+        switcher::view_room_name_menu,
     },
 };
-
-const MESSAGE_BUBBLE_MAX_WIDTH: f32 = 800.0;
 
 impl<'chat> Constellations {
     pub fn view_timeline(&self) -> Element<'_, Message> {
@@ -769,7 +767,7 @@ impl<'chat> Constellations {
                 } else {
                     10
                 })
-                .max_width(MESSAGE_BUBBLE_MAX_WIDTH);
+                .max_width(600);
 
             let bubble_wrap =
                 container(bubble)
@@ -826,7 +824,7 @@ impl<'chat> Constellations {
                 } else {
                     10
                 })
-                .max_width(MESSAGE_BUBBLE_MAX_WIDTH);
+                .max_width(600);
 
             let bubble_wrap =
                 container(bubble)
@@ -1021,14 +1019,10 @@ impl<'chat> Constellations {
             let call_participants = self.call_participants.get(room_id);
             let participant_count = call_participants.map_or(0, |p| p.len());
 
-            let mut room_header =
-                Row::new()
-                    .spacing(10)
-                    .align_y(Alignment::Center)
-                    .push(view_settings_name_button(
-                        room_name,
-                        crate::SettingsPanel::Room,
-                    ));
+            let mut room_header = Row::new()
+                .spacing(10)
+                .align_y(Alignment::Center)
+                .push(view_room_name_menu(room_name));
 
             if participant_count > 0 {
                 room_header = room_header.push(
@@ -1105,6 +1099,33 @@ impl<'chat> Constellations {
                 content = content.push(self.view_threaded_timeline());
             } else {
                 content = content.push(room_header);
+                if self.inviting_to_room {
+                    let mut invite_input = text_input("@user:example.com", &self.invite_to_room_id)
+                        .on_input(Message::InviteToRoomIdChanged);
+                    let is_empty = self.invite_to_room_id.trim().is_empty();
+                    let mut invite_btn = button::text(crate::fl!("invite"));
+                    if !is_empty {
+                        invite_input = invite_input.on_submit(|_| Message::InviteToRoom);
+                        invite_btn = invite_btn.on_press(Message::InviteToRoom);
+                    }
+                    let invite_btn_widget: Element<'_, Message> = if is_empty {
+                        tooltip(
+                            invite_btn,
+                            text::body(crate::fl!("enter-user-id-to-invite")),
+                            Position::Top,
+                        )
+                        .into()
+                    } else {
+                        invite_btn.into()
+                    };
+                    let invite_ui = Column::new().spacing(5).push(invite_input).push(
+                        Row::new().spacing(5).push(invite_btn_widget).push(
+                            button::text(crate::fl!("cancel"))
+                                .on_press(Message::ToggleInviteToRoom),
+                        ),
+                    );
+                    content = content.push(container(invite_ui).padding(5));
+                }
                 let chat_area = Column::new()
                     .spacing(10)
                     .width(cosmic::iced::Length::Fill)

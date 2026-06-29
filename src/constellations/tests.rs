@@ -27,6 +27,8 @@ fn create_test_app() -> Constellations {
         new_room_name: String::new(),
         inviting_to_space: false,
         invite_to_space_id: String::new(),
+        inviting_to_room: false,
+        invite_to_room_id: String::new(),
         error: None,
         login_homeserver: String::new(),
         login_username: String::new(),

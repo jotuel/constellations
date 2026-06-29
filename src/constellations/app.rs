@@ -232,6 +232,8 @@ fn app(core: Core, config: settings::config::Config) -> Constellations {
         new_room_name: String::new(),
         inviting_to_space: false,
         invite_to_space_id: String::new(),
+        inviting_to_room: false,
+        invite_to_room_id: String::new(),
         error: None,
         login_homeserver: "https://matrix.org".to_string(),
         login_username: String::new(),

@@ -559,15 +559,32 @@ fn view_space_name_menu(name: &str) -> menu::MenuBar<Message> {
         .item_width(menu::ItemWidth::Uniform(160))
         .spacing(4.0)
 }
-
-/// A clickable title that opens settings on press.
-pub(crate) fn view_settings_name_button(
-    name: &str,
-    panel: crate::SettingsPanel,
-) -> Element<'static, Message> {
-    button::custom(text::title3(name.to_string()))
-        .class(cosmic::theme::Button::MenuRoot)
-        .padding(0)
-        .on_press(Message::OpenSettings(panel))
-        .into()
+pub(crate) fn view_room_name_menu(name: &str) -> menu::MenuBar<Message> {
+    let key_binds = std::collections::HashMap::new();
+    let menu_tree = menu::Tree::with_children(
+        RcElementWrapper::new(Element::from(menu::root(name.to_string()))),
+        menu::items(
+            &key_binds,
+            vec![
+                menu::Item::Button(
+                    crate::fl!("room-settings"),
+                    Some(cosmic::widget::icon::Handle::from(Named::new(
+                        "emblem-system",
+                    ))),
+                    crate::MenuAct::RoomSettings,
+                ),
+                menu::Item::Button(
+                    crate::fl!("invite"),
+                    Some(cosmic::widget::icon::Handle::from(Named::new(
+                        "contact-new-symbolic",
+                    ))),
+                    crate::MenuAct::RoomInvite,
+                ),
+            ],
+        ),
+    );
+    menu::bar(vec![menu_tree])
+        .item_height(menu::ItemHeight::Dynamic(40))
+        .item_width(menu::ItemWidth::Uniform(160))
+        .spacing(4.0)
 }
