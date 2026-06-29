@@ -221,6 +221,39 @@ impl<'switcher> Constellations {
             room_list = room_list.push(container(create_ui).padding(5));
         }
 
+        if self.inviting_to_space && self.selected_space.is_some() {
+            let mut invite_input = text_input("@user:example.com", &self.invite_to_space_id)
+                .on_input(Message::InviteToSpaceIdChanged);
+
+            let is_empty = self.invite_to_space_id.trim().is_empty();
+
+            let mut invite_btn = button::text(crate::fl!("invite"));
+            if !is_empty {
+                invite_input = invite_input.on_submit(|_| Message::InviteToSpace);
+                invite_btn = invite_btn.on_press(Message::InviteToSpace);
+            }
+
+            let invite_btn_widget: Element<'_, Message> = if is_empty {
+                tooltip(
+                    invite_btn,
+                    text::body(crate::fl!("enter-user-id-to-invite")),
+                    Position::Top,
+                )
+                .into()
+            } else {
+                invite_btn.into()
+            };
+
+            let invite_ui = Column::new().spacing(5).push(invite_input).push(
+                Row::new()
+                    .spacing(5)
+                    .push(invite_btn_widget)
+                    .push(button::text(CANCEL.as_str()).on_press(Message::ToggleInviteToSpace)),
+            );
+
+            room_list = room_list.push(container(invite_ui).padding(5));
+        }
+
         if let Some(selected_space) = &self.selected_space {
             let space_room = self
                 .room_list
@@ -280,10 +313,7 @@ impl<'switcher> Constellations {
                 .spacing(10)
                 .width(cosmic::iced::Length::Fill)
                 .push(avatar)
-                .push(view_settings_name_button(
-                    &space_name,
-                    crate::SettingsPanel::Space,
-                ));
+                .push(view_space_name_menu(&space_name));
             room_list = room_list.push(container(space_header).padding([5, 5, 15, 5]));
             room_list = room_list.push(divider::horizontal::default());
             if !subspaces.is_empty() {
@@ -494,6 +524,36 @@ fn view_menu_create() -> menu::MenuBar<Message> {
         ),
     );
 
+    menu::bar(vec![menu_tree])
+        .item_height(menu::ItemHeight::Dynamic(40))
+        .item_width(menu::ItemWidth::Uniform(160))
+        .spacing(4.0)
+}
+
+fn view_space_name_menu(name: &str) -> menu::MenuBar<Message> {
+    let key_binds = std::collections::HashMap::new();
+    let menu_tree = menu::Tree::with_children(
+        RcElementWrapper::new(Element::from(menu::root(name.to_string()))),
+        menu::items(
+            &key_binds,
+            vec![
+                menu::Item::Button(
+                    crate::fl!("space-settings"),
+                    Some(cosmic::widget::icon::Handle::from(Named::new(
+                        "emblem-system",
+                    ))),
+                    crate::MenuAct::SpaceSettings,
+                ),
+                menu::Item::Button(
+                    crate::fl!("invite"),
+                    Some(cosmic::widget::icon::Handle::from(Named::new(
+                        "contact-new-symbolic",
+                    ))),
+                    crate::MenuAct::SpaceInvite,
+                ),
+            ],
+        ),
+    );
     menu::bar(vec![menu_tree])
         .item_height(menu::ItemHeight::Dynamic(40))
         .item_width(menu::ItemWidth::Uniform(160))

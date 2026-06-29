@@ -63,6 +63,8 @@ pub struct Constellations {
     pub(crate) creating_room: bool,
     pub(crate) creating_space: bool,
     pub(crate) new_room_name: String,
+    pub(crate) inviting_to_space: bool,
+    pub(crate) invite_to_space_id: String,
     pub(crate) error: Option<String>,
     pub(crate) login_homeserver: String,
     pub(crate) login_username: String,
@@ -165,6 +167,10 @@ pub enum Message {
     NewRoomNameChanged(String),
     ToggleCreateRoom,
     ToggleCreateSpace,
+    ToggleInviteToSpace,
+    InviteToSpaceIdChanged(String),
+    InviteToSpace,
+    SpaceUserInvited(Result<(), String>),
     DismissError,
     LoginHomeserverChanged(String),
     LoginUsernameChanged(String),
@@ -241,6 +247,8 @@ pub enum MenuAct {
     Logout,
     CreateRoom,
     CreateSpace,
+    SpaceSettings,
+    SpaceInvite,
 }
 
 impl MenuAction for MenuAct {
@@ -252,6 +260,8 @@ impl MenuAction for MenuAct {
             MenuAct::Logout => Message::Logout,
             MenuAct::CreateRoom => Message::ToggleCreateRoom,
             MenuAct::CreateSpace => Message::ToggleCreateSpace,
+            MenuAct::SpaceSettings => Message::OpenSettings(SettingsPanel::Space),
+            MenuAct::SpaceInvite => Message::ToggleInviteToSpace,
         }
     }
 }

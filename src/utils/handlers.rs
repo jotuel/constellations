@@ -1561,7 +1561,9 @@ impl Constellations {
     pub fn handle_start_qr_login(
         &mut self,
     ) -> Task<Action<<Constellations as Application>::Message>> {
-        self.auth_flow = AuthFlow::Qr { step: QrLoginStep::Initiating };
+        self.auth_flow = AuthFlow::Qr {
+            step: QrLoginStep::Initiating,
+        };
         self.error = None;
 
         let mut hs = self.login_homeserver.trim().to_string();
@@ -2273,6 +2275,51 @@ impl Constellations {
                 self.new_room_name.clear();
                 Task::none()
             }
+            Message::ToggleInviteToSpace => {
+                self.inviting_to_space = !self.inviting_to_space;
+                if self.inviting_to_space {
+                    self.creating_room = false;
+                    self.creating_space = false;
+                }
+                self.invite_to_space_id.clear();
+                Task::none()
+            }
+            Message::InviteToSpaceIdChanged(id) => {
+                self.invite_to_space_id = id;
+                Task::none()
+            }
+            Message::InviteToSpace => {
+                if let Some(matrix) = &self.matrix
+                    && let Some(space_id) = &self.selected_space
+                {
+                    let matrix = matrix.clone();
+                    let space_id = space_id.to_string();
+                    let user_id = self.invite_to_space_id.clone();
+                    Task::perform(
+                        async move {
+                            matrix
+                                .invite_user(&space_id, &user_id)
+                                .await
+                                .map_err(|e| e.to_string())
+                        },
+                        |res| Action::from(Message::SpaceUserInvited(res)),
+                    )
+                } else {
+                    Task::none()
+                }
+            }
+            Message::SpaceUserInvited(res) => {
+                match res {
+                    Ok(_) => {
+                        self.inviting_to_space = false;
+                        self.invite_to_space_id.clear();
+                    }
+                    Err(e) => {
+                        self.set_error(format!("Failed to invite: {}", e));
+                    }
+                }
+                Task::none()
+            }
             Message::NewRoomNameChanged(name) => {
                 self.new_room_name = name;
                 Task::none()
@@ -2854,6 +2901,8 @@ mod tests {
             composer_attachments: Vec::new(),
             active_reaction_picker: None,
             creating_space: false,
+            inviting_to_space: false,
+            invite_to_space_id: String::new(),
             active_thread_root: None,
             threaded_timeline_items: eyeball_im::Vector::new(),
             is_loading_more: false,
@@ -3210,7 +3259,12 @@ mod tests {
         // 2. Start QR Login
         let _task = app.handle_start_qr_login();
         assert!(matches!(app.auth_flow, AuthFlow::Qr { .. }));
-        assert_eq!(app.auth_flow, AuthFlow::Qr { step: QrLoginStep::Initiating });
+        assert_eq!(
+            app.auth_flow,
+            AuthFlow::Qr {
+                step: QrLoginStep::Initiating
+            }
+        );
         assert!(app.qr_rendezvous_url.is_some());
 
         let url = app.qr_rendezvous_url.clone().unwrap();
@@ -3218,15 +3272,30 @@ mod tests {
 
         // 3. Step Changed to ShowingQr
         let _task = app.handle_qr_login_step_changed(QrLoginStep::ShowingQr);
-        assert_eq!(app.auth_flow, AuthFlow::Qr { step: QrLoginStep::ShowingQr });
+        assert_eq!(
+            app.auth_flow,
+            AuthFlow::Qr {
+                step: QrLoginStep::ShowingQr
+            }
+        );
 
         // 4. Rendezvous Established
         let _task = app.handle_qr_login_step_changed(QrLoginStep::RendezvousEstablished);
-        assert_eq!(app.auth_flow, AuthFlow::Qr { step: QrLoginStep::RendezvousEstablished });
+        assert_eq!(
+            app.auth_flow,
+            AuthFlow::Qr {
+                step: QrLoginStep::RendezvousEstablished
+            }
+        );
 
         // 5. Step Changed to Authenticating
         let _task = app.handle_qr_login_step_changed(QrLoginStep::Authenticating);
-        assert_eq!(app.auth_flow, AuthFlow::Qr { step: QrLoginStep::Authenticating });
+        assert_eq!(
+            app.auth_flow,
+            AuthFlow::Qr {
+                step: QrLoginStep::Authenticating
+            }
+        );
 
         // 6. Step Changed to Success
         // Calling handle_qr_login_step_changed(Success) will trigger handle_login_finished,
