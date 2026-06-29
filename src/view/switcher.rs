@@ -163,64 +163,6 @@ impl<'switcher> Constellations {
             }
         }
 
-        if self.creating_room || self.creating_space {
-            let label = if self.creating_room {
-                ROOM_NAME.as_str()
-            } else {
-                SPACE_NAME.as_str()
-            };
-
-            let mut name_input =
-                text_input(label, &self.new_room_name).on_input(Message::NewRoomNameChanged);
-
-            let is_empty = self.new_room_name.trim().is_empty();
-
-            let mut create_btn = button::text(CREATE.as_str());
-            if !is_empty {
-                if self.creating_room {
-                    name_input =
-                        name_input.on_submit(|_| Message::CreateRoom(self.new_room_name.clone()));
-                    create_btn =
-                        create_btn.on_press(Message::CreateRoom(self.new_room_name.clone()));
-                } else {
-                    name_input =
-                        name_input.on_submit(|_| Message::CreateSpace(self.new_room_name.clone()));
-                    create_btn =
-                        create_btn.on_press(Message::CreateSpace(self.new_room_name.clone()));
-                }
-            }
-
-            let create_btn_widget: Element<'_, Message> = if is_empty {
-                tooltip(
-                    create_btn,
-                    text::body(if self.creating_room {
-                        ENTER_ROOM_NAME.as_str()
-                    } else {
-                        ENTER_SPACE_NAME.as_str()
-                    }),
-                    Position::Top,
-                )
-                .into()
-            } else {
-                create_btn.into()
-            };
-
-            let cancel_msg = if self.creating_room {
-                Message::ToggleCreateRoom
-            } else {
-                Message::ToggleCreateSpace
-            };
-
-            let create_ui = Column::new().spacing(5).push(name_input).push(
-                Row::new()
-                    .spacing(5)
-                    .push(create_btn_widget)
-                    .push(button::text(CANCEL.as_str()).on_press(cancel_msg)),
-            );
-
-            room_list = room_list.push(container(create_ui).padding(5));
-        }
-
         if self.inviting_to_space && self.selected_space.is_some() {
             let mut invite_input = text_input("@user:example.com", &self.invite_to_space_id)
                 .on_input(Message::InviteToSpaceIdChanged);
@@ -486,7 +428,11 @@ impl<'switcher> Constellations {
             create_btn.into()
         };
 
-        Column::new().spacing(10).push(name_input).push(create_btn_widget).into()
+        Column::new()
+            .spacing(10)
+            .push(name_input)
+            .push(create_btn_widget)
+            .into()
     }
 
     fn view_avatar_room(
