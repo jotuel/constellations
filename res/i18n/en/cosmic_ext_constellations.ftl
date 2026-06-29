@@ -21,6 +21,7 @@ all-rooms = All Rooms
 unknown-space = Unknown Space
 unknown-room = Unknown Room
 joined-rooms = Joined Rooms
+subspaces = Subspaces
 other-rooms = Other Rooms
 create-room = Create Room
 create-space = Create Space

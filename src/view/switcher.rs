@@ -4,7 +4,7 @@ use crate::{
         ALL_ROOMS, AVATAR_RADIUS, CANCEL, CREATE, CREATE_ROOM, CREATE_SPACE, ENTER_ROOM_NAME,
         ENTER_SPACE_NAME, JOIN, JOINED_ROOMS, OTHER_ROOMS, ROOM_AVATAR_HEIGHT, ROOM_AVATAR_WIDTH,
         ROOM_HAS_NO_AVATAR, ROOM_NAME, ROOM_SWITCHER_WIDTH, SPACE_AVATAR_HEIGHT,
-        SPACE_AVATAR_WIDTH, SPACE_NAME, UNKNOWN_ROOM, UNKNOWN_SPACE,
+        SPACE_AVATAR_WIDTH, SPACE_NAME, SUBSPACES, UNKNOWN_ROOM, UNKNOWN_SPACE,
     },
 };
 use cosmic::{
@@ -144,6 +144,25 @@ impl<'switcher> Constellations {
     pub fn view_sidebar(&self) -> Element<'_, Message> {
         let mut room_list = Column::new().spacing(5);
 
+        let mut subspaces = Vec::new();
+        let mut subspace_ids = std::collections::HashSet::new();
+
+        if let Some(selected_space) = &self.selected_space
+            && let Some(matrix) = &self.matrix
+            && let Ok(selected_space_id) = matrix_sdk::ruma::RoomId::parse(selected_space.as_str())
+        {
+            for room in &self.room_list {
+                if room.is_space
+                    && room.id.as_ref() != selected_space.as_str()
+                    && let Ok(room_id) = matrix_sdk::ruma::RoomId::parse(room.id.as_ref())
+                    && matrix.is_in_space_sync(&room_id, &selected_space_id)
+                {
+                    subspaces.push(room);
+                    subspace_ids.insert(room.id.as_ref());
+                }
+            }
+        }
+
         if self.creating_room || self.creating_space {
             let label = if self.creating_room {
                 ROOM_NAME.as_str()
@@ -267,6 +286,41 @@ impl<'switcher> Constellations {
                 ));
             room_list = room_list.push(container(space_header).padding([5, 5, 15, 5]));
             room_list = room_list.push(divider::horizontal::default());
+            if !subspaces.is_empty() {
+                room_list = room_list.push(
+                    container(text::title3(SUBSPACES.as_str()).size(14)).padding([10, 5, 5, 5]),
+                );
+                for subspace in &subspaces {
+                    let mut room_content = Column::new().spacing(2);
+                    let mut header = self.view_avatar_room(subspace);
+                    if let Some(unread_str) = &subspace.unread_count_str {
+                        header = header.push(text::body(unread_str.as_str()).size(12));
+                    }
+                    room_content = room_content.push(header);
+
+                    if let Some(last_msg) = &subspace.last_message {
+                        let first_line = clean_last_message(last_msg);
+                        room_content = room_content.push(
+                            text::body(first_line)
+                                .size(12)
+                                .width(cosmic::iced::Length::Fill),
+                        );
+                    }
+
+                    let btn = button::custom(
+                        container(room_content)
+                            .padding(5)
+                            .width(cosmic::iced::Length::Fill),
+                    )
+                    .selected(false)
+                    .class(cosmic::theme::Button::ListItem(
+                        self.core.system_theme().cosmic().corner_radii.radius_m,
+                    ))
+                    .on_press(Message::SelectSpace(Some(subspace.id.clone())));
+
+                    room_list = room_list.push(btn.width(cosmic::iced::Fill));
+                }
+            }
 
             if !self.other_rooms.is_empty() {
                 room_list = room_list.push(
@@ -277,6 +331,9 @@ impl<'switcher> Constellations {
 
         for &room_idx in &self.filtered_room_list {
             let room = &self.room_list[room_idx];
+            if subspace_ids.contains(room.id.as_ref()) {
+                continue;
+            }
             let room_id = room.id.clone();
             let mut room_content = Column::new().spacing(2);
 
