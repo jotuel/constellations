@@ -63,8 +63,6 @@ pub struct State {
     pub join_rule: Option<matrix_sdk::ruma::events::room::join_rules::JoinRule>,
     pub history_visibility: Option<HistoryVisibility>,
     pub restricted_space_id: String,
-    pub pinned_events: Vec<matrix_sdk::ruma::OwnedEventId>,
-    pub pinned_event_id_input: String,
     pub ignored_users: Vec<matrix_sdk::ruma::OwnedUserId>,
     pub is_encrypted: bool,
     pub canonical_alias: String,
@@ -117,9 +115,6 @@ pub enum Message {
     JoinRuleChanged(matrix_sdk::ruma::events::room::join_rules::JoinRule),
     HistoryVisibilityChanged(HistoryVisibility),
     RestrictedSpaceIdChanged(String),
-    PinnedEventIdChanged(String),
-    PinEvent,
-    UnpinEvent(matrix_sdk::ruma::OwnedEventId),
     IgnoreUser(matrix_sdk::ruma::OwnedUserId),
     UnignoreUser(matrix_sdk::ruma::OwnedUserId),
     EnableEncryption,
@@ -155,7 +150,6 @@ pub struct RoomInfo {
     pub notification_mode: Option<matrix_sdk::notification_settings::RoomNotificationMode>,
     pub join_rule: Option<matrix_sdk::ruma::events::room::join_rules::JoinRule>,
     pub history_visibility: Option<HistoryVisibility>,
-    pub pinned_events: Vec<matrix_sdk::ruma::OwnedEventId>,
     pub ignored_users: Vec<matrix_sdk::ruma::OwnedUserId>,
     pub is_encrypted: bool,
     pub canonical_alias: Option<String>,
@@ -223,23 +217,6 @@ impl State {
                                     ) => Some(ev.content.history_visibility),
                                     _ => None,
                                 });
-
-                            let pinned_events = room
-                                .get_state_event_static::<matrix_sdk::ruma::events::room::pinned_events::RoomPinnedEventsEventContent>()
-                                .await
-                                .ok()
-                                .flatten()
-                                .and_then(|e| e.deserialize().ok())
-                                .and_then(|e| match e {
-                                    matrix_sdk_base::deserialized_responses::SyncOrStrippedState::Sync(
-                                        matrix_sdk::ruma::events::SyncStateEvent::Original(ev),
-                                    ) => Some(ev.content.pinned),
-                                    matrix_sdk_base::deserialized_responses::SyncOrStrippedState::Stripped(
-                                        ev,
-                                    ) => ev.content.pinned,
-                                    _ => None,
-                                })
-                                .unwrap_or_default();
 
                             let ignored_users = engine.ignored_users().await.unwrap_or_default();
                             let is_encrypted = room.encryption_settings().is_some();
@@ -312,7 +289,6 @@ impl State {
                                 notification_mode,
                                 join_rule,
                                 history_visibility,
-                                pinned_events,
                                 ignored_users,
                                 is_encrypted,
                                 canonical_alias,
@@ -376,8 +352,6 @@ impl State {
                             }
                             _ => String::new(),
                         };
-                        self.pinned_events = info.pinned_events;
-                        self.pinned_event_id_input = String::new();
                         self.ignored_users = info.ignored_users;
                         self.is_encrypted = info.is_encrypted;
                         self.canonical_alias = info.canonical_alias.clone().unwrap_or_default();
@@ -1118,49 +1092,6 @@ impl State {
                 self.restricted_space_id = id;
                 Task::none()
             }
-            Message::PinnedEventIdChanged(id) => {
-                self.pinned_event_id_input = id;
-                Task::none()
-            }
-            Message::PinEvent => {
-                if let Some(matrix) = matrix
-                    && let Some(room_id) = &self.room_id
-                {
-                    let event_id_res =
-                        matrix_sdk::ruma::EventId::parse(&self.pinned_event_id_input);
-                    match event_id_res {
-                        Ok(event_id) => {
-                            if !self.pinned_events.contains(&event_id) {
-                                let mut new_pinned = self.pinned_events.clone();
-                                new_pinned.push(event_id);
-                                let engine = matrix.clone();
-                                let room_id_clone = room_id.clone();
-                                let room_id_clone_reload = room_id.clone();
-                                return Task::perform(
-                                    async move {
-                                        engine
-                                            .set_pinned_events(&room_id_clone, new_pinned)
-                                            .await
-                                            .map_err(|e| e.to_string())
-                                    },
-                                    move |res| {
-                                        Action::from(crate::Message::RoomSettings(match res {
-                                            Ok(_) => {
-                                                Message::LoadRoom(room_id_clone_reload.clone())
-                                            }
-                                            Err(e) => Message::RoomSaved(Err(e)),
-                                        }))
-                                    },
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            self.error = Some(format!("Invalid Event ID: {}", e));
-                        }
-                    }
-                }
-                Task::none()
-            }
             Message::IgnoreUser(user_id) => {
                 if let Some(matrix) = matrix
                     && let Some(room_id) = &self.room_id
@@ -1194,32 +1125,6 @@ impl State {
                         async move {
                             engine
                                 .unignore_user(&user_id)
-                                .await
-                                .map_err(|e| e.to_string())
-                        },
-                        move |res| {
-                            Action::from(crate::Message::RoomSettings(match res {
-                                Ok(_) => Message::LoadRoom(room_id_clone_reload.clone()),
-                                Err(e) => Message::RoomSaved(Err(e)),
-                            }))
-                        },
-                    );
-                }
-                Task::none()
-            }
-            Message::UnpinEvent(event_id) => {
-                if let Some(matrix) = matrix
-                    && let Some(room_id) = &self.room_id
-                {
-                    let mut new_pinned = self.pinned_events.clone();
-                    new_pinned.retain(|id| id != &event_id);
-                    let engine = matrix.clone();
-                    let room_id_clone = room_id.clone();
-                    let room_id_clone_reload = room_id.clone();
-                    return Task::perform(
-                        async move {
-                            engine
-                                .set_pinned_events(&room_id_clone, new_pinned)
                                 .await
                                 .map_err(|e| e.to_string())
                         },
@@ -1894,53 +1799,6 @@ impl State {
             .into()
     }
 
-    fn view_pinned_events(&self) -> Element<'_, Message> {
-        let mut section = settings::section().title(crate::fl!("pinned-messages"));
-
-        for event_id in &self.pinned_events {
-            section = section.add(settings::item(
-                event_id.as_str(),
-                button::destructive(crate::fl!("unpin"))
-                    .on_press(Message::UnpinEvent(event_id.clone())),
-            ));
-        }
-
-        let is_empty = self.pinned_event_id_input.trim().is_empty();
-        let mut pin_btn = button::text(crate::fl!("pin"));
-        if !is_empty {
-            pin_btn = pin_btn.on_press(Message::PinEvent);
-        }
-
-        let pin_widget: Element<'_, Message> = if is_empty {
-            tooltip(
-                pin_btn,
-                text::body(crate::fl!("enter-event-id-to-pin")),
-                Position::Top,
-            )
-            .into()
-        } else {
-            pin_btn.into()
-        };
-
-        let pin_event_layout = Column::new()
-            .spacing(5)
-            .push(text::body(crate::fl!("pin-event-by-id")).size(12))
-            .push(
-                Row::new()
-                    .spacing(10)
-                    .align_y(Alignment::Center)
-                    .push(
-                        text_input("Event ID ($...)", &self.pinned_event_id_input)
-                            .on_input(Message::PinnedEventIdChanged),
-                    )
-                    .push(pin_widget),
-            );
-
-        section = section.add(settings::item_row(vec![pin_event_layout.into()]));
-
-        section.into()
-    }
-
     fn view_membership_actions(&self) -> Option<Element<'_, Message>> {
         if let Some(membership) = &self.membership {
             use matrix_sdk::RoomState;
@@ -1979,7 +1837,6 @@ impl State {
             self.view_aliases(),
             self.view_notifications(),
             self.view_permissions(),
-            self.view_pinned_events(),
         ]);
 
         if let Some(error_view) = self.view_error() {
@@ -2081,16 +1938,6 @@ mod tests {
         let _task = state.update(Message::JoinRuleChanged(JoinRule::Public), &None);
         // The task should be none since matrix engine is None
         // We can't easily inspect Task, but we can verify it compiles and runs.
-    }
-
-    #[test]
-    fn test_pinned_event_id_changed() {
-        let mut state = State::default();
-        let _ = state.update(
-            Message::PinnedEventIdChanged("$event:example.com".to_string()),
-            &None,
-        );
-        assert_eq!(state.pinned_event_id_input, "$event:example.com");
     }
 
     #[test]

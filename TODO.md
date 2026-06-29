@@ -5,13 +5,16 @@
 **Space Switcher**
 [ ] Implement Suggested Rooms category
 [ ] Spaces section for subspaces
+[ ] Make Space's name button open a menu with Settings just as one option
 [ ] Add Invite into Space option to Space menu 
 
 **Rooms**
+[ ] Make Rooms name button a menu that has Room Settings as one option
 [ ] Make messages wider
 [ ] Invito into Room option for Room menu
 [ ] Implement Video Rooms
 
 **Settings**
 [ ] Split bigger sections into their own separate menus (ie. ManageSpacesUsers)
-[ ] Remove pinning a message option from Settings
+[x] Remove pinning a message option from Settings
+[ ] Make Invite & Promote section only invite
