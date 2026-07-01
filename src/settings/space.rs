@@ -633,12 +633,7 @@ impl State {
             .into();
         }
 
-        let mut col = settings::view_column(vec![
-            self.view_profile(),
-            self.view_discovery(),
-            self.view_hierarchy(),
-            self.view_add_child(),
-        ]);
+        let mut col = settings::view_column(vec![self.view_profile(), self.view_discovery()]);
 
         if let Some(error_view) = self.view_error() {
             col = col.push(error_view);
@@ -646,6 +641,16 @@ impl State {
 
         if let Some(save_btn) = self.view_save_button() {
             col = col.push(save_btn);
+        }
+
+        col.into()
+    }
+
+    pub fn view_manage(&self) -> Element<'_, Message> {
+        let mut col = settings::view_column(vec![self.view_hierarchy(), self.view_add_child()]);
+
+        if let Some(error_view) = self.view_error() {
+            col = col.push(error_view);
         }
 
         col.into()

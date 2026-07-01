@@ -19,14 +19,31 @@ use crate::{
         ADD_REACTION, CLOSE_THREAD, DOWNLOAD_FILE, DOWNLOAD_IMAGE, DOWNLOADED, IGNORE, OPEN_THREAD,
         REPLIES, REPLY, TOOLTIP_ATTACH, TOOLTIP_DELETE, TOOLTIP_EDIT, TOOLTIP_EMOJIS, TOOLTIP_FIND,
         TOOLTIP_LOCATION, TOOLTIP_REPLY, TOOLTIP_THREAD, UNIGNORE_USER,
-        switcher::view_settings_name_button,
+        switcher::view_room_name_menu,
     },
 };
 
-const MESSAGE_BUBBLE_MAX_WIDTH: f32 = 800.0;
-
 impl<'chat> Constellations {
     pub fn view_timeline(&self) -> Element<'_, Message> {
+        let selected_room_data = self
+            .selected_room
+            .as_ref()
+            .and_then(|id| self.room_list.iter().find(|r| r.id.as_ref() == id.as_ref()));
+
+        let is_video_room = selected_room_data
+            .map(|r| {
+                r.room_type
+                    .as_ref()
+                    .is_some_and(|t| t.to_string() == "org.matrix.msc3401.call.room")
+            })
+            .unwrap_or(false);
+
+        if is_video_room {
+            if let Some(room) = selected_room_data {
+                return self.view_video_room(room);
+            }
+        }
+
         let mut timeline = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
 
         let is_filtering = self.is_search_active
@@ -36,7 +53,6 @@ impl<'chat> Constellations {
         if is_filtering {
             return self.view_search_results();
         }
-
         let filter_is_ascii = self.search_query.is_ascii();
         let filter_lower_fallback =
             (is_filtering && !filter_is_ascii).then(|| self.search_query.to_lowercase());
@@ -599,12 +615,19 @@ impl<'chat> Constellations {
                     }
                 }
 
+                let reply_event_id = in_reply_to.event_id.clone();
                 let reply_indicator = Row::new()
                     .spacing(5)
                     .push(text::body("⤴").size(10))
                     .push(text::body(reply_snippet).size(10));
 
-                let reply_indicator_wrap = container(reply_indicator)
+                let reply_btn = button::custom(reply_indicator)
+                    .on_press(Message::JumpToMessage(reply_event_id))
+                    .class(cosmic::theme::Button::ListItem(
+                        self.core.system_theme().cosmic().corner_radii.radius_m,
+                    ));
+
+                let reply_indicator_wrap = container(reply_btn)
                     .width(cosmic::iced::Length::Fill)
                     .align_x(if is_me {
                         Alignment::End
@@ -769,7 +792,7 @@ impl<'chat> Constellations {
                 } else {
                     10
                 })
-                .max_width(MESSAGE_BUBBLE_MAX_WIDTH);
+                .max_width(600);
 
             let bubble_wrap =
                 container(bubble)
@@ -826,7 +849,7 @@ impl<'chat> Constellations {
                 } else {
                     10
                 })
-                .max_width(MESSAGE_BUBBLE_MAX_WIDTH);
+                .max_width(600);
 
             let bubble_wrap =
                 container(bubble)
@@ -1021,14 +1044,10 @@ impl<'chat> Constellations {
             let call_participants = self.call_participants.get(room_id);
             let participant_count = call_participants.map_or(0, |p| p.len());
 
-            let mut room_header =
-                Row::new()
-                    .spacing(10)
-                    .align_y(Alignment::Center)
-                    .push(view_settings_name_button(
-                        room_name,
-                        crate::SettingsPanel::Room,
-                    ));
+            let mut room_header = Row::new()
+                .spacing(10)
+                .align_y(Alignment::Center)
+                .push(view_room_name_menu(room_name));
 
             if participant_count > 0 {
                 room_header = room_header.push(
@@ -1105,12 +1124,54 @@ impl<'chat> Constellations {
                 content = content.push(self.view_threaded_timeline());
             } else {
                 content = content.push(room_header);
-                let chat_area = Column::new()
+                if self.inviting_to_room {
+                    let mut invite_input = text_input("@user:example.com", &self.invite_to_room_id)
+                        .on_input(Message::InviteToRoomIdChanged);
+                    let is_empty = self.invite_to_room_id.trim().is_empty();
+                    let mut invite_btn = button::text(crate::fl!("invite"));
+                    if !is_empty {
+                        invite_input = invite_input.on_submit(|_| Message::InviteToRoom);
+                        invite_btn = invite_btn.on_press(Message::InviteToRoom);
+                    }
+                    let invite_btn_widget: Element<'_, Message> = if is_empty {
+                        tooltip(
+                            invite_btn,
+                            text::body(crate::fl!("enter-user-id-to-invite")),
+                            Position::Top,
+                        )
+                        .into()
+                    } else {
+                        invite_btn.into()
+                    };
+                    let invite_ui = Column::new().spacing(5).push(invite_input).push(
+                        Row::new().spacing(5).push(invite_btn_widget).push(
+                            button::text(crate::fl!("cancel"))
+                                .on_press(Message::ToggleInviteToRoom),
+                        ),
+                    );
+                    content = content.push(container(invite_ui).padding(5));
+                }
+                let selected_room_data = self
+                    .selected_room
+                    .as_ref()
+                    .and_then(|id| self.room_list.iter().find(|r| r.id.as_ref() == id.as_ref()));
+
+                let is_video_room = selected_room_data
+                    .map(|r| {
+                        r.room_type
+                            .as_ref()
+                            .is_some_and(|t| t.to_string() == "org.matrix.msc3401.call.room")
+                    })
+                    .unwrap_or(false);
+
+                let mut chat_area = Column::new()
                     .spacing(10)
                     .width(cosmic::iced::Length::Fill)
                     .height(cosmic::iced::Length::Fill)
-                    .push(self.view_timeline())
-                    .push(self.view_composer());
+                    .push(self.view_timeline());
+                if !is_video_room {
+                    chat_area = chat_area.push(self.view_composer());
+                }
                 content = content.push(chat_area);
             }
         } else {
@@ -1306,9 +1367,9 @@ impl<'chat> Constellations {
     }
 
     pub fn view_search_results(&self) -> Element<'_, Message> {
-        let mut results_col = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
+        let mut results_col = Column::new().spacing(15).width(cosmic::iced::Length::Fill);
 
-        // Find fuzzy matched messages
+        // 1. Message matches
         let mut matches = Vec::new();
         for item in &self.timeline_items {
             let body_matches = if let Some(timeline_item) = &item.item
@@ -1331,46 +1392,31 @@ impl<'chat> Constellations {
             }
         }
 
-        // Header card
-        results_col = results_col.push(
-            container(
-                Row::new().spacing(10).align_y(Alignment::Center).push(
-                    text::body(crate::fl!(
-                        "search-results-found",
-                        count = matches.len(),
-                        query = self.search_query.as_str()
-                    ))
-                    .size(14),
-                ),
-            )
-            .style(|theme: &cosmic::Theme| {
-                use cosmic::iced::widget::container::Catalog;
-                theme.style(&cosmic::theme::Container::Card)
-            })
-            .padding(12)
-            .width(cosmic::iced::Length::Fill),
-        );
-
-        let mut results_list = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
-        let thread_counts = std::collections::HashMap::new();
-
-        if matches.is_empty() {
-            results_list = results_list.push(
-                container(
-                    Column::new()
-                        .spacing(10)
-                        .align_x(Alignment::Center)
-                        .push(cosmic::widget::icon::from_name("edit-find-symbolic").size(64))
-                        .push(text::body(crate::fl!("no-results-found")).size(16)),
-                )
-                .width(cosmic::iced::Length::Fill)
-                .align_x(Alignment::Center)
-                .padding(40),
-            );
-        } else {
+        // Section: Messages in this Room
+        if !matches.is_empty() {
+            results_col = results_col.push(text::title3("Messages in this Room").size(14));
+            let mut message_list = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
+            let thread_counts = std::collections::HashMap::new();
             for item in matches {
-                results_list = results_list.push(
-                    container(self.view_item(item, &thread_counts))
+                let item_id_for_jump = item.item_id.clone();
+                let mut card_content = Column::new()
+                    .spacing(5)
+                    .push(self.view_item(item, &thread_counts));
+
+                if let Some(matrix::TimelineEventItemId::EventId(event_id)) = &item_id_for_jump {
+                    let event_id_clone = event_id.clone();
+                    card_content = card_content.push(
+                        Row::new()
+                            .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
+                            .push(
+                                button::text(crate::fl!("jump-to-message"))
+                                    .on_press(Message::JumpToMessage(event_id_clone)),
+                            ),
+                    );
+                }
+
+                message_list = message_list.push(
+                    container(card_content)
                         .style(|theme: &cosmic::Theme| {
                             use cosmic::iced::widget::container::Catalog;
                             let cosmic = theme.cosmic();
@@ -1383,11 +1429,200 @@ impl<'chat> Constellations {
                         .width(cosmic::iced::Length::Fill),
                 );
             }
+            results_col = results_col.push(message_list);
+        } else {
+            results_col = results_col.push(
+                container(
+                    Column::new()
+                        .spacing(10)
+                        .align_x(Alignment::Center)
+                        .push(cosmic::widget::icon::from_name("edit-find-symbolic").size(32))
+                        .push(text::body("No matching messages in this room").size(14)),
+                )
+                .width(cosmic::iced::Length::Fill)
+                .align_x(Alignment::Center)
+                .padding(20),
+            );
         }
 
-        results_col = results_col.push(scrollable(results_list).height(cosmic::iced::Length::Fill));
+        results_col = results_col.push(divider::horizontal::default());
 
-        results_col.into()
+        // Section: Public Spaces & Rooms
+        results_col = results_col.push(text::title3("Public Rooms & Spaces").size(14));
+
+        if self.is_searching_public {
+            results_col = results_col.push(
+                container(cosmic::widget::progress_bar::indeterminate_circular().size(24.0))
+                    .width(cosmic::iced::Length::Fill)
+                    .align_x(Alignment::Center)
+                    .padding(20),
+            );
+        } else if self.public_search_results.is_empty() {
+            results_col = results_col.push(
+                container(text::body("No public rooms or spaces found").size(14))
+                    .width(cosmic::iced::Length::Fill)
+                    .align_x(Alignment::Center)
+                    .padding(20),
+            );
+        } else {
+            let mut public_list = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
+            for room in &self.public_search_results {
+                let name = room
+                    .name
+                    .as_deref()
+                    .or(room.canonical_alias.as_deref())
+                    .unwrap_or("Unnamed Room");
+                let is_joined = self.joined_room_ids.contains(room.id.as_str());
+
+                // Avatar
+                let default_avatar = || {
+                    let initials: String = name.chars().next().unwrap_or('R').to_string();
+                    container(text::body(initials).size(14))
+                        .width(40)
+                        .height(40)
+                        .align_x(Alignment::Center)
+                        .align_y(Alignment::Center)
+                        .style(|theme: &cosmic::Theme| {
+                            use cosmic::iced::widget::container::Catalog;
+                            let cosmic = theme.cosmic();
+                            let mut style = theme.style(&cosmic::theme::Container::Card);
+                            style.border.radius = cosmic.corner_radii.radius_xs.into();
+                            style
+                        })
+                };
+                let avatar_widget: Element<'_, Message> = if let Some(url) = &room.avatar_url {
+                    if let Some(handle) = self.media_cache.get(url) {
+                        cosmic::widget::image(handle.clone())
+                            .width(40)
+                            .height(40)
+                            .border_radius(4.0)
+                            .into()
+                    } else {
+                        default_avatar().into()
+                    }
+                } else {
+                    default_avatar().into()
+                };
+
+                let mut details_col = Column::new().spacing(4).push(
+                    Row::new()
+                        .spacing(8)
+                        .align_y(Alignment::Center)
+                        .push(text::body(name.to_string()).font(cosmic::iced::Font {
+                            weight: cosmic::iced::font::Weight::Bold,
+                            ..Default::default()
+                        }))
+                        .push(
+                            text::body(format!("({} members)", room.num_joined_members)).size(10),
+                        ),
+                );
+                if let Some(topic) = &room.topic {
+                    details_col = details_col.push(text::body(topic.to_string()).size(11));
+                }
+                details_col = details_col.push(text::body(room.id.to_string()).size(9));
+
+                let action_btn = if is_joined {
+                    button::text("Joined")
+                } else {
+                    let id_arc = std::sync::Arc::from(room.id.as_str());
+                    button::suggested("Join").on_press(Message::JoinRoom(id_arc))
+                };
+
+                let card_row = Row::new()
+                    .spacing(15)
+                    .align_y(Alignment::Center)
+                    .push(avatar_widget)
+                    .push(details_col.width(cosmic::iced::Length::Fill))
+                    .push(action_btn);
+
+                public_list = public_list.push(
+                    container(card_row)
+                        .style(|theme: &cosmic::Theme| {
+                            use cosmic::iced::widget::container::Catalog;
+                            theme.style(&cosmic::theme::Container::Card)
+                        })
+                        .padding(10)
+                        .width(cosmic::iced::Length::Fill),
+                );
+            }
+            results_col = results_col.push(public_list);
+        }
+
+        scrollable(results_col)
+            .id(crate::TIMELINE_ID.clone())
+            .height(cosmic::iced::Length::Fill)
+            .into()
+    }
+
+    pub fn view_video_room<'a>(
+        &'a self,
+        room_data: &'a crate::matrix::RoomData,
+    ) -> Element<'a, Message> {
+        let room_id = room_data.id.as_ref();
+        let is_in_call = self.user_id.as_ref().is_some_and(|uid| {
+            self.call_participants
+                .get(room_id)
+                .is_some_and(|p| p.iter().any(|participant| participant.as_str() == uid))
+        });
+
+        let mut content = Column::new()
+            .spacing(20)
+            .align_x(Alignment::Center)
+            .width(cosmic::iced::Length::Fill);
+
+        // Icon
+        content = content.push(cosmic::widget::icon::from_name("camera-video-symbolic").size(96));
+
+        // Room Name
+        let room_name = room_data.name.as_deref().unwrap_or("Unnamed Video Room");
+        content = content.push(text::title1(room_name).size(24));
+
+        // Call status
+        if is_in_call {
+            content = content.push(text::body(crate::fl!("call-status-connected")).size(16));
+            let leave_btn =
+                button::destructive(crate::fl!("call-leave")).on_press(Message::LeaveCall);
+            content = content.push(leave_btn);
+        } else {
+            content = content.push(text::body(crate::fl!("call-status-not-connected")).size(16));
+            let join_btn = button::suggested(crate::fl!("call-join")).on_press(Message::JoinCall);
+            content = content.push(join_btn);
+        }
+
+        // Participants list
+        let call_participants = self.call_participants.get(room_id);
+        let participant_count = call_participants.map_or(0, |p| p.len());
+
+        let mut participants_col = Column::new().spacing(10).align_x(Alignment::Center);
+        participants_col = participants_col
+            .push(text::title3(format!("Participants ({})", participant_count)).size(16));
+
+        if let Some(participants) = call_participants
+            && !participants.is_empty()
+        {
+            for participant in participants {
+                participants_col = participants_col.push(text::body(participant.as_str()).size(14));
+            }
+        } else {
+            participants_col = participants_col.push(text::body("No one is in the call").size(14));
+        }
+
+        content = content.push(
+            container(participants_col)
+                .style(|theme: &cosmic::Theme| {
+                    use cosmic::iced::widget::container::Catalog;
+                    theme.style(&cosmic::theme::Container::Card)
+                })
+                .padding(15)
+                .width(300.0),
+        );
+
+        container(content)
+            .width(cosmic::iced::Length::Fill)
+            .height(cosmic::iced::Length::Fill)
+            .align_x(Alignment::Center)
+            .align_y(Alignment::Center)
+            .into()
     }
 
     pub fn view_members_panel(&self) -> Element<'_, Message> {

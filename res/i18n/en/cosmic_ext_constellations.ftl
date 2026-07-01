@@ -325,3 +325,11 @@ keyword-notifications = Keyword Notifications
 keyword-notifications-description = Receive notifications when these keywords are mentioned in any room.
 add-keyword-title = Add Keyword
 new-keyword-placeholder = New keyword
+
+# Video Rooms, Search & Management Drawer
+video-room = Video Room
+manage-spaces-users = Manage Rooms & Users
+manage-members = Manage Members
+jump-to-message = Jump to Message
+call-status-connected = Connected to call
+call-status-not-connected = Not in call

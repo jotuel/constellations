@@ -124,6 +124,8 @@ impl Application for Constellations {
                 SettingsPanel::Space => crate::fl!("space-settings"),
                 SettingsPanel::Members => crate::fl!("room-members"),
                 SettingsPanel::Pinned => crate::fl!("pinned-messages"),
+                SettingsPanel::ManageRoomMembers => crate::fl!("manage-members"),
+                SettingsPanel::ManageSpaceRooms => crate::fl!("manage-spaces-users"),
             };
 
             let panel_content = match panel {
@@ -133,6 +135,13 @@ impl Application for Constellations {
                 SettingsPanel::App => self.app_settings.view().map(Message::AppSettings),
                 SettingsPanel::Members => self.view_members_panel(),
                 SettingsPanel::Pinned => self.view_pinned_panel(),
+                SettingsPanel::ManageRoomMembers => {
+                    self.room_settings.view_manage().map(Message::RoomSettings)
+                }
+                SettingsPanel::ManageSpaceRooms => self
+                    .space_settings
+                    .view_manage()
+                    .map(Message::SpaceSettings),
             };
 
             Some(
@@ -247,6 +256,8 @@ fn app(core: Core, config: settings::config::Config) -> Constellations {
         new_room_name: String::new(),
         inviting_to_space: false,
         invite_to_space_id: String::new(),
+        inviting_to_room: false,
+        invite_to_room_id: String::new(),
         error: None,
         login_homeserver: "https://matrix.org".to_string(),
         login_username: String::new(),
@@ -262,6 +273,9 @@ fn app(core: Core, config: settings::config::Config) -> Constellations {
         last_threaded_timeline_offset: 0.0,
         search_query: String::new(),
         is_search_active: false,
+        public_search_results: Vec::new(),
+        is_searching_public: false,
+        new_room_is_video: false,
         active_reaction_picker: None,
         active_thread_root: None,
         threaded_timeline_items: Vector::new(),

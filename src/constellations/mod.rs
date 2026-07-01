@@ -65,6 +65,8 @@ pub struct Constellations {
     pub(crate) new_room_name: String,
     pub(crate) inviting_to_space: bool,
     pub(crate) invite_to_space_id: String,
+    pub(crate) inviting_to_room: bool,
+    pub(crate) invite_to_room_id: String,
     pub(crate) error: Option<String>,
     pub(crate) login_homeserver: String,
     pub(crate) login_username: String,
@@ -80,6 +82,9 @@ pub struct Constellations {
     pub(crate) last_threaded_timeline_offset: f32,
     pub(crate) search_query: String,
     pub(crate) is_search_active: bool,
+    pub(crate) public_search_results: Vec<matrix::PublicRoom>,
+    pub(crate) is_searching_public: bool,
+    pub(crate) new_room_is_video: bool,
     pub(crate) active_reaction_picker: Option<matrix::TimelineEventItemId>,
     pub(crate) active_thread_root: Option<matrix_sdk::ruma::OwnedEventId>,
     pub(crate) threaded_timeline_items: Vector<ConstellationsItem>,
@@ -171,6 +176,10 @@ pub enum Message {
     InviteToSpaceIdChanged(String),
     InviteToSpace,
     SpaceUserInvited(Result<(), String>),
+    ToggleInviteToRoom,
+    InviteToRoomIdChanged(String),
+    InviteToRoom,
+    RoomUserInvited(Result<(), String>),
     DismissError,
     LoginHomeserverChanged(String),
     LoginUsernameChanged(String),
@@ -221,6 +230,9 @@ pub enum Message {
     PinnedEventsFetched(Result<Vec<matrix::PinnedEventInfo>, String>),
     ToggleSearch,
     SearchQueryChanged(String),
+    PublicSearchResults(Result<Vec<matrix::PublicRoom>, String>),
+    NewRoomIsVideoChanged(bool),
+    JumpToMessage(matrix_sdk::ruma::OwnedEventId),
     JoinCall,
     LeaveCall,
     CallJoined(Result<(), String>),
@@ -238,6 +250,8 @@ pub enum SettingsPanel {
     Space,
     Members,
     Pinned,
+    ManageRoomMembers,
+    ManageSpaceRooms,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -249,6 +263,10 @@ pub enum MenuAct {
     CreateSpace,
     SpaceSettings,
     SpaceInvite,
+    RoomSettings,
+    RoomInvite,
+    ManageRoomMembers,
+    ManageSpaceRooms,
 }
 
 impl MenuAction for MenuAct {
@@ -262,6 +280,10 @@ impl MenuAction for MenuAct {
             MenuAct::CreateSpace => Message::ToggleCreateSpace,
             MenuAct::SpaceSettings => Message::OpenSettings(SettingsPanel::Space),
             MenuAct::SpaceInvite => Message::ToggleInviteToSpace,
+            MenuAct::RoomSettings => Message::OpenSettings(SettingsPanel::Room),
+            MenuAct::RoomInvite => Message::ToggleInviteToRoom,
+            MenuAct::ManageRoomMembers => Message::OpenSettings(SettingsPanel::ManageRoomMembers),
+            MenuAct::ManageSpaceRooms => Message::OpenSettings(SettingsPanel::ManageSpaceRooms),
         }
     }
 }

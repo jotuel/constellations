@@ -1382,7 +1382,6 @@ impl State {
         use matrix_sdk::ruma::events::room::join_rules::{AllowRule, JoinRule, Restricted};
 
         let mut perm_col = Column::new().spacing(10);
-        perm_col = perm_col.push(text::title3(crate::fl!("permissions")));
 
         let mut join_rule_row = Row::new().spacing(10).align_y(Alignment::Center);
         join_rule_row = join_rule_row.push(text::body(crate::fl!("join-rule")).width(100));
@@ -1576,7 +1575,10 @@ impl State {
                 )
                 .wrap(),
         );
-        perm_col.into()
+        settings::section()
+            .title(crate::fl!("permissions"))
+            .add(settings::item_row(vec![perm_col.into()]))
+            .into()
     }
 
     fn view_save_button(&self) -> Option<Element<'_, Message>> {
@@ -1812,6 +1814,12 @@ impl State {
             col = col.push(save_btn);
         }
 
+        col.into()
+    }
+
+    pub fn view_manage(&self) -> Element<'_, Message> {
+        let mut col = settings::view_column(Vec::new());
+
         if let Some(members_view) = self.view_manage_members() {
             col = col.push(members_view);
         } else if self.is_loading_power_levels {
@@ -1827,7 +1835,6 @@ impl State {
         col.into()
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;

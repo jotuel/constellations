@@ -1049,10 +1049,11 @@ impl Constellations {
     ) -> Task<Action<<Constellations as Application>::Message>> {
         if let Some(matrix) = &self.matrix {
             let matrix = matrix.clone();
+            let is_video = self.new_room_is_video;
             Task::perform(
                 async move {
                     matrix
-                        .create_room(&name)
+                        .create_room(&name, is_video)
                         .await
                         .map(|id| id.to_string())
                         .map_err(|e| e.to_string())
@@ -1959,6 +1960,8 @@ impl Constellations {
                 self.room_members.clear();
                 self.pinned_events.clear();
                 self.pinned_events_details.clear();
+                self.inviting_to_room = false;
+                self.invite_to_room_id.clear();
                 let fetch_members_task = if self.show_members_panel {
                     self.is_loading_members = true;
                     self.fetch_members_task()
@@ -2324,6 +2327,47 @@ impl Constellations {
                 }
                 Task::none()
             }
+            Message::ToggleInviteToRoom => {
+                self.inviting_to_room = !self.inviting_to_room;
+                self.invite_to_room_id.clear();
+                Task::none()
+            }
+            Message::InviteToRoomIdChanged(id) => {
+                self.invite_to_room_id = id;
+                Task::none()
+            }
+            Message::InviteToRoom => {
+                if let Some(matrix) = &self.matrix
+                    && let Some(room_id) = &self.selected_room
+                {
+                    let matrix = matrix.clone();
+                    let room_id = room_id.to_string();
+                    let user_id = self.invite_to_room_id.clone();
+                    Task::perform(
+                        async move {
+                            matrix
+                                .invite_user(&room_id, &user_id)
+                                .await
+                                .map_err(|e| e.to_string())
+                        },
+                        |res| Action::from(Message::RoomUserInvited(res)),
+                    )
+                } else {
+                    Task::none()
+                }
+            }
+            Message::RoomUserInvited(res) => {
+                match res {
+                    Ok(_) => {
+                        self.inviting_to_room = false;
+                        self.invite_to_room_id.clear();
+                    }
+                    Err(e) => {
+                        self.set_error(format!("Failed to invite: {}", e));
+                    }
+                }
+                Task::none()
+            }
             Message::NewRoomNameChanged(name) => {
                 self.new_room_name = name;
                 Task::none()
@@ -2538,6 +2582,8 @@ impl Constellations {
                     self.search_query.clear();
                     self.room_settings.member_filter.clear();
                     self.space_settings.child_filter.clear();
+                    self.public_search_results.clear();
+                    self.is_searching_public = false;
                 } else if let Some(panel) = &self.current_settings_panel {
                     match panel {
                         SettingsPanel::Room => {
@@ -2557,16 +2603,108 @@ impl Constellations {
                 if let Some(panel) = &self.current_settings_panel {
                     match panel {
                         SettingsPanel::Room => {
-                            self.room_settings.member_filter = query;
+                            self.room_settings.member_filter = query.clone();
                         }
                         SettingsPanel::Space => {
-                            self.space_settings.child_filter = query;
+                            self.space_settings.child_filter = query.clone();
                         }
                         _ => {}
                     }
                 }
                 self.update_filtered_rooms();
+
+                if self.current_settings_panel.is_none() && !self.search_query.trim().is_empty() {
+                    if let Some(matrix) = &self.matrix {
+                        let query_str = self.search_query.trim().to_string();
+                        let matrix = matrix.clone();
+                        self.is_searching_public = true;
+
+                        Task::perform(
+                            async move { matrix.search_public_rooms(query_str, Some(20)).await },
+                            |res| {
+                                Action::from(Message::PublicSearchResults(
+                                    res.map_err(|e| e.to_string()),
+                                ))
+                            },
+                        )
+                    } else {
+                        Task::none()
+                    }
+                } else {
+                    self.public_search_results.clear();
+                    self.is_searching_public = false;
+                    Task::none()
+                }
+            }
+            Message::PublicSearchResults(res) => {
+                self.is_searching_public = false;
+                match res {
+                    Ok(results) => {
+                        self.public_search_results = results;
+
+                        let mut missing_avatar_urls = Vec::new();
+                        for room in &self.public_search_results {
+                            if let Some(avatar_url) = &room.avatar_url {
+                                if !self.media_cache.contains_key(avatar_url) {
+                                    missing_avatar_urls.push(avatar_url.clone());
+                                }
+                            }
+                        }
+
+                        let mut tasks = Vec::new();
+                        for avatar_url in missing_avatar_urls {
+                            let source = MediaSource::Plain(matrix_sdk::ruma::OwnedMxcUri::from(
+                                avatar_url.as_str(),
+                            ));
+                            tasks.push(self.handle_fetch_media(source));
+                        }
+                        if !tasks.is_empty() {
+                            return Task::batch(tasks);
+                        }
+                    }
+                    Err(e) => {
+                        self.error = Some(format!("Failed to search public rooms: {}", e));
+                    }
+                }
                 Task::none()
+            }
+            Message::NewRoomIsVideoChanged(is_video) => {
+                self.new_room_is_video = is_video;
+                Task::none()
+            }
+            Message::JumpToMessage(event_id) => {
+                let index = self.timeline_items.iter().position(|item| {
+                    item.item_id.as_ref().is_some_and(|id| {
+                        if let matrix::TimelineEventItemId::EventId(eid) = id {
+                            eid == &event_id
+                        } else {
+                            false
+                        }
+                    })
+                });
+
+                if let Some(i) = index
+                    && !self.timeline_items.is_empty()
+                    && self.last_content_height > 0.0
+                {
+                    let relative_idx = i as f32 / self.timeline_items.len() as f32;
+                    let target_y = (relative_idx * self.last_content_height)
+                        - (self.last_viewport_height / 2.0);
+                    let target_y =
+                        target_y.clamp(0.0, self.last_content_height - self.last_viewport_height);
+
+                    self.last_timeline_offset = target_y;
+
+                    scrollable::scroll_to(
+                        TIMELINE_ID.clone(),
+                        scrollable::AbsoluteOffset {
+                            x: Some(0.0),
+                            y: Some(target_y),
+                        },
+                    )
+                } else {
+                    Task::none()
+                }
             }
             Message::JoinCall => self.handle_join_call(),
             Message::LeaveCall => self.handle_leave_call(),
@@ -2880,6 +3018,9 @@ mod tests {
             is_sync_indicator_active: false,
             search_query: String::new(),
             is_search_active: false,
+            public_search_results: Vec::new(),
+            is_searching_public: false,
+            new_room_is_video: false,
             joined_room_ids: HashSet::new(),
             visited_room_ids: HashSet::new(),
             is_first_time_joining: false,
@@ -2911,6 +3052,8 @@ mod tests {
             creating_space: false,
             inviting_to_space: false,
             invite_to_space_id: String::new(),
+            inviting_to_room: false,
+            invite_to_room_id: String::new(),
             active_thread_root: None,
             threaded_timeline_items: eyeball_im::Vector::new(),
             is_loading_more: false,

@@ -883,7 +883,7 @@ async fn test_send_message_success() {
     }
 
     // Create the room so it's registered in the client store
-    let room_id = engine.create_room("Test Room").await.unwrap();
+    let room_id = engine.create_room("Test Room", false).await.unwrap();
     assert_eq!(room_id.as_str(), "!test_room:localhost");
 
     // Now test successful plain text send
@@ -1039,7 +1039,7 @@ async fn test_create_room() {
         inner.client = client;
     }
 
-    let room_id = engine.create_room("Test Room").await.unwrap();
+    let room_id = engine.create_room("Test Room", false).await.unwrap();
     assert_eq!(room_id.as_str(), "!new_room:example.com");
 }
 
@@ -1455,7 +1455,7 @@ async fn test_leave_room_success() {
         inner.client = client;
     }
 
-    let room_id = engine.create_room("Test Room").await.unwrap();
+    let room_id = engine.create_room("Test Room", false).await.unwrap();
     assert_eq!(room_id.as_str(), "!leave_test_room:example.com");
 
     let result = engine.leave_room(room_id.as_str()).await;
@@ -1556,7 +1556,7 @@ async fn test_leave_room_error() {
         inner.client = client;
     }
 
-    let room_id = engine.create_room("Test Room").await.unwrap();
+    let room_id = engine.create_room("Test Room", false).await.unwrap();
 
     let result = engine.leave_room(room_id.as_str()).await;
     if result.is_ok() {
@@ -1629,7 +1629,7 @@ async fn test_fetch_room_data_success() {
         inner.client = client.clone();
     }
 
-    let room_id = engine.create_room("Test Room").await.unwrap();
+    let room_id = engine.create_room("Test Room", false).await.unwrap();
     assert_eq!(room_id.as_str(), "!new_room:example.com");
 
     let client_actual = engine.client().await;

@@ -100,6 +100,17 @@ impl From<anyhow::Error> for SyncError {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublicRoom {
+    pub id: String,
+    pub name: Option<String>,
+    pub topic: Option<String>,
+    pub canonical_alias: Option<String>,
+    pub num_joined_members: u32,
+    pub avatar_url: Option<String>,
+    pub is_space: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoomData {
     pub id: std::sync::Arc<str>,
     pub name: Option<String>,
@@ -2254,10 +2265,64 @@ impl MatrixEngine {
         Ok(content)
     }
 
-    pub async fn create_room(&self, name: &str) -> Result<OwnedRoomId> {
+    pub async fn search_public_rooms(
+        &self,
+        query: String,
+        limit: Option<u32>,
+    ) -> Result<Vec<PublicRoom>> {
+        let client = {
+            let inner = self.inner.read().await;
+            inner.client.clone()
+        };
+
+        let mut filter = matrix_sdk::ruma::directory::Filter::new();
+        if !query.is_empty() {
+            filter.generic_search_term = Some(query);
+        }
+
+        let mut request =
+            matrix_sdk::ruma::api::client::directory::get_public_rooms_filtered::v3::Request::new();
+        request.limit = limit.map(|l| l.into());
+        request.filter = filter;
+
+        let response = client.public_rooms_filtered(request).await?;
+
+        let rooms = response
+            .chunk
+            .into_iter()
+            .map(|chunk| {
+                let is_space = chunk
+                    .room_type
+                    .as_ref()
+                    .map(|t| t == &matrix_sdk::ruma::room::RoomType::Space)
+                    .unwrap_or(false);
+                PublicRoom {
+                    id: chunk.room_id.to_string(),
+                    name: chunk.name,
+                    topic: chunk.topic,
+                    canonical_alias: chunk.canonical_alias.map(|a| a.to_string()),
+                    num_joined_members: u64::from(chunk.num_joined_members) as u32,
+                    avatar_url: chunk.avatar_url.map(|u| u.to_string()),
+                    is_space,
+                }
+            })
+            .collect();
+
+        Ok(rooms)
+    }
+
+    pub async fn create_room(&self, name: &str, is_video: bool) -> Result<OwnedRoomId> {
         let client = self.client().await;
         let mut request = matrix_sdk::ruma::api::client::room::create_room::v3::Request::new();
         request.name = Some(name.to_string());
+        if is_video {
+            let mut creation_content =
+                matrix_sdk::ruma::api::client::room::create_room::v3::CreationContent::new();
+            creation_content.room_type = Some(matrix_sdk::ruma::room::RoomType::from(
+                "org.matrix.msc3401.call.room",
+            ));
+            request.creation_content = Some(matrix_sdk::ruma::serde::Raw::new(&creation_content)?);
+        }
         let room = client.create_room(request).await?;
         Ok(room.room_id().to_owned())
     }
