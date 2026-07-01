@@ -2267,12 +2267,16 @@ impl Constellations {
                 self.creating_room = !self.creating_room;
                 self.creating_space = false;
                 self.new_room_name.clear();
+                self.current_settings_panel = None;
+                self.core.set_show_context(self.creating_room);
                 Task::none()
             }
             Message::ToggleCreateSpace => {
                 self.creating_space = !self.creating_space;
                 self.creating_room = false;
                 self.new_room_name.clear();
+                self.current_settings_panel = None;
+                self.core.set_show_context(self.creating_space);
                 Task::none()
             }
             Message::ToggleInviteToSpace => {
@@ -2331,6 +2335,7 @@ impl Constellations {
                         self.creating_room = false;
                         self.new_room_name.clear();
                         self.selected_room = Some(room_id.as_str().into());
+                        self.core.set_show_context(false);
                     }
                     Err(e) => {
                         self.set_error(format!("Failed to create room: {}", e));
@@ -2344,6 +2349,7 @@ impl Constellations {
                     Ok(space_id) => {
                         self.creating_space = false;
                         self.new_room_name.clear();
+                        self.core.set_show_context(false);
                         if let Ok(rid) = space_id.as_str().try_into() {
                             return self.handle_select_space(Some(rid));
                         }
@@ -2448,6 +2454,8 @@ impl Constellations {
                 self.needs_threaded_layout_scroll_restoration = true;
                 self.show_members_panel = false;
                 self.show_pinned_panel = false;
+                self.creating_room = false;
+                self.creating_space = false;
                 self.current_settings_panel = Some(panel.clone());
                 self.core.set_show_context(true);
 

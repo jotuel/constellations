@@ -139,6 +139,21 @@ impl Application for Constellations {
                 cosmic::app::context_drawer::context_drawer(panel_content, Message::CloseSettings)
                     .title(title.to_string()),
             )
+        } else if self.creating_room || self.creating_space {
+            let title = if self.creating_room {
+                crate::fl!("create-room")
+            } else {
+                crate::fl!("create-space")
+            };
+            let close_msg = if self.creating_room {
+                Message::ToggleCreateRoom
+            } else {
+                Message::ToggleCreateSpace
+            };
+            Some(
+                cosmic::app::context_drawer::context_drawer(self.view_create_form(), close_msg)
+                    .title(title.to_string()),
+            )
         } else {
             None
         }
