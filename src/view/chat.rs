@@ -1151,6 +1151,7 @@ impl<'chat> Constellations {
                     );
                     content = content.push(container(invite_ui).padding(5));
                 }
+
                 let selected_room_data = self
                     .selected_room
                     .as_ref()
