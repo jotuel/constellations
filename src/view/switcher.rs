@@ -623,7 +623,7 @@ fn view_space_name_menu(name: &str) -> menu::MenuBar<Message> {
 pub(crate) fn view_room_name_menu(name: &str) -> menu::MenuBar<Message> {
     let key_binds = std::collections::HashMap::new();
     let menu_tree = menu::Tree::with_children(
-        RcElementWrapper::new(Element::from(menu::root(name.to_string()))),
+        RcElementWrapper::new(Element::from(menu::root(name.to_owned()))),
         menu::items(
             &key_binds,
             vec![
