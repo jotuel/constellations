@@ -1,7 +1,7 @@
 use crate::matrix::MatrixEngine;
 use cosmic::iced::Alignment;
 use cosmic::widget::{
-    Column, Row, button, radio, settings, text, text_input, tooltip, tooltip::Position,
+    Column, Row, button, radio, settings, slider, text, text_input, tooltip, tooltip::Position,
 };
 use cosmic::{Action, Element, Task};
 use matrix_sdk::room::power_levels::RoomPowerLevelChanges;
@@ -29,6 +29,7 @@ pub struct State {
     pub power_levels: Option<(i64, HashMap<matrix_sdk::ruma::OwnedUserId, i64>)>,
     pub is_loading_power_levels: bool,
     pub updating_power_level_for: Option<String>,
+    pub pending_power_level: Option<(String, i64)>,
     pub ban_level: i64,
     pub original_ban_level: i64,
     pub invite_level: i64,
@@ -93,7 +94,8 @@ pub enum Message {
     RoomForgotten(Result<(), String>),
     LoadPowerLevels,
     PowerLevelsLoaded(Result<PowerLevelInfo, String>),
-    UpdatePowerLevel(String, i64),
+    PendingPowerLevel(String, i64),
+    CommitPowerLevel(String),
     PowerLevelUpdated(String, Result<(), String>),
     BanLevelChanged(String),
     InviteLevelChanged(String),
@@ -691,8 +693,17 @@ impl State {
                 self.member_filter = f;
                 Task::none()
             }
-            Message::UpdatePowerLevel(user_id, level) => {
-                if let Some(matrix) = matrix
+            Message::PendingPowerLevel(user_id, level) => {
+                self.pending_power_level = Some((user_id, level));
+                Task::none()
+            }
+            Message::CommitPowerLevel(user_id) => {
+                if self.updating_power_level_for.as_deref() == Some(user_id.as_str()) {
+                    return Task::none();
+                }
+                if let Some((draft_user, draft_level)) = self.pending_power_level.take()
+                    && draft_user == user_id
+                    && let Some(matrix) = matrix
                     && let Some(room_id) = &self.room_id
                 {
                     self.updating_power_level_for = Some(user_id.clone());
@@ -703,7 +714,11 @@ impl State {
                     return Task::perform(
                         async move {
                             engine
-                                .update_user_power_level(&room_id_clone, &user_id_for_task, level)
+                                .update_user_power_level(
+                                    &room_id_clone,
+                                    &user_id_for_task,
+                                    draft_level,
+                                )
                                 .await
                                 .map_err(|e| e.to_string())
                         },
@@ -719,6 +734,7 @@ impl State {
             }
             Message::PowerLevelUpdated(user_id, res) => {
                 self.updating_power_level_for = None;
+                self.pending_power_level = None;
                 match res {
                     Ok(_) => {
                         self.invite_user_id = String::new();
@@ -1699,33 +1715,30 @@ impl State {
                     }
                 }
 
-                let is_updating = self.updating_power_level_for.as_deref() == Some(user_id_str);
                 let is_me = self.current_user_id.as_deref() == Some(user_id_str);
 
                 let mut user_col = Column::new().spacing(5);
+
+                let current_level = match &self.pending_power_level {
+                    Some((uid, l)) if uid == user_id_str => *l,
+                    _ => *level,
+                };
 
                 let user_row = Row::new()
                     .spacing(10)
                     .align_y(Alignment::Center)
                     .push(text::body(user_id_str).size(14))
-                    .push(text::body(level.to_string()).size(14))
+                    .push(text::body(current_level.to_string()).size(14))
                     .wrap();
 
-                let mut level_row = Row::new().spacing(5);
-                for l in [0, 50, 100] {
-                    let mut btn = button::text(match l {
-                        0 => crate::fl!("default"),
-                        50 => crate::fl!("mod"),
-                        100 => crate::fl!("admin"),
-                        _ => "??".to_string(),
-                    });
-                    if !is_updating && *level != l {
-                        btn = btn.on_press(Message::UpdatePowerLevel(user_id_str.to_string(), l));
-                    }
-                    level_row = level_row.push(btn);
-                }
+                let level_slider = slider(0..=100, current_level.clamp(0, 100) as i32, move |l| {
+                    Message::PendingPowerLevel(user_id_str.to_string(), l as i64)
+                })
+                .on_release(Message::CommitPowerLevel(user_id_str.to_string()));
 
-                user_col = user_col.push(user_row).push(level_row.wrap());
+                user_col = user_col
+                    .push(user_row)
+                    .push(Row::new().spacing(10).push(level_slider).wrap());
 
                 if !is_me {
                     let mut action_row = Row::new().spacing(5);
@@ -1859,6 +1872,8 @@ impl State {
             col = col.push(members_view);
         } else if self.is_loading_power_levels {
             col = col.push(text::body(crate::fl!("loading-members")));
+        } else {
+            println!("No members view")
         }
 
         col = col.push(self.view_invite());
@@ -2011,5 +2026,51 @@ mod tests {
             &None,
         );
         assert!(state.alt_aliases.is_empty());
+    }
+
+    #[test]
+    fn test_pending_power_level() {
+        let mut state = State::default();
+        let _ = state.update(
+            Message::PendingPowerLevel("@user:example.com".to_string(), 75),
+            &None,
+        );
+        assert_eq!(
+            state.pending_power_level,
+            Some(("@user:example.com".to_string(), 75))
+        );
+    }
+
+    #[test]
+    fn test_commit_power_level_no_matrix() {
+        let mut state = State {
+            pending_power_level: Some(("@user:example.com".to_string(), 50)),
+            ..Default::default()
+        };
+        let _ = state.update(
+            Message::CommitPowerLevel("@user:example.com".to_string()),
+            &None,
+        );
+        // Without a matrix engine the commit is a no-op, but the draft is consumed.
+        assert!(state.pending_power_level.is_none());
+        assert!(state.updating_power_level_for.is_none());
+    }
+
+    #[test]
+    fn test_commit_power_level_guarded_while_updating() {
+        let mut state = State {
+            pending_power_level: Some(("@user:example.com".to_string(), 50)),
+            updating_power_level_for: Some("@user:example.com".to_string()),
+            ..Default::default()
+        };
+        let _ = state.update(
+            Message::CommitPowerLevel("@user:example.com".to_string()),
+            &None,
+        );
+        // Already updating this user: the commit is ignored and the draft is preserved.
+        assert_eq!(
+            state.pending_power_level,
+            Some(("@user:example.com".to_string(), 50))
+        );
     }
 }

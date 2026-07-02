@@ -2518,7 +2518,10 @@ impl Constellations {
                 let task = if panel == SettingsPanel::User {
                     self.user_settings
                         .update(settings::user::Message::LoadProfile, &self.matrix)
-                } else if panel == SettingsPanel::Room {
+                } else if matches!(
+                    panel,
+                    SettingsPanel::Room | SettingsPanel::ManageRoomMembers
+                ) {
                     if let Some(room_id) = &self.selected_room {
                         self.room_settings.update(
                             settings::room::Message::LoadRoom(room_id.clone()),
