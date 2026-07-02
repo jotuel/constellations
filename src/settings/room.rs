@@ -1,6 +1,8 @@
 use crate::matrix::MatrixEngine;
 use cosmic::iced::Alignment;
-use cosmic::widget::{Column, Row, button, settings, text, text_input, tooltip, tooltip::Position};
+use cosmic::widget::{
+    Column, Row, button, radio, settings, text, text_input, tooltip, tooltip::Position,
+};
 use cosmic::{Action, Element, Task};
 use matrix_sdk::room::power_levels::RoomPowerLevelChanges;
 use matrix_sdk::ruma::RoomId;
@@ -154,6 +156,28 @@ pub struct RoomInfo {
     pub is_encrypted: bool,
     pub canonical_alias: Option<String>,
     pub alt_aliases: Vec<String>,
+}
+
+/// Lightweight `Copy` choice used as the radio value for join rule selection.
+///
+/// `JoinRule` itself is not `Copy` (it carries a `Restricted` payload), so it
+/// cannot be used directly as a radio value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum JoinRuleChoice {
+    Public,
+    Invite,
+    Knock,
+    Restricted,
+}
+
+/// Lightweight `Copy` choice used as the radio value for history visibility.
+///
+/// `HistoryVisibility` is not `Copy`, so it cannot be a radio value directly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HistoryVisibilityChoice {
+    Shared,
+    Invited,
+    Joined,
 }
 
 impl State {
@@ -1213,17 +1237,12 @@ impl State {
                 RoomNotificationMode::Mute => crate::fl!("notification-mode-mute"),
             };
 
-            let mut btn = if self.notification_mode == Some(mode) {
-                button::suggested(label)
-            } else {
-                button::text(label)
-            };
-
-            if self.notification_mode != Some(mode) && !self.is_loading_notifications {
-                btn = btn.on_press(Message::NotificationModeChanged(mode));
-            }
-
-            r = r.push(btn);
+            r = r.push(radio(
+                text::body(label),
+                mode,
+                self.notification_mode,
+                move |_| Message::NotificationModeChanged(mode),
+            ));
         }
 
         settings::section()
@@ -1383,77 +1402,93 @@ impl State {
 
         let mut perm_col = Column::new().spacing(10);
 
-        let mut join_rule_row = Row::new().spacing(10).align_y(Alignment::Center);
-        join_rule_row = join_rule_row.push(text::body(crate::fl!("join-rule")).width(100));
-
-        for rule in [JoinRule::Public, JoinRule::Invite, JoinRule::Knock] {
-            let label = match rule {
-                JoinRule::Public => crate::fl!("join-rule-public"),
-                JoinRule::Invite => crate::fl!("join-rule-invite"),
-                JoinRule::Knock => crate::fl!("join-rule-knock"),
-                _ => unreachable!(),
-            };
-
-            let is_selected = self.join_rule.as_ref() == Some(&rule);
-            let mut btn = if is_selected {
-                button::suggested(label)
-            } else {
-                button::text(label)
-            };
-
-            if !is_selected {
-                btn = btn.on_press(Message::JoinRuleChanged(rule));
-            }
-            join_rule_row = join_rule_row.push(btn);
-        }
-
         let is_restricted = matches!(self.join_rule, Some(JoinRule::Restricted(_)));
 
         let parsed_restricted_space_id = RoomId::parse(&self.restricted_space_id).ok();
 
-        let mut restricted_btn = if is_restricted {
-            button::suggested(crate::fl!("join-rule-restricted"))
-        } else {
-            button::text(crate::fl!("join-rule-restricted"))
+        perm_col = perm_col.push(text::body(crate::fl!("join-rule")).width(180));
+        let mut join_rule_row = Row::new().spacing(10).align_y(Alignment::Center);
+
+        let selected_rule = match &self.join_rule {
+            Some(JoinRule::Public) => Some(JoinRuleChoice::Public),
+            Some(JoinRule::Invite) => Some(JoinRuleChoice::Invite),
+            Some(JoinRule::Knock) => Some(JoinRuleChoice::Knock),
+            Some(JoinRule::Restricted(_)) => Some(JoinRuleChoice::Restricted),
+            _ => None,
         };
 
-        if !is_restricted && let Some(space_id) = &parsed_restricted_space_id {
-            let restricted = Restricted::new(vec![AllowRule::room_membership(space_id.clone())]);
-            restricted_btn =
-                restricted_btn.on_press(Message::JoinRuleChanged(JoinRule::Restricted(restricted)));
-        }
+        for choice in [
+            JoinRuleChoice::Public,
+            JoinRuleChoice::Invite,
+            JoinRuleChoice::Knock,
+            JoinRuleChoice::Restricted,
+        ] {
+            let label = match choice {
+                JoinRuleChoice::Public => crate::fl!("join-rule-public"),
+                JoinRuleChoice::Invite => crate::fl!("join-rule-invite"),
+                JoinRuleChoice::Knock => crate::fl!("join-rule-knock"),
+                JoinRuleChoice::Restricted => crate::fl!("join-rule-restricted"),
+            };
 
-        join_rule_row = join_rule_row.push(restricted_btn);
+            let msg = match choice {
+                JoinRuleChoice::Public => Message::JoinRuleChanged(JoinRule::Public),
+                JoinRuleChoice::Invite => Message::JoinRuleChanged(JoinRule::Invite),
+                JoinRuleChoice::Knock => Message::JoinRuleChanged(JoinRule::Knock),
+                JoinRuleChoice::Restricted => {
+                    if let Some(space_id) = &parsed_restricted_space_id {
+                        let restricted =
+                            Restricted::new(vec![AllowRule::room_membership(space_id.clone())]);
+                        Message::JoinRuleChanged(JoinRule::Restricted(restricted))
+                    } else {
+                        Message::JoinRuleChanged(JoinRule::Restricted(Restricted::default()))
+                    }
+                }
+            };
+
+            join_rule_row =
+                join_rule_row.push(radio(text::body(label), choice, selected_rule, move |_| {
+                    msg
+                }));
+        }
 
         perm_col = perm_col.push(join_rule_row.wrap());
 
+        perm_col = perm_col.push(text::body(crate::fl!("history-visibility")).width(180));
         let mut history_visibility_row = Row::new().spacing(10).align_y(Alignment::Center);
-        history_visibility_row =
-            history_visibility_row.push(text::body(crate::fl!("history-visibility")).width(100));
 
-        for visibility in [
-            HistoryVisibility::Shared,
-            HistoryVisibility::Invited,
-            HistoryVisibility::Joined,
+        let selected_visibility = match &self.history_visibility {
+            Some(HistoryVisibility::Shared) => Some(HistoryVisibilityChoice::Shared),
+            Some(HistoryVisibility::Invited) => Some(HistoryVisibilityChoice::Invited),
+            Some(HistoryVisibility::Joined) => Some(HistoryVisibilityChoice::Joined),
+            _ => None,
+        };
+
+        for choice in [
+            HistoryVisibilityChoice::Shared,
+            HistoryVisibilityChoice::Invited,
+            HistoryVisibilityChoice::Joined,
         ] {
-            let label = match visibility {
-                HistoryVisibility::Shared => crate::fl!("history-visibility-shared"),
-                HistoryVisibility::Invited => crate::fl!("history-visibility-invited"),
-                HistoryVisibility::Joined => crate::fl!("history-visibility-joined"),
-                _ => unreachable!(),
+            let (label, visibility) = match choice {
+                HistoryVisibilityChoice::Shared => (
+                    crate::fl!("history-visibility-shared"),
+                    HistoryVisibility::Shared,
+                ),
+                HistoryVisibilityChoice::Invited => (
+                    crate::fl!("history-visibility-invited"),
+                    HistoryVisibility::Invited,
+                ),
+                HistoryVisibilityChoice::Joined => (
+                    crate::fl!("history-visibility-joined"),
+                    HistoryVisibility::Joined,
+                ),
             };
 
-            let is_selected = self.history_visibility.as_ref() == Some(&visibility);
-            let mut btn = if is_selected {
-                button::suggested(label)
-            } else {
-                button::text(label)
-            };
-
-            if !is_selected {
-                btn = btn.on_press(Message::HistoryVisibilityChanged(visibility));
-            }
-            history_visibility_row = history_visibility_row.push(btn);
+            history_visibility_row = history_visibility_row.push(radio(
+                text::body(label),
+                choice,
+                selected_visibility,
+                move |_| Message::HistoryVisibilityChanged(visibility),
+            ));
         }
 
         perm_col = perm_col.push(history_visibility_row.wrap());
