@@ -1,6 +1,8 @@
 use crate::matrix::MatrixEngine;
 use cosmic::iced::Alignment;
-use cosmic::widget::{Column, Row, button, settings, text, text_input, tooltip, tooltip::Position};
+use cosmic::widget::{
+    Column, Row, button, radio, settings, slider, text, text_input, tooltip, tooltip::Position,
+};
 use cosmic::{Action, Element, Task};
 use matrix_sdk::room::power_levels::RoomPowerLevelChanges;
 use matrix_sdk::ruma::RoomId;
@@ -27,6 +29,7 @@ pub struct State {
     pub power_levels: Option<(i64, HashMap<matrix_sdk::ruma::OwnedUserId, i64>)>,
     pub is_loading_power_levels: bool,
     pub updating_power_level_for: Option<String>,
+    pub pending_power_level: Option<(String, i64)>,
     pub ban_level: i64,
     pub original_ban_level: i64,
     pub invite_level: i64,
@@ -91,7 +94,8 @@ pub enum Message {
     RoomForgotten(Result<(), String>),
     LoadPowerLevels,
     PowerLevelsLoaded(Result<PowerLevelInfo, String>),
-    UpdatePowerLevel(String, i64),
+    PendingPowerLevel(String, i64),
+    CommitPowerLevel(String),
     PowerLevelUpdated(String, Result<(), String>),
     BanLevelChanged(String),
     InviteLevelChanged(String),
@@ -154,6 +158,28 @@ pub struct RoomInfo {
     pub is_encrypted: bool,
     pub canonical_alias: Option<String>,
     pub alt_aliases: Vec<String>,
+}
+
+/// Lightweight `Copy` choice used as the radio value for join rule selection.
+///
+/// `JoinRule` itself is not `Copy` (it carries a `Restricted` payload), so it
+/// cannot be used directly as a radio value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum JoinRuleChoice {
+    Public,
+    Invite,
+    Knock,
+    Restricted,
+}
+
+/// Lightweight `Copy` choice used as the radio value for history visibility.
+///
+/// `HistoryVisibility` is not `Copy`, so it cannot be a radio value directly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HistoryVisibilityChoice {
+    Shared,
+    Invited,
+    Joined,
 }
 
 impl State {
@@ -667,8 +693,17 @@ impl State {
                 self.member_filter = f;
                 Task::none()
             }
-            Message::UpdatePowerLevel(user_id, level) => {
-                if let Some(matrix) = matrix
+            Message::PendingPowerLevel(user_id, level) => {
+                self.pending_power_level = Some((user_id, level));
+                Task::none()
+            }
+            Message::CommitPowerLevel(user_id) => {
+                if self.updating_power_level_for.as_deref() == Some(user_id.as_str()) {
+                    return Task::none();
+                }
+                if let Some((draft_user, draft_level)) = self.pending_power_level.take()
+                    && draft_user == user_id
+                    && let Some(matrix) = matrix
                     && let Some(room_id) = &self.room_id
                 {
                     self.updating_power_level_for = Some(user_id.clone());
@@ -679,7 +714,11 @@ impl State {
                     return Task::perform(
                         async move {
                             engine
-                                .update_user_power_level(&room_id_clone, &user_id_for_task, level)
+                                .update_user_power_level(
+                                    &room_id_clone,
+                                    &user_id_for_task,
+                                    draft_level,
+                                )
                                 .await
                                 .map_err(|e| e.to_string())
                         },
@@ -695,6 +734,7 @@ impl State {
             }
             Message::PowerLevelUpdated(user_id, res) => {
                 self.updating_power_level_for = None;
+                self.pending_power_level = None;
                 match res {
                     Ok(_) => {
                         self.invite_user_id = String::new();
@@ -1213,17 +1253,12 @@ impl State {
                 RoomNotificationMode::Mute => crate::fl!("notification-mode-mute"),
             };
 
-            let mut btn = if self.notification_mode == Some(mode) {
-                button::suggested(label)
-            } else {
-                button::text(label)
-            };
-
-            if self.notification_mode != Some(mode) && !self.is_loading_notifications {
-                btn = btn.on_press(Message::NotificationModeChanged(mode));
-            }
-
-            r = r.push(btn);
+            r = r.push(radio(
+                text::body(label),
+                mode,
+                self.notification_mode,
+                move |_| Message::NotificationModeChanged(mode),
+            ));
         }
 
         settings::section()
@@ -1383,77 +1418,93 @@ impl State {
 
         let mut perm_col = Column::new().spacing(10);
 
-        let mut join_rule_row = Row::new().spacing(10).align_y(Alignment::Center);
-        join_rule_row = join_rule_row.push(text::body(crate::fl!("join-rule")).width(100));
-
-        for rule in [JoinRule::Public, JoinRule::Invite, JoinRule::Knock] {
-            let label = match rule {
-                JoinRule::Public => crate::fl!("join-rule-public"),
-                JoinRule::Invite => crate::fl!("join-rule-invite"),
-                JoinRule::Knock => crate::fl!("join-rule-knock"),
-                _ => unreachable!(),
-            };
-
-            let is_selected = self.join_rule.as_ref() == Some(&rule);
-            let mut btn = if is_selected {
-                button::suggested(label)
-            } else {
-                button::text(label)
-            };
-
-            if !is_selected {
-                btn = btn.on_press(Message::JoinRuleChanged(rule));
-            }
-            join_rule_row = join_rule_row.push(btn);
-        }
-
         let is_restricted = matches!(self.join_rule, Some(JoinRule::Restricted(_)));
 
         let parsed_restricted_space_id = RoomId::parse(&self.restricted_space_id).ok();
 
-        let mut restricted_btn = if is_restricted {
-            button::suggested(crate::fl!("join-rule-restricted"))
-        } else {
-            button::text(crate::fl!("join-rule-restricted"))
+        perm_col = perm_col.push(text::body(crate::fl!("join-rule")).width(180));
+        let mut join_rule_row = Row::new().spacing(10).align_y(Alignment::Center);
+
+        let selected_rule = match &self.join_rule {
+            Some(JoinRule::Public) => Some(JoinRuleChoice::Public),
+            Some(JoinRule::Invite) => Some(JoinRuleChoice::Invite),
+            Some(JoinRule::Knock) => Some(JoinRuleChoice::Knock),
+            Some(JoinRule::Restricted(_)) => Some(JoinRuleChoice::Restricted),
+            _ => None,
         };
 
-        if !is_restricted && let Some(space_id) = &parsed_restricted_space_id {
-            let restricted = Restricted::new(vec![AllowRule::room_membership(space_id.clone())]);
-            restricted_btn =
-                restricted_btn.on_press(Message::JoinRuleChanged(JoinRule::Restricted(restricted)));
-        }
+        for choice in [
+            JoinRuleChoice::Public,
+            JoinRuleChoice::Invite,
+            JoinRuleChoice::Knock,
+            JoinRuleChoice::Restricted,
+        ] {
+            let label = match choice {
+                JoinRuleChoice::Public => crate::fl!("join-rule-public"),
+                JoinRuleChoice::Invite => crate::fl!("join-rule-invite"),
+                JoinRuleChoice::Knock => crate::fl!("join-rule-knock"),
+                JoinRuleChoice::Restricted => crate::fl!("join-rule-restricted"),
+            };
 
-        join_rule_row = join_rule_row.push(restricted_btn);
+            let msg = match choice {
+                JoinRuleChoice::Public => Message::JoinRuleChanged(JoinRule::Public),
+                JoinRuleChoice::Invite => Message::JoinRuleChanged(JoinRule::Invite),
+                JoinRuleChoice::Knock => Message::JoinRuleChanged(JoinRule::Knock),
+                JoinRuleChoice::Restricted => {
+                    if let Some(space_id) = &parsed_restricted_space_id {
+                        let restricted =
+                            Restricted::new(vec![AllowRule::room_membership(space_id.clone())]);
+                        Message::JoinRuleChanged(JoinRule::Restricted(restricted))
+                    } else {
+                        Message::JoinRuleChanged(JoinRule::Restricted(Restricted::default()))
+                    }
+                }
+            };
+
+            join_rule_row =
+                join_rule_row.push(radio(text::body(label), choice, selected_rule, move |_| {
+                    msg
+                }));
+        }
 
         perm_col = perm_col.push(join_rule_row.wrap());
 
+        perm_col = perm_col.push(text::body(crate::fl!("history-visibility")).width(180));
         let mut history_visibility_row = Row::new().spacing(10).align_y(Alignment::Center);
-        history_visibility_row =
-            history_visibility_row.push(text::body(crate::fl!("history-visibility")).width(100));
 
-        for visibility in [
-            HistoryVisibility::Shared,
-            HistoryVisibility::Invited,
-            HistoryVisibility::Joined,
+        let selected_visibility = match &self.history_visibility {
+            Some(HistoryVisibility::Shared) => Some(HistoryVisibilityChoice::Shared),
+            Some(HistoryVisibility::Invited) => Some(HistoryVisibilityChoice::Invited),
+            Some(HistoryVisibility::Joined) => Some(HistoryVisibilityChoice::Joined),
+            _ => None,
+        };
+
+        for choice in [
+            HistoryVisibilityChoice::Shared,
+            HistoryVisibilityChoice::Invited,
+            HistoryVisibilityChoice::Joined,
         ] {
-            let label = match visibility {
-                HistoryVisibility::Shared => crate::fl!("history-visibility-shared"),
-                HistoryVisibility::Invited => crate::fl!("history-visibility-invited"),
-                HistoryVisibility::Joined => crate::fl!("history-visibility-joined"),
-                _ => unreachable!(),
+            let (label, visibility) = match choice {
+                HistoryVisibilityChoice::Shared => (
+                    crate::fl!("history-visibility-shared"),
+                    HistoryVisibility::Shared,
+                ),
+                HistoryVisibilityChoice::Invited => (
+                    crate::fl!("history-visibility-invited"),
+                    HistoryVisibility::Invited,
+                ),
+                HistoryVisibilityChoice::Joined => (
+                    crate::fl!("history-visibility-joined"),
+                    HistoryVisibility::Joined,
+                ),
             };
 
-            let is_selected = self.history_visibility.as_ref() == Some(&visibility);
-            let mut btn = if is_selected {
-                button::suggested(label)
-            } else {
-                button::text(label)
-            };
-
-            if !is_selected {
-                btn = btn.on_press(Message::HistoryVisibilityChanged(visibility));
-            }
-            history_visibility_row = history_visibility_row.push(btn);
+            history_visibility_row = history_visibility_row.push(radio(
+                text::body(label),
+                choice,
+                selected_visibility,
+                move |_| Message::HistoryVisibilityChanged(visibility),
+            ));
         }
 
         perm_col = perm_col.push(history_visibility_row.wrap());
@@ -1664,33 +1715,30 @@ impl State {
                     }
                 }
 
-                let is_updating = self.updating_power_level_for.as_deref() == Some(user_id_str);
                 let is_me = self.current_user_id.as_deref() == Some(user_id_str);
 
                 let mut user_col = Column::new().spacing(5);
+
+                let current_level = match &self.pending_power_level {
+                    Some((uid, l)) if uid == user_id_str => *l,
+                    _ => *level,
+                };
 
                 let user_row = Row::new()
                     .spacing(10)
                     .align_y(Alignment::Center)
                     .push(text::body(user_id_str).size(14))
-                    .push(text::body(level.to_string()).size(14))
+                    .push(text::body(current_level.to_string()).size(14))
                     .wrap();
 
-                let mut level_row = Row::new().spacing(5);
-                for l in [0, 50, 100] {
-                    let mut btn = button::text(match l {
-                        0 => crate::fl!("default"),
-                        50 => crate::fl!("mod"),
-                        100 => crate::fl!("admin"),
-                        _ => "??".to_string(),
-                    });
-                    if !is_updating && *level != l {
-                        btn = btn.on_press(Message::UpdatePowerLevel(user_id_str.to_string(), l));
-                    }
-                    level_row = level_row.push(btn);
-                }
+                let level_slider = slider(0..=100, current_level.clamp(0, 100) as i32, move |l| {
+                    Message::PendingPowerLevel(user_id_str.to_string(), l as i64)
+                })
+                .on_release(Message::CommitPowerLevel(user_id_str.to_string()));
 
-                user_col = user_col.push(user_row).push(level_row.wrap());
+                user_col = user_col
+                    .push(user_row)
+                    .push(Row::new().spacing(10).push(level_slider).wrap());
 
                 if !is_me {
                     let mut action_row = Row::new().spacing(5);
@@ -1824,6 +1872,8 @@ impl State {
             col = col.push(members_view);
         } else if self.is_loading_power_levels {
             col = col.push(text::body(crate::fl!("loading-members")));
+        } else {
+            println!("No members view")
         }
 
         col = col.push(self.view_invite());
@@ -1976,5 +2026,51 @@ mod tests {
             &None,
         );
         assert!(state.alt_aliases.is_empty());
+    }
+
+    #[test]
+    fn test_pending_power_level() {
+        let mut state = State::default();
+        let _ = state.update(
+            Message::PendingPowerLevel("@user:example.com".to_string(), 75),
+            &None,
+        );
+        assert_eq!(
+            state.pending_power_level,
+            Some(("@user:example.com".to_string(), 75))
+        );
+    }
+
+    #[test]
+    fn test_commit_power_level_no_matrix() {
+        let mut state = State {
+            pending_power_level: Some(("@user:example.com".to_string(), 50)),
+            ..Default::default()
+        };
+        let _ = state.update(
+            Message::CommitPowerLevel("@user:example.com".to_string()),
+            &None,
+        );
+        // Without a matrix engine the commit is a no-op, but the draft is consumed.
+        assert!(state.pending_power_level.is_none());
+        assert!(state.updating_power_level_for.is_none());
+    }
+
+    #[test]
+    fn test_commit_power_level_guarded_while_updating() {
+        let mut state = State {
+            pending_power_level: Some(("@user:example.com".to_string(), 50)),
+            updating_power_level_for: Some("@user:example.com".to_string()),
+            ..Default::default()
+        };
+        let _ = state.update(
+            Message::CommitPowerLevel("@user:example.com".to_string()),
+            &None,
+        );
+        // Already updating this user: the commit is ignored and the draft is preserved.
+        assert_eq!(
+            state.pending_power_level,
+            Some(("@user:example.com".to_string(), 50))
+        );
     }
 }
