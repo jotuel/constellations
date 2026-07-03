@@ -3,17 +3,17 @@ use tokio::sync::mpsc;
 use zbus::names::WellKnownName;
 use zbus::{Connection, interface, proxy};
 
-pub const DBUS_NAME: &str = "fi.joonastuomi.CosmicExtConstellations";
-pub const DBUS_PATH: &str = "/fi/joonastuomi/CosmicExtConstellations";
+pub const DBUS_NAME: &str = "fi.joonastuomi.Constellations";
+pub const DBUS_PATH: &str = "/fi/joonastuomi/Constellations";
 
 pub struct IpcInterface {
     tx: mpsc::UnboundedSender<String>,
 }
 
-#[interface(name = "fi.joonastuomi.CosmicExtConstellations.Ipc")]
+#[interface(name = "fi.joonastuomi.Constellations.Ipc")]
 impl IpcInterface {
     async fn handle_callback(&self, uri: String) {
-        if !uri.starts_with("fi.joonastuomi.CosmicExtConstellations://callback") {
+        if !uri.starts_with("fi.joonastuomi.Constellations://callback") {
             tracing::warn!("Received invalid OIDC callback URI");
             return;
         }
@@ -23,9 +23,9 @@ impl IpcInterface {
 }
 
 #[proxy(
-    interface = "fi.joonastuomi.CosmicExtConstellations.Ipc",
-    default_service = "fi.joonastuomi.CosmicExtConstellations",
-    default_path = "/fi/joonastuomi/CosmicExtConstellations"
+    interface = "fi.joonastuomi.Constellations.Ipc",
+    default_service = "fi.joonastuomi.Constellations",
+    default_path = "/fi/joonastuomi/Constellations"
 )]
 pub trait Ipc {
     fn handle_callback(&self, uri: String) -> zbus::Result<()>;
@@ -63,8 +63,8 @@ mod tests {
         // Start the server which claims the DBus name
         let _server_conn = start_server(tx).await.expect("Failed to start DBus server");
 
-        // The valid callback URI must start with fi.joonastuomi.CosmicExtConstellations://callback
-        let valid_uri = "fi.joonastuomi.CosmicExtConstellations://callback/?code=12345".to_string();
+        // The valid callback URI must start with fi.joonastuomi.Constellations://callback
+        let valid_uri = "fi.joonastuomi.Constellations://callback/?code=12345".to_string();
         call_handle_callback(valid_uri.clone())
             .await
             .expect("Failed to call proxy");

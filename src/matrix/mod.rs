@@ -55,8 +55,8 @@ struct LiveKitAuthResponse {
     token: String,
 }
 
-const OIDC_CALLBACK_URL: &str = "fi.joonastuomi.CosmicExtConstellations://callback";
-const OIDC_CLIENT_ID: &str = "fi.joonastuomi.CosmicExtConstellations";
+const OIDC_CALLBACK_URL: &str = "fi.joonastuomi.Constellations://callback";
+const OIDC_CLIENT_ID: &str = "fi.joonastuomi.Constellations";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SyncStatus {
@@ -390,7 +390,7 @@ impl MatrixEngine {
     fn get_fallback_path(secret_type: &str) -> PathBuf {
         let data_dir = dirs::data_dir()
             .unwrap_or_else(|| PathBuf::from("."))
-            .join("cosmic-ext-constellations");
+            .join("constellations");
         if !data_dir.exists() {
             let _ = std::fs::create_dir_all(&data_dir);
         }
@@ -422,7 +422,7 @@ impl MatrixEngine {
         };
 
         let mut attributes = HashMap::new();
-        attributes.insert("app_id", "fi.joonastuomi.CosmicExtConstellations");
+        attributes.insert("app_id", "fi.joonastuomi.Constellations");
         attributes.insert("type", "matrix-session");
 
         match keyring
@@ -877,7 +877,7 @@ impl MatrixEngine {
             };
 
             let mut attributes = HashMap::new();
-            attributes.insert("app_id", "fi.joonastuomi.CosmicExtConstellations");
+            attributes.insert("app_id", "fi.joonastuomi.Constellations");
             attributes.insert("type", "matrix-session");
 
             match keyring.search_items(&attributes).await {
@@ -999,7 +999,7 @@ impl MatrixEngine {
         };
 
         let mut session_attributes = HashMap::new();
-        session_attributes.insert("app_id", "fi.joonastuomi.CosmicExtConstellations");
+        session_attributes.insert("app_id", "fi.joonastuomi.Constellations");
         session_attributes.insert("type", "matrix-session");
 
         if let Ok(items) = keyring.search_items(&session_attributes).await {
@@ -1009,7 +1009,7 @@ impl MatrixEngine {
         }
 
         let mut pass_attributes = HashMap::new();
-        pass_attributes.insert("app_id", "fi.joonastuomi.CosmicExtConstellations");
+        pass_attributes.insert("app_id", "fi.joonastuomi.Constellations");
         pass_attributes.insert("type", "store-passphrase");
 
         if let Ok(items) = keyring.search_items(&pass_attributes).await {
@@ -2523,7 +2523,7 @@ impl MatrixEngine {
         };
 
         let mut attributes = HashMap::new();
-        attributes.insert("app_id", "fi.joonastuomi.CosmicExtConstellations");
+        attributes.insert("app_id", "fi.joonastuomi.Constellations");
         attributes.insert("type", "store-passphrase");
 
         match keyring.search_items(&attributes).await {

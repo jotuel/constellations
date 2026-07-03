@@ -55,7 +55,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let is_notify = args.iter().any(|arg| arg == "--notify");
     let uri = args
         .get(1)
-        .filter(|u| u.starts_with("fi.joonastuomi.CosmicExtConstellations://"))
+        .filter(|u| u.starts_with("fi.joonastuomi.Constellations://"))
         .cloned();
 
     let rt = tokio::runtime::Runtime::new()?;
