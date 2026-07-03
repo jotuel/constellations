@@ -1,7 +1,7 @@
 #!/bin/bash
 # 1. Start target application in the background
 cargo build
-./target/debug/cosmic-ext-constellations &
+./target/debug/constellations &
 APP_PID=$!
 echo "Started app with PID $APP_PID"
 

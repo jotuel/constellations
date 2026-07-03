@@ -1539,6 +1539,59 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3d52eff69cd5e647efe296129160853a42795992097e8af39800e1060caeea9b"
 
 [[package]]
+name = "constellations"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ashpd 0.13.12",
+ "chrono",
+ "cosmic-text",
+ "dirs",
+ "emojis 0.9.0",
+ "eyeball-im",
+ "futures",
+ "i18n-embed",
+ "i18n-embed-fl",
+ "imbl 7.0.0",
+ "libcosmic",
+ "livekit",
+ "matrix-sdk",
+ "matrix-sdk-base",
+ "matrix-sdk-sqlite",
+ "matrix-sdk-store-encryption",
+ "matrix-sdk-test",
+ "matrix-sdk-ui",
+ "mimalloc",
+ "mime 0.3.17",
+ "mime_guess",
+ "notify-rust",
+ "oo7",
+ "open",
+ "pulldown-cmark",
+ "qrcode",
+ "rand 0.10.1",
+ "reqwest 0.13.4",
+ "rfd 0.17.2",
+ "ruma-events",
+ "rust-embed",
+ "rustls",
+ "serde",
+ "serde_json",
+ "serial_test",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "unic-langid",
+ "unifiedpush",
+ "unifiedpush_storage_preferences",
+ "url",
+ "wiremock",
+ "zbus",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1649,59 +1702,6 @@ source = "git+https://github.com/pop-os/libcosmic#417923fbafc0f38a63846b307036e4
 dependencies = [
  "quote",
  "syn 2.0.118",
-]
-
-[[package]]
-name = "cosmic-ext-constellations"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "ashpd 0.13.12",
- "chrono",
- "cosmic-text",
- "dirs",
- "emojis 0.9.0",
- "eyeball-im",
- "futures",
- "i18n-embed",
- "i18n-embed-fl",
- "imbl 7.0.0",
- "libcosmic",
- "livekit",
- "matrix-sdk",
- "matrix-sdk-base",
- "matrix-sdk-sqlite",
- "matrix-sdk-store-encryption",
- "matrix-sdk-test",
- "matrix-sdk-ui",
- "mimalloc",
- "mime 0.3.17",
- "mime_guess",
- "notify-rust",
- "oo7",
- "open",
- "pulldown-cmark",
- "qrcode",
- "rand 0.10.1",
- "reqwest 0.13.4",
- "rfd 0.17.2",
- "ruma-events",
- "rust-embed",
- "rustls",
- "serde",
- "serde_json",
- "serial_test",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "tracing-subscriber",
- "unic-langid",
- "unifiedpush",
- "unifiedpush_storage_preferences",
- "url",
- "wiremock",
- "zbus",
 ]
 
 [[package]]
