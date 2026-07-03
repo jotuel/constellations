@@ -78,24 +78,6 @@ impl ConstellationsItem {
         }
     }
 
-    pub fn new_mock(sender_name: &str, text: &str, timestamp: &str, is_me: bool) -> Self {
-        let sender_id = matrix_sdk::ruma::user_id!("@unknown:example.com").to_owned();
-        let markdown = parse_markdown(text, false);
-        let plain_text = parse_plain_text(text);
-        Self {
-            item: None,
-            sender_id,
-            sender_name: sender_name.to_string(),
-            avatar_url: None,
-            timestamp: timestamp.to_string(),
-            is_me,
-            markdown,
-            plain_text,
-            thread_root_id: None,
-            item_id: None,
-        }
-    }
-
     pub fn body_text(&self) -> String {
         self.item
             .as_ref()
@@ -115,5 +97,26 @@ impl ConstellationsItem {
                     .collect::<Vec<_>>()
                     .join("")
             })
+    }
+}
+
+#[cfg(test)]
+impl ConstellationsItem {
+    pub fn mock(sender_name: &str, text: &str, timestamp: &str, is_me: bool) -> Self {
+        let sender_id = matrix_sdk::ruma::user_id!("@unknown:example.com").to_owned();
+        let markdown = parse_markdown(text, false);
+        let plain_text = parse_plain_text(text);
+        Self {
+            item: None,
+            sender_id,
+            sender_name: sender_name.to_string(),
+            avatar_url: None,
+            timestamp: timestamp.to_string(),
+            is_me,
+            markdown,
+            plain_text,
+            thread_root_id: None,
+            item_id: None,
+        }
     }
 }
