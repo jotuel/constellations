@@ -227,7 +227,6 @@ impl<C: VectorOperations<T>, T: Clone> ApplyVectorDiffExt<T> for C {
     }
 }
 
-pub(crate) mod handlers;
 pub mod i18n;
 pub(crate) mod ipc;
 pub mod item;
