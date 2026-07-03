@@ -838,56 +838,6 @@ impl Constellations {
     pub fn handle_send_message(
         &mut self,
     ) -> Task<Action<<Constellations as Application>::Message>> {
-        if self.user_id == Some("@simulated_user:matrix.org".to_string()) {
-            let body = self.composer_content.text();
-            if body.is_empty() {
-                return Task::none();
-            }
-
-            let now = chrono::Local::now();
-            let timestamp = now.format("%Y-%m-%d %H:%M:%S").to_string();
-
-            if let Some(editing_item) = &self.editing_item {
-                if let Some(index) = self.timeline_items.iter().position(|item| {
-                    item.sender_name == editing_item.sender_name
-                        && item.timestamp == editing_item.timestamp
-                }) {
-                    self.timeline_items[index] = crate::ConstellationsItem::new_mock(
-                        &editing_item.sender_name,
-                        &body,
-                        &editing_item.timestamp,
-                        editing_item.is_me,
-                    );
-                }
-                self.editing_item = None;
-            } else if let Some(replying_to) = &self.replying_to {
-                let reply_text = replying_to.body_text();
-                let reply_body = format!("> {}\n\n{}", reply_text, body);
-
-                self.timeline_items
-                    .push_back(crate::ConstellationsItem::new_mock(
-                        "You",
-                        &reply_body,
-                        &timestamp,
-                        true,
-                    ));
-                self.replying_to = None;
-            } else {
-                self.timeline_items
-                    .push_back(crate::ConstellationsItem::new_mock(
-                        "You", &body, &timestamp, true,
-                    ));
-            }
-
-            self.composer_content = cosmic::widget::text_editor::Content::new();
-            self.composer_preview_events.clear();
-
-            return scrollable::snap_to(
-                TIMELINE_ID.clone(),
-                scrollable::RelativeOffset::END.into(),
-            );
-        }
-
         if let (Some(matrix), Some(room_id)) = (&self.matrix, &self.selected_room) {
             let body = self.composer_content.text();
 
@@ -1388,66 +1338,7 @@ impl Constellations {
     ) -> Task<Action<<Constellations as Application>::Message>> {
         self.auth_flow = AuthFlow::Idle;
         match res {
-            Ok(user_id) => {
-                self.user_id = Some(user_id.clone());
-                if user_id == "@simulated_user:matrix.org" {
-                    self.room_list = vec![
-                        matrix::RoomData {
-                            id: std::sync::Arc::from("!general:matrix.org"),
-                            name: Some("General Chat".to_string()),
-                            last_message: Some("Yes, works seamlessly. And the markdown rendering in message bubbles is awesome.".to_string()),
-                            unread_count: 0,
-                            unread_count_str: None,
-                            avatar_url: None,
-                            room_type: None,
-                            is_space: false,
-                            parent_space_id: None,
-                            order: None,
-                            join_rule: None,
-                            allowed_spaces: Vec::new(),
-                            suggested: false,
-                        },
-                        matrix::RoomData {
-                            id: std::sync::Arc::from("!rust:matrix.org"),
-                            name: Some("Rust Developers".to_string()),
-                            last_message: Some("Incredible! opt-level = 3 and LTO make the binaries extremely compact and snappy too.".to_string()),
-                            unread_count: 2,
-                            unread_count_str: Some("2".to_string()),
-                            avatar_url: None,
-                            room_type: None,
-                            is_space: false,
-                            parent_space_id: None,
-                            order: None,
-                            join_rule: None,
-                            allowed_spaces: Vec::new(),
-                            suggested: false,
-                        },
-                        matrix::RoomData {
-                            id: std::sync::Arc::from("!call:matrix.org"),
-                            name: Some("Element Call Room".to_string()),
-                            last_message: Some("Sure, joining in a second!".to_string()),
-                            unread_count: 0,
-                            unread_count_str: None,
-                            avatar_url: None,
-                            room_type: None,
-                            is_space: false,
-                            parent_space_id: None,
-                            order: None,
-                            join_rule: None,
-                            allowed_spaces: Vec::new(),
-                            suggested: false,
-                        },
-                    ];
-                    self.update_filtered_rooms();
-
-                    let default_room: std::sync::Arc<str> =
-                        std::sync::Arc::from("!general:matrix.org");
-                    self.selected_room = Some(default_room.clone());
-                    self.room_name_cache
-                        .insert(default_room.clone(), "General Chat".to_string());
-                    self.timeline_items = self.generate_mock_timeline(&default_room);
-                }
-            }
+            Ok(user_id) => self.user_id = Some(user_id.clone()),
             Err(matrix::SyncError::MissingSlidingSyncSupport) => {
                 self.sync_status = matrix::SyncStatus::MissingSlidingSyncSupport;
             }
@@ -1978,50 +1869,16 @@ impl Constellations {
                 self.is_timeline_at_bottom = true;
                 self.is_threaded_timeline_at_bottom = true;
                 self.is_timeline_initialized = false;
+                self.is_first_time_joining = false;
+                self.visited_room_ids.insert(room_id.clone());
+                self.needs_initial_scroll = true;
 
-                if self.user_id == Some("@simulated_user:matrix.org".to_string()) {
-                    self.timeline_items = self.generate_mock_timeline(&room_id);
-                    self.visited_room_ids.insert(room_id.clone());
-
-                    let unread_count =
-                        if let Some(room) = self.room_list.iter().find(|r| r.id == room_id) {
-                            room.unread_count
-                        } else {
-                            0
-                        };
-
-                    let offset = if unread_count == 0 {
-                        scrollable::RelativeOffset::END
-                    } else {
-                        let total_items = self.timeline_items.len();
-                        let unread = unread_count as usize;
-                        if unread >= total_items {
-                            scrollable::RelativeOffset::START
-                        } else {
-                            let ratio = (total_items - unread) as f32 / total_items as f32;
-                            scrollable::RelativeOffset { x: 0.0, y: ratio }
-                        }
-                    };
-
-                    self.needs_initial_scroll = false;
-                    Task::batch(vec![
-                        self.update_title(),
-                        scrollable::snap_to(TIMELINE_ID.clone(), offset.into()),
-                        fetch_members_task,
-                        fetch_pinned_task,
-                    ])
-                } else {
-                    self.is_first_time_joining = false;
-                    self.visited_room_ids.insert(room_id.clone());
-                    self.needs_initial_scroll = true;
-
-                    Task::batch(vec![
-                        self.update_title(),
-                        self.handle_load_more(false),
-                        fetch_members_task,
-                        fetch_pinned_task,
-                    ])
-                }
+                Task::batch(vec![
+                    self.update_title(),
+                    self.handle_load_more(false),
+                    fetch_members_task,
+                    fetch_pinned_task,
+                ])
             }
             Message::ComposerChanged(text) => {
                 self.composer_preview_events = parse_markdown(&text, false);
@@ -2805,114 +2662,7 @@ impl Constellations {
         }
     }
 
-    pub fn generate_mock_timeline(
-        &self,
-        room_id: &str,
-    ) -> eyeball_im::Vector<crate::ConstellationsItem> {
-        let mut items = eyeball_im::Vector::new();
-        match room_id {
-            "!general:matrix.org" => {
-                let mut first_item = crate::ConstellationsItem::new_mock(
-                    "Alice",
-                    "Welcome to the Cosmic Constellations matrix client!",
-                    "2026-05-29 22:50:12",
-                    false,
-                );
-                first_item.item_id = Some(matrix_sdk_ui::timeline::TimelineEventItemId::EventId(
-                    matrix_sdk::ruma::event_id!("$mock_pinned_1:example.com").to_owned(),
-                ));
-                items.push_back(first_item);
-                items.push_back(crate::ConstellationsItem::new_mock(
-                    "Bob",
-                    "Wow, this interface is super fast and beautiful. The pixel-perfect QR login and dark theme looks fantastic!",
-                    "2026-05-29 22:51:05",
-                    false,
-                ));
-                items.push_back(crate::ConstellationsItem::new_mock(
-                    "Alice",
-                    "Indeed, they really polished the UI. Have you tried resizing the panels?",
-                    "2026-05-29 22:51:45",
-                    false,
-                ));
-                items.push_back(crate::ConstellationsItem::new_mock(
-                    "Bob",
-                    "Yes, works seamlessly. And the markdown rendering in message bubbles is awesome.",
-                    "2026-05-29 22:52:30",
-                    false,
-                ));
-            }
-            "!rust:matrix.org" => {
-                items.push_back(crate::ConstellationsItem::new_mock(
-                    "Ferris",
-                    "Hello Rustaceans! Let's write some high-performance async code with iced and tokio.",
-                    "2026-05-29 22:45:00",
-                    false,
-                ));
-                items.push_back(crate::ConstellationsItem::new_mock(
-                    "Alice",
-                    "Already on it. constellations uses `eyeball_im` and dynamic index filtering for the room list to keep allocations low.",
-                    "2026-05-29 22:46:15",
-                    false,
-                ));
-                items.push_back(crate::ConstellationsItem::new_mock(
-                    "Ferris",
-                    "Incredible! `opt-level = 3` and LTO make the binaries extremely compact and snappy too.",
-                    "2026-05-29 22:47:30",
-                    false,
-                ));
-            }
-            "!call:matrix.org" => {
-                items.push_back(crate::ConstellationsItem::new_mock(
-                    "System",
-                    "Element Call session started.",
-                    "2026-05-29 22:30:00",
-                    false,
-                ));
-                items.push_back(crate::ConstellationsItem::new_mock(
-                    "Bob",
-                    "Anyone up for a quick call to test the WebRTC integration?",
-                    "2026-05-29 22:31:00",
-                    false,
-                ));
-                items.push_back(crate::ConstellationsItem::new_mock(
-                    "Alice",
-                    "Sure, joining in a second!",
-                    "2026-05-29 22:32:00",
-                    false,
-                ));
-            }
-            _ => {}
-        }
-        items
-    }
-
     fn fetch_members_task(&self) -> Task<Action<Message>> {
-        if self.user_id == Some("@simulated_user:matrix.org".to_string()) {
-            let mock_members = vec![
-                matrix::RoomMemberInfo {
-                    user_id: "@simulated_user:matrix.org".to_string(),
-                    display_name: Some("You".to_string()),
-                    avatar_url: None,
-                },
-                matrix::RoomMemberInfo {
-                    user_id: "@alice:matrix.org".to_string(),
-                    display_name: Some("Alice".to_string()),
-                    avatar_url: None,
-                },
-                matrix::RoomMemberInfo {
-                    user_id: "@bob:matrix.org".to_string(),
-                    display_name: Some("Bob".to_string()),
-                    avatar_url: None,
-                },
-                matrix::RoomMemberInfo {
-                    user_id: "@ferris:matrix.org".to_string(),
-                    display_name: Some("Ferris".to_string()),
-                    avatar_url: None,
-                },
-            ];
-            return Task::done(Action::from(Message::MembersFetched(Ok(mock_members))));
-        }
-
         let Some(room_id) = self.selected_room.clone() else {
             return Task::none();
         };
@@ -2931,18 +2681,6 @@ impl Constellations {
     }
 
     fn fetch_pinned_events_task(&self) -> Task<Action<Message>> {
-        if self.user_id == Some("@simulated_user:matrix.org".to_string()) {
-            let mock_pinned = vec![matrix::PinnedEventInfo {
-                event_id: "$mock_pinned_1:example.com".to_string(),
-                sender_id: "@mock_sender:example.com".to_string(),
-                sender_name: "Mock Sender".to_string(),
-                avatar_url: None,
-                timestamp: "2026-06-09 12:00:00".to_string(),
-                body: "This is a mock pinned message that is always loaded!".to_string(),
-            }];
-            return Task::done(Action::from(Message::PinnedEventsFetched(Ok(mock_pinned))));
-        }
-
         let Some(room_id) = self.selected_room.clone() else {
             return Task::none();
         };
@@ -3508,7 +3246,7 @@ mod tests {
         // Populate timeline
         for i in 0..10 {
             app.timeline_items
-                .push_back(crate::ConstellationsItem::new_mock(
+                .push_back(crate::ConstellationsItem::mock(
                     "Sender",
                     &format!("Msg {}", i),
                     "2026-06-08T13:22:31Z",
@@ -3535,7 +3273,7 @@ mod tests {
         // Populate timeline again
         for i in 0..10 {
             app.timeline_items
-                .push_back(crate::ConstellationsItem::new_mock(
+                .push_back(crate::ConstellationsItem::mock(
                     "Sender",
                     &format!("Msg {}", i),
                     "2026-06-08T13:22:31Z",
@@ -3562,7 +3300,7 @@ mod tests {
 
         app.is_timeline_initialized = true;
         app.timeline_items
-            .push_back(crate::ConstellationsItem::new_mock(
+            .push_back(crate::ConstellationsItem::mock(
                 "Sender",
                 "Msg",
                 "2026-06-08T13:22:31Z",
@@ -3604,11 +3342,11 @@ mod tests {
         let root_b = matrix_sdk::ruma::EventId::parse("$root_b:example.com").unwrap();
 
         // `new_mock` constructs items with `item: None` by design.
-        let mut threaded_a = ConstellationsItem::new_mock("alice", "reply", "12:00", false);
+        let mut threaded_a = ConstellationsItem::mock("alice", "reply", "12:00", false);
         threaded_a.thread_root_id = Some(root_a.clone());
-        let mut threaded_b = ConstellationsItem::new_mock("bob", "reply", "12:01", false);
+        let mut threaded_b = ConstellationsItem::mock("bob", "reply", "12:01", false);
         threaded_b.thread_root_id = Some(root_b.clone());
-        let plain = ConstellationsItem::new_mock("carol", "message", "12:02", true);
+        let plain = ConstellationsItem::mock("carol", "message", "12:02", true);
 
         app.timeline_items.push_back(threaded_a);
         app.timeline_items.push_back(threaded_b);

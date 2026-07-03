@@ -27,7 +27,9 @@ impl Constellations {
         let password_input = text_input(crate::fl!("password"), &self.login_password).password();
 
         let (homeserver_input, username_input, password_input) =
-            if (self.auth_flow == AuthFlow::Password || self.auth_flow == AuthFlow::Oidc) || self.is_registering {
+            if (self.auth_flow == AuthFlow::Password || self.auth_flow == AuthFlow::Oidc)
+                || self.is_registering
+            {
                 (homeserver_input, username_input, password_input)
             } else {
                 (
@@ -101,7 +103,9 @@ impl Constellations {
             oidc_col.into()
         } else {
             let mut btn = button::text(crate::fl!("oidc-login-button"));
-            if !self.login_homeserver.is_empty() && self.auth_flow != AuthFlow::Password && !self.is_registering_mode
+            if !self.login_homeserver.is_empty()
+                && self.auth_flow != AuthFlow::Password
+                && !self.is_registering_mode
             {
                 btn = btn.on_press(Message::SubmitOidcLogin);
             }
@@ -110,7 +114,10 @@ impl Constellations {
 
         let qr_login_button = {
             let mut btn = button::text(crate::fl!("login-qr-button"));
-            if self.auth_flow != AuthFlow::Password && !self.is_registering_mode && self.auth_flow != AuthFlow::Oidc {
+            if self.auth_flow != AuthFlow::Password
+                && !self.is_registering_mode
+                && self.auth_flow != AuthFlow::Oidc
+            {
                 btn = btn.on_press(Message::StartQrLogin);
             }
             btn
@@ -122,12 +129,14 @@ impl Constellations {
             button::text(crate::fl!("need-account"))
         };
 
-        let toggle_mode_button =
-            if (self.auth_flow == AuthFlow::Password || self.auth_flow == AuthFlow::Oidc) || self.is_registering {
-                toggle_mode_button
-            } else {
-                toggle_mode_button.on_press(Message::ToggleLoginMode)
-            };
+        let toggle_mode_button = if (self.auth_flow == AuthFlow::Password
+            || self.auth_flow == AuthFlow::Oidc)
+            || self.is_registering
+        {
+            toggle_mode_button
+        } else {
+            toggle_mode_button.on_press(Message::ToggleLoginMode)
+        };
 
         content = content.push(main_button);
 

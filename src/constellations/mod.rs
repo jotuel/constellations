@@ -14,6 +14,7 @@ use std::collections::HashMap;
 use url::Url;
 
 mod app;
+mod handlers;
 mod state;
 mod subscriptions;
 
