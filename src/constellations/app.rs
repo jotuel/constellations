@@ -16,7 +16,7 @@ impl Application for Constellations {
     type Executor = cosmic::executor::Default;
     type Message = Message;
     type Flags = Option<String>;
-    const APP_ID: &'static str = "fi.joonastuomi.CosmicExtConstellations";
+    const APP_ID: &'static str = "fi.joonastuomi.Constellations";
 
     fn core(&self) -> &Core {
         &self.core

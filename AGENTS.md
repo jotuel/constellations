@@ -4,7 +4,7 @@ Guidance for AI coding agents working in this repository. Read this before editi
 
 ## What this is
 
-`cosmic-ext-constellations` ("Constellations") — a Matrix client for the COSMIC desktop, built with [libcosmic](https://github.com/pop-os/libcosmic) (over iced) and [matrix-rust-sdk](https://github.com/matrix-org/matrix-rust-sdk). **Alpha quality**; expect breaking changes. Targets stable 1.0 alongside matrix-rust-sdk / iced stable releases.
+`constellations` ("Constellations") — a Matrix client for the COSMIC desktop, built with [libcosmic](https://github.com/pop-os/libcosmic) (over iced) and [matrix-rust-sdk](https://github.com/matrix-org/matrix-rust-sdk). **Alpha quality**; expect breaking changes. Targets stable 1.0 alongside matrix-rust-sdk / iced stable releases.
 
 Rust edition 2024.
 
@@ -61,7 +61,7 @@ Runtime: single Tokio runtime; E2E encryption, SSO login, and SQLite store via m
 ## Gotchas
 
 - **Single-instance lock:** the `single-instance` libcosmic feature is active. If the app is already running, `main.rs` short-circuits (notifies the existing instance). Kill stray processes before debugging if a new run won't start.
-- **Custom URI scheme:** `fi.joonastuomi.CosmicExtConstellations://` is handled as `argv[1]` in `main.rs`. `--notify` is a special argv flag for notification relaunch.
+- **Custom URI scheme:** `fi.joonastuomi.Constellations://` is handled as `argv[1]` in `main.rs`. `--notify` is a special argv flag for notification relaunch.
 - **Lazy store decryption:** if the matrix SQLite store is recreated/cleared (e.g. keyring reset), clear associated lazy cache/search directories too, or you get `invalid MAC of the store key` later. See `cosmic-development` skill §4.
 - **`edition = "2024"`** — use 2024-era Rust idioms; keep the toolchain current via `rustup`.
 

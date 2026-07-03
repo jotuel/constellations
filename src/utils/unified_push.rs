@@ -8,21 +8,16 @@ pub async fn run_headless_notification_handler() -> Result<(), Box<dyn std::erro
     info!("Starting UnifiedPush headless handler...");
 
     let storage = UnifiedPushStoragePreferences::new(AppInfo {
-        name: "fi.joonastuomi.CosmicExtConstellations",
+        name: "fi.joonastuomi.Constellations",
         author: "Joonas Tuomi",
     });
 
     let (tx, rx) = mpsc::channel();
     let handle = Handle::current();
 
-    let _up = UnifiedPush::new(
-        "fi.joonastuomi.CosmicExtConstellations",
-        storage,
-        tx,
-        handle,
-    )
-    .await
-    .map_err(|e| anyhow::anyhow!("Failed to initialize UnifiedPush client: {:?}", e))?;
+    let _up = UnifiedPush::new("fi.joonastuomi.Constellations", storage, tx, handle)
+        .await
+        .map_err(|e| anyhow::anyhow!("Failed to initialize UnifiedPush client: {:?}", e))?;
 
     // Wait briefly for incoming D-Bus message calls routed by KUnifiedPush.
     // Since KUnifiedPush activated us, we expect the Message call immediately.
@@ -133,7 +128,7 @@ pub async fn register_pusher_internal(
 
     let ids = PusherIds::new(
         endpoint.to_string(),
-        "fi.joonastuomi.CosmicExtConstellations".to_string(),
+        "fi.joonastuomi.Constellations".to_string(),
     );
     let kind = PusherKind::Http(HttpPusherData::new(endpoint.to_string()));
     let init = PusherInit {
@@ -161,20 +156,15 @@ pub fn start_unified_push_listener(engine: crate::matrix::MatrixEngine) {
         rt.block_on(async move {
             info!("Starting UnifiedPush listener in background thread...");
             let storage = UnifiedPushStoragePreferences::new(AppInfo {
-                name: "fi.joonastuomi.CosmicExtConstellations",
+                name: "fi.joonastuomi.Constellations",
                 author: "Joonas Tuomi",
             });
 
             let (tx, rx) = mpsc::channel();
             let handle = Handle::current();
 
-            let _up = match UnifiedPush::new(
-                "fi.joonastuomi.CosmicExtConstellations",
-                storage,
-                tx,
-                handle,
-            )
-            .await
+            let _up = match UnifiedPush::new("fi.joonastuomi.Constellations", storage, tx, handle)
+                .await
             {
                 Ok(u) => u,
                 Err(e) => {

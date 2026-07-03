@@ -1,5 +1,5 @@
 [package]
-name = "cosmic-ext-constellations"
+name = "constellations"
 version = "0.1.0"
 author = "Joonas Tuomi <me@joonastuomi.fi>"
 edition = "2024"
