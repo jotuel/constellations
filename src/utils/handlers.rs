@@ -2850,7 +2850,7 @@ impl Constellations {
                 ));
                 items.push_back(crate::ConstellationsItem::new_mock(
                     "Alice",
-                    "Already on it. Cosmic-ext-constellations uses `eyeball_im` and dynamic index filtering for the room list to keep allocations low.",
+                    "Already on it. constellations uses `eyeball_im` and dynamic index filtering for the room list to keep allocations low.",
                     "2026-05-29 22:46:15",
                     false,
                 ));
