@@ -2,7 +2,8 @@
 - [ ] Take in as an argument which message to open at
 
 #### i18n
-- [ ] There are a few non-localized Error state messages
+- [x] There are a few non-localized Error state messages
+- [x] Other non-localized strings in chat.rs for example
 
 #### Search
 - [x] Searching for public Spaces/Rooms
