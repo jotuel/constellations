@@ -6,8 +6,8 @@ echo "Building binary with profiling info..."
 cargo build --profile profiling
 
 # Select the profiling tool (samply, heaptrack, or direct)
-PROFILE_TOOL=${1:-"samply"} 
-BINARY="./target/profiling/cosmic-ext-constellations"
+PROFILE_TOOL=${1:-"samply"}
+BINARY="./target/profiling/constellations"
 SCREENS_DIR="./scratch/screens"
 mkdir -p "$SCREENS_DIR"
 
