@@ -38,10 +38,8 @@ impl<'chat> Constellations {
             })
             .unwrap_or(false);
 
-        if is_video_room {
-            if let Some(room) = selected_room_data {
-                return self.view_video_room(room);
-            }
+        if is_video_room && let Some(room) = selected_room_data {
+            return self.view_video_room(room);
         }
 
         let mut timeline = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
