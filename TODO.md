@@ -1,6 +1,9 @@
 #### Application
 - [ ] Take in as an argument which message to open at
 
+#### i18n
+- [ ] There are a few non-localized Error state messages
+
 #### Search
 - [x] Searching for public Spaces/Rooms
 - [x] Improve displaying results
@@ -18,7 +21,7 @@
 - [x] Implement Video Rooms
 
 #### Settings
-- [ ] Room Permissions section visibility and join rule as radio widgets
+- [x] Room Permissions section visibility and join rule as radio widgets
 - [x] Remove pinning a message option from Settings
 - [x] Make Invite & Promote section only invite
 - [x] Split bigger sections into their own separate menus (ie. ManageSpacesUsers)
