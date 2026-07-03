@@ -2504,10 +2504,10 @@ impl Constellations {
 
                         let mut missing_avatar_urls = Vec::new();
                         for room in &self.public_search_results {
-                            if let Some(avatar_url) = &room.avatar_url {
-                                if !self.media_cache.contains_key(avatar_url) {
-                                    missing_avatar_urls.push(avatar_url.clone());
-                                }
+                            if let Some(avatar_url) = &room.avatar_url
+                                && !self.media_cache.contains_key(avatar_url)
+                            {
+                                missing_avatar_urls.push(avatar_url.clone());
                             }
                         }
 
