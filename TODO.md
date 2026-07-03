@@ -2,14 +2,14 @@
 - [ ] Take in as an argument which message to open at
 
 #### Search
-- [x] Searching for public Spaces/Rooms 
+- [x] Searching for public Spaces/Rooms
 - [x] Improve displaying results
 
 #### Space Switcher
 - [x] Implement Suggested Rooms category
 - [x] Spaces section for subspaces
 - [x] Make Space's name button open a menu with Settings just as one option
-- [x] Add Invite into Space option to Space menu 
+- [x] Add Invite into Space option to Space menu
 
 #### Rooms
 - [x] Make Rooms name button a menu that has Room Settings as one option
