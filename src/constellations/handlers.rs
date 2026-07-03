@@ -2659,6 +2659,7 @@ impl Constellations {
                 }
                 Task::none()
             }
+            Message::UnpinMessage(event_id) => self.handle_unpin_message(event_id),
         }
     }
 
@@ -2689,6 +2690,69 @@ impl Constellations {
         };
         Task::perform(
             async move {
+                let ids = matrix
+                    .get_pinned_events(&room_id)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                let mut details = Vec::new();
+                for id in ids {
+                    match matrix.fetch_pinned_event_details(&room_id, &id).await {
+                        Ok(detail) => details.push(detail),
+                        Err(e) => {
+                            tracing::error!(
+                                "Failed to fetch details for pinned event {}: {}",
+                                id,
+                                e
+                            );
+                            details.push(matrix::PinnedEventInfo {
+                                event_id: id.to_string(),
+                                sender_id: "@unknown:example.com".to_string(),
+                                sender_name: "Unknown".to_string(),
+                                avatar_url: None,
+                                timestamp: "Unknown time".to_string(),
+                                body: format!("[Failed to load message content: {}]", e),
+                            });
+                        }
+                    }
+                }
+                Ok(details)
+            },
+            |res| Action::from(Message::PinnedEventsFetched(res)),
+        )
+    }
+
+    /// Removes an event from the room's pinned list, then refreshes the panel.
+    pub fn handle_unpin_message(
+        &mut self,
+        event_id: matrix_sdk::ruma::OwnedEventId,
+    ) -> Task<Action<<Constellations as Application>::Message>> {
+        self.is_loading_pinned = true;
+        self.unpin_message_task(event_id)
+    }
+
+    fn unpin_message_task(
+        &self,
+        event_id: matrix_sdk::ruma::OwnedEventId,
+    ) -> Task<Action<Message>> {
+        let Some(room_id) = self.selected_room.clone() else {
+            return Task::none();
+        };
+        let Some(matrix) = self.matrix.clone() else {
+            return Task::none();
+        };
+        Task::perform(
+            async move {
+                let current = matrix
+                    .get_pinned_events(&room_id)
+                    .await
+                    .map_err(|e| e.to_string())?;
+                let updated: Vec<_> = current.into_iter().filter(|id| id != &event_id).collect();
+                matrix
+                    .set_pinned_events(&room_id, updated)
+                    .await
+                    .map_err(|e| e.to_string())?;
+
+                // Rebuild the panel from the server's view of pinned events.
                 let ids = matrix
                     .get_pinned_events(&room_id)
                     .await

@@ -26,4 +26,4 @@
 #### Chat
 - [x] Make it possible to go to a certain message
 - [x] Have the thing indicating message is a reply be a clickable link to jump to that messages
-- [ ] Have a link to it and icon to unpin in the Pinned messages
+- [x] Have a link to it and icon to unpin in the Pinned messages

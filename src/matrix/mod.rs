@@ -1889,6 +1889,21 @@ impl MatrixEngine {
         })
     }
 
+    /// Replaces the room's `m.room.pinned_events` state with the given list.
+    pub async fn set_pinned_events(
+        &self,
+        room_id: &str,
+        pinned: Vec<matrix_sdk::ruma::OwnedEventId>,
+    ) -> Result<()> {
+        let room_id_parsed = RoomId::parse(room_id)?;
+        let client = self.client().await;
+        let room = client.get_room(&room_id_parsed).context("Room not found")?;
+        use matrix_sdk::ruma::events::room::pinned_events::RoomPinnedEventsEventContent;
+        let content = RoomPinnedEventsEventContent::new(pinned);
+        room.send_state_event(content).await?;
+        Ok(())
+    }
+
     pub async fn get_space_children(&self, space_id: &str) -> Result<Vec<RoomData>> {
         let space_id_parsed = RoomId::parse(space_id)?;
         let client = self.client().await;

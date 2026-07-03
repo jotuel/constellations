@@ -229,6 +229,7 @@ pub enum Message {
     MembersFetched(Result<Vec<matrix::RoomMemberInfo>, String>),
     TogglePinnedPanel,
     PinnedEventsFetched(Result<Vec<matrix::PinnedEventInfo>, String>),
+    UnpinMessage(matrix_sdk::ruma::OwnedEventId),
     ToggleSearch,
     SearchQueryChanged(String),
     PublicSearchResults(Result<Vec<matrix::PublicRoom>, String>),
