@@ -1,5 +1,5 @@
 fallback_language = "en"
 
 [fluent]
-domain = "cosmic_ext_constellations"
+domain = "constellations"
 assets_dir = "res/i18n"

@@ -98,7 +98,9 @@ impl Constellations {
                 )
             }
             Err(e) => {
-                self.set_error(format!("Failed to initialize Matrix engine: {}", e));
+                self.set_error(
+                    crate::fl!("error-failed-init-engine", error = e.to_string()).to_string(),
+                );
                 self.is_initializing = false;
                 Task::none()
             }
@@ -813,7 +815,12 @@ impl Constellations {
                 if let (Some(matrix), Some(room_id)) = (&self.matrix, &self.selected_room) {
                     let matrix_clone = matrix.clone();
                     let room_id_clone = room_id.clone();
-                    let body = format!("Location: geo:{lat},{lon}");
+                    let body = crate::fl!(
+                        "location-message-body",
+                        lat = lat.to_string(),
+                        lon = lon.to_string()
+                    )
+                    .to_string();
                     let geo_uri = format!("geo:{lat},{lon}");
                     Task::perform(
                         async move {
@@ -829,7 +836,9 @@ impl Constellations {
                 }
             }
             Err(e) => {
-                self.set_error(format!("Failed to retrieve location: {}", e));
+                self.set_error(
+                    crate::fl!("error-failed-get-location", error = e.to_string()).to_string(),
+                );
                 Task::none()
             }
         }
@@ -1164,7 +1173,10 @@ impl Constellations {
                 self.other_rooms = other_rooms;
             }
             Err(e) => {
-                self.set_error(format!("Failed to fetch space children: {}", e));
+                self.set_error(
+                    crate::fl!("error-failed-fetch-space-children", error = e.to_string())
+                        .to_string(),
+                );
             }
         }
 
@@ -1207,7 +1219,9 @@ impl Constellations {
                 );
             }
             Err(e) => {
-                self.set_error(format!("Failed to fetch media: {}", e));
+                self.set_error(
+                    crate::fl!("error-failed-fetch-media", error = e.to_string()).to_string(),
+                );
             }
         }
         Task::none()
@@ -1226,7 +1240,9 @@ impl Constellations {
                     );
                 }
                 Err(e) => {
-                    self.set_error(format!("Failed to fetch media: {}", e));
+                    self.set_error(
+                        crate::fl!("error-failed-fetch-media", error = e.to_string()).to_string(),
+                    );
                 }
             }
         }
@@ -1293,7 +1309,9 @@ impl Constellations {
                 self.update_title()
             }
             Err(e) => {
-                self.set_error(format!("Registration failed: {}", e));
+                self.set_error(
+                    crate::fl!("error-failed-registration", error = e.to_string()).to_string(),
+                );
                 Task::none()
             }
         }
@@ -1343,7 +1361,7 @@ impl Constellations {
                 self.sync_status = matrix::SyncStatus::MissingSlidingSyncSupport;
             }
             Err(e) => {
-                self.set_error(format!("Login failed: {}", e));
+                self.set_error(crate::fl!("error-failed-login", error = e.to_string()).to_string());
             }
         }
         Task::none()
@@ -1382,7 +1400,9 @@ impl Constellations {
             }
             Err(e) => {
                 self.auth_flow = AuthFlow::Idle;
-                self.set_error(format!("OIDC login failed to start: {}", e));
+                self.set_error(
+                    crate::fl!("error-failed-oidc-login", error = e.to_string()).to_string(),
+                );
             }
         }
         Task::none()
@@ -1627,7 +1647,9 @@ impl Constellations {
             Message::LoadMoreFinished(res) => {
                 self.is_loading_more = false;
                 if let Err(e) = res {
-                    self.set_error(format!("Failed to load more messages: {}", e));
+                    self.set_error(
+                        crate::fl!("error-failed-load-more", error = e.to_string()).to_string(),
+                    );
                 }
 
                 if let Some(task) = self.check_and_perform_initial_scroll() {
@@ -1940,7 +1962,10 @@ impl Constellations {
                         self.editing_item = None;
                     }
                     Err(e) => {
-                        self.set_error(format!("Failed to send message: {}", e));
+                        self.set_error(
+                            crate::fl!("error-failed-send-message", error = e.to_string())
+                                .to_string(),
+                        );
                     }
                 }
                 Task::none()
@@ -1954,14 +1979,20 @@ impl Constellations {
                         self.editing_item = None;
                     }
                     Err(e) => {
-                        self.set_error(format!("Failed to edit message: {}", e));
+                        self.set_error(
+                            crate::fl!("error-failed-edit-message", error = e.to_string())
+                                .to_string(),
+                        );
                     }
                 }
                 Task::none()
             }
             Message::MessageRedacted(res) => {
                 if let Err(e) = res {
-                    self.set_error(format!("Failed to redact message: {}", e));
+                    self.set_error(
+                        crate::fl!("error-failed-redact-message", error = e.to_string())
+                            .to_string(),
+                    );
                 }
                 Task::none()
             }
@@ -2022,11 +2053,14 @@ impl Constellations {
                         // Successfully sent, could remove from ui if we were tracking it per-message
                     }
                     Err(e) => {
-                        self.set_error(format!(
-                            "Failed to send attachment {}: {}",
-                            path.display(),
-                            e
-                        ));
+                        self.set_error(
+                            crate::fl!(
+                                "error-failed-send-attachment",
+                                path = path.display().to_string(),
+                                error = e.to_string()
+                            )
+                            .to_string(),
+                        );
                     }
                 }
                 Task::none()
@@ -2106,7 +2140,10 @@ impl Constellations {
             }
             Message::ReactionToggled(res) => {
                 if let Err(e) = res {
-                    self.set_error(format!("Failed to toggle reaction: {}", e));
+                    self.set_error(
+                        crate::fl!("error-failed-toggle-reaction", error = e.to_string())
+                            .to_string(),
+                    );
                 }
                 Task::none()
             }
@@ -2179,7 +2216,9 @@ impl Constellations {
                         self.invite_to_space_id.clear();
                     }
                     Err(e) => {
-                        self.set_error(format!("Failed to invite: {}", e));
+                        self.set_error(
+                            crate::fl!("error-failed-invite", error = e.to_string()).to_string(),
+                        );
                     }
                 }
                 Task::none()
@@ -2220,7 +2259,9 @@ impl Constellations {
                         self.invite_to_room_id.clear();
                     }
                     Err(e) => {
-                        self.set_error(format!("Failed to invite: {}", e));
+                        self.set_error(
+                            crate::fl!("error-failed-invite", error = e.to_string()).to_string(),
+                        );
                     }
                 }
                 Task::none()
@@ -2239,7 +2280,10 @@ impl Constellations {
                         self.core.set_show_context(false);
                     }
                     Err(e) => {
-                        self.set_error(format!("Failed to create room: {}", e));
+                        self.set_error(
+                            crate::fl!("error-failed-create-room", error = e.to_string())
+                                .to_string(),
+                        );
                     }
                 }
                 Task::none()
@@ -2256,7 +2300,10 @@ impl Constellations {
                         }
                     }
                     Err(e) => {
-                        self.set_error(format!("Failed to create space: {}", e));
+                        self.set_error(
+                            crate::fl!("error-failed-create-space", error = e.to_string())
+                                .to_string(),
+                        );
                     }
                 }
                 Task::none()
@@ -2343,7 +2390,9 @@ impl Constellations {
                         }
                     }
                     Err(e) => {
-                        self.set_error(format!("Failed to join room: {}", e));
+                        self.set_error(
+                            crate::fl!("error-failed-join-room", error = e.to_string()).to_string(),
+                        );
                     }
                 }
                 Task::none()
@@ -2523,7 +2572,10 @@ impl Constellations {
                         }
                     }
                     Err(e) => {
-                        self.error = Some(format!("Failed to search public rooms: {}", e));
+                        self.error = Some(
+                            crate::fl!("error-failed-search-public-rooms", error = e.to_string())
+                                .to_string(),
+                        );
                     }
                 }
                 Task::none()
@@ -2570,13 +2622,17 @@ impl Constellations {
             Message::LeaveCall => self.handle_leave_call(),
             Message::CallJoined(res) => {
                 if let Err(e) = res {
-                    self.set_error(format!("Failed to join call: {}", e));
+                    self.set_error(
+                        crate::fl!("error-failed-join-call", error = e.to_string()).to_string(),
+                    );
                 }
                 Task::none()
             }
             Message::CallLeft(res) => {
                 if let Err(e) = res {
-                    self.set_error(format!("Failed to leave call: {}", e));
+                    self.set_error(
+                        crate::fl!("error-failed-leave-call", error = e.to_string()).to_string(),
+                    );
                 }
                 Task::none()
             }
@@ -2619,7 +2675,10 @@ impl Constellations {
                         self.room_members = members;
                     }
                     Err(e) => {
-                        self.set_error(format!("Failed to fetch room members: {}", e));
+                        self.set_error(
+                            crate::fl!("error-failed-fetch-members", error = e.to_string())
+                                .to_string(),
+                        );
                     }
                 }
                 Task::none()
@@ -2654,7 +2713,10 @@ impl Constellations {
                         self.pinned_events_details = pinned_details;
                     }
                     Err(e) => {
-                        self.set_error(format!("Failed to fetch pinned events: {}", e));
+                        self.set_error(
+                            crate::fl!("error-failed-fetch-pinned", error = e.to_string())
+                                .to_string(),
+                        );
                     }
                 }
                 Task::none()
@@ -2707,10 +2769,14 @@ impl Constellations {
                             details.push(matrix::PinnedEventInfo {
                                 event_id: id.to_string(),
                                 sender_id: "@unknown:example.com".to_string(),
-                                sender_name: "Unknown".to_string(),
+                                sender_name: crate::fl!("unknown-sender").to_string(),
                                 avatar_url: None,
-                                timestamp: "Unknown time".to_string(),
-                                body: format!("[Failed to load message content: {}]", e),
+                                timestamp: crate::fl!("unknown-time").to_string(),
+                                body: crate::fl!(
+                                    "error-failed-load-message-content",
+                                    error = e.to_string()
+                                )
+                                .to_string(),
                             });
                         }
                     }
@@ -2770,10 +2836,14 @@ impl Constellations {
                             details.push(matrix::PinnedEventInfo {
                                 event_id: id.to_string(),
                                 sender_id: "@unknown:example.com".to_string(),
-                                sender_name: "Unknown".to_string(),
+                                sender_name: crate::fl!("unknown-sender").to_string(),
                                 avatar_url: None,
-                                timestamp: "Unknown time".to_string(),
-                                body: format!("[Failed to load message content: {}]", e),
+                                timestamp: crate::fl!("unknown-time").to_string(),
+                                body: crate::fl!(
+                                    "error-failed-load-message-content",
+                                    error = e.to_string()
+                                )
+                                .to_string(),
                             });
                         }
                     }
@@ -2900,7 +2970,7 @@ mod tests {
         // Verify the error state is set correctly
         assert_eq!(
             app.error,
-            Some("Failed to fetch media: network timeout".to_string())
+            Some(crate::fl!("error-failed-fetch-media", error = "network timeout").to_string())
         );
 
         // Ensure nothing was inserted into the cache
@@ -2978,7 +3048,13 @@ mod tests {
 
         assert_eq!(
             app.error,
-            Some("Failed to initialize Matrix engine: Error: Initial sync failed".to_string())
+            Some(
+                crate::fl!(
+                    "error-failed-init-engine",
+                    error = "Error: Initial sync failed"
+                )
+                .to_string()
+            )
         );
         assert!(!app.is_initializing);
     }
@@ -3023,7 +3099,10 @@ mod tests {
 
         assert!(app.auth_flow != AuthFlow::Password);
         assert!(app.auth_flow != AuthFlow::Oidc);
-        assert_eq!(app.error, Some("Login failed: network error".to_string()));
+        assert_eq!(
+            app.error,
+            Some(crate::fl!("error-failed-login", error = "network error").to_string())
+        );
     }
 
     #[tokio::test]

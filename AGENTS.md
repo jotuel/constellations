@@ -48,7 +48,7 @@ Runtime: single Tokio runtime; E2E encryption, SSO login, and SQLite store via m
 ## Conventions
 
 **i18n — Fluent, mandatory for user-facing strings.**
-- Strings live in `res/i18n/<lang>/cosmic_ext_constellations.ftl` (fallback language `en`, domain `cosmic_ext_constellations`).
+- Strings live in `res/i18n/<lang>/constellations.ftl` (fallback language `en`, domain `constellations`).
 - Use the exported `fl!` macro: `fl!("message_id")` or `fl!("message_id", args...)`. Never hardcode English in the UI.
 - Config in `i18n.toml`; loader is `LazyLock`-initialized in `src/utils/i18n.rs`.
 

@@ -419,7 +419,7 @@ impl State {
     }
 
     fn view_cross_signing<'a>(&'a self) -> Element<'a, Message> {
-        let mut section = settings::section().title("Cross-signing");
+        let mut section = settings::section().title(crate::fl!("cross-signing"));
 
         if self.is_loading_cross_signing {
             section = section.add(text::body(crate::fl!("loading-cross-signing-status")));
@@ -433,28 +433,28 @@ impl State {
                         .spacing(10)
                         .push(text::body(label.to_string()))
                         .push(text::body(if has_key {
-                            "✅ Present"
+                            crate::fl!("key-present")
                         } else {
-                            "❌ Missing"
+                            crate::fl!("key-missing")
                         })),
                 );
                 if let Some(key) = key_val {
-                    c = c.push(text::body(format!("Public Key: {}", key)).size(10));
+                    c = c.push(text::body(crate::fl!("public-key", key = key)).size(10));
                 }
                 c
             };
 
             section = section
                 .add(settings::item(
-                    "Master Key:",
+                    crate::fl!("master-key"),
                     build_key_row("", status.has_master, info.master_key.as_ref()),
                 ))
                 .add(settings::item(
-                    "Self-signing Key:",
+                    crate::fl!("self-signing-key"),
                     build_key_row("", status.has_self_signing, info.self_signing_key.as_ref()),
                 ))
                 .add(settings::item(
-                    "User-signing Key:",
+                    crate::fl!("user-signing-key"),
                     build_key_row("", status.has_user_signing, info.user_signing_key.as_ref()),
                 ));
 
@@ -591,7 +591,7 @@ impl State {
                                 .on_input(Message::New3PIDCountryCodeChanged),
                         )
                         .push(
-                            text_input("Phone Number", &self.new_3pid_msisdn)
+                            text_input(crate::fl!("phone-number"), &self.new_3pid_msisdn)
                                 .on_input(Message::New3PIDMsisdnChanged),
                         )
                         .push(phone_widget),
@@ -664,7 +664,7 @@ impl State {
             return Column::new().into();
         }
 
-        let mut section = settings::section().title("Verification");
+        let mut section = settings::section().title(crate::fl!("verification"));
         match &self.verification_ui_state {
             VerificationUIState::WaitingForOtherDevice => {
                 section = section.add(text::body(crate::fl!("waiting-for-other-device")));

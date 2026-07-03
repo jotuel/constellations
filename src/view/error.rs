@@ -3,7 +3,7 @@ use cosmic::Element;
 use cosmic::iced::Alignment;
 use cosmic::widget::{Row, button, container, icon, text};
 
-pub fn view_error(error: &str) -> Element<'_, Message> {
+pub fn view_error(error: impl Into<String>) -> Element<'static, Message> {
     let error_card = container(
         Row::new()
             .spacing(12)
@@ -13,7 +13,7 @@ pub fn view_error(error: &str) -> Element<'_, Message> {
                     .symbolic(true)
                     .size(20),
             )
-            .push(text::body(error.to_string()))
+            .push(text::body(error.into()))
             .push(
                 button::icon(icon::from_name("window-close-symbolic").symbolic(true))
                     .tooltip(crate::fl!("dismiss"))

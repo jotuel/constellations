@@ -86,7 +86,11 @@ impl<'switcher> Constellations {
                 btn = btn.padding(0);
             }
 
-            let space_name = space.name.as_deref().unwrap_or("Unknown Space");
+            let space_name = space
+                .name
+                .as_deref()
+                .map(str::to_string)
+                .unwrap_or_else(|| crate::fl!("unknown-space"));
             let space_tooltip = tooltip(btn, text::body(space_name), Position::Right);
 
             content = content.push(space_tooltip);

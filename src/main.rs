@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     LazyLock::force(&i18n::LOAD_LOCALIZATION);
 
     let env_filter = if cfg!(debug_assertions) {
-        "matrix_sdk=debug,matrix_sdk_ui=debug,cosmic_ext_constellations=debug"
+        "matrix_sdk=debug,matrix_sdk_ui=debug,constellations=debug"
     } else {
         "warn"
     };
