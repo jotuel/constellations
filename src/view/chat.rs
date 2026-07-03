@@ -1715,7 +1715,32 @@ impl<'chat> Constellations {
                             .push(text::body(&item.body).size(12)),
                     );
 
-                let card = container(message_row)
+                // Card is a jump-to-message link, with a sibling unpin button
+                // (siblings, not nested, to keep iced happy).
+                let card_row = match matrix_sdk::ruma::EventId::parse(&item.event_id) {
+                    Ok(event_id) => {
+                        let jump_btn = button::custom(message_row)
+                            .width(cosmic::iced::Length::Fill)
+                            .class(cosmic::theme::Button::Standard)
+                            .on_press(Message::JumpToMessage(event_id.clone()));
+
+                        let unpin_btn = tooltip(
+                            button::icon(cosmic::widget::icon::from_name("pin-symbolic"))
+                                .on_press(Message::UnpinMessage(event_id)),
+                            text::body(crate::fl!("unpin-message")),
+                            Position::Bottom,
+                        );
+
+                        Row::new()
+                            .spacing(8)
+                            .align_y(Alignment::Center)
+                            .push(jump_btn)
+                            .push(unpin_btn)
+                    }
+                    Err(_) => Row::new().push(message_row),
+                };
+
+                let card = container(card_row)
                     .padding(10)
                     .style(move |theme: &cosmic::Theme| {
                         use cosmic::iced::widget::container::Catalog;

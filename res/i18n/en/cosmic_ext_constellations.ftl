@@ -64,6 +64,7 @@ close-picker = Close Picker
 close-members = Close Members
 close-pinned = Close Pinned
 pinned-messages = Pinned Messages
+unpin-message = Unpin
 no-pinned-messages = No pinned messages
 pinned-message-not-loaded = Pinned Message (Not loaded in active view)
 search-emojis = Search emojis...
