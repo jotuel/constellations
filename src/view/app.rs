@@ -116,14 +116,22 @@ impl Constellations {
             .into();
         }
 
-        let active_error = self.error.as_deref().or(match &self.sync_status {
-            matrix::SyncStatus::Error(e) => Some(e.as_str()),
-            matrix::SyncStatus::MissingSlidingSyncSupport => Some("Error: Your homeserver does not support Sliding Sync (MSC4186), which is required by Constellations."),
-            _ => None,
-        });
+        // Show the sliding-sync error when there's no explicit app error, since its
+        // localized message is owned (not borrowed from `self`) and view_error takes
+        // owned input.
+        let sliding_sync_error = matches!(
+            self.sync_status,
+            matrix::SyncStatus::MissingSlidingSyncSupport
+        );
 
-        if let Some(error) = active_error {
+        if let Some(error) = self.error.as_deref() {
             let error_overlay = crate::view::error::view_error(error);
+            final_view = cosmic::iced::widget::stack![final_view, error_overlay].into();
+        } else if sliding_sync_error {
+            let error_overlay = crate::view::error::view_error(crate::fl!("error-no-sliding-sync"));
+            final_view = cosmic::iced::widget::stack![final_view, error_overlay].into();
+        } else if let matrix::SyncStatus::Error(e) = &self.sync_status {
+            let error_overlay = crate::view::error::view_error(e.as_str());
             final_view = cosmic::iced::widget::stack![final_view, error_overlay].into();
         }
 

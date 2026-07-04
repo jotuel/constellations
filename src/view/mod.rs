@@ -69,7 +69,8 @@ impl Constellations {
             .selected_room
             .as_ref()
             .and_then(|id| self.get_room_name(id))
-            .unwrap_or("Constellations - Matrix Client");
+            .map(str::to_string)
+            .unwrap_or_else(|| crate::fl!("app-subtitle"));
         self.core.set_header_title(title.to_string());
         Task::none()
     }

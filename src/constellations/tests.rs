@@ -313,7 +313,7 @@ fn test_update_room_joined_error() {
 
     assert_eq!(
         app.error,
-        Some("Failed to join room: some connection error".to_string())
+        Some(crate::fl!("error-failed-join-room", error = "some connection error").to_string())
     );
 }
 

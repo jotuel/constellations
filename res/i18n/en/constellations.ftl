@@ -32,8 +32,6 @@ cancel = Cancel
 create = Create
 enter-room-name = Enter a room name to create
 enter-space-name = Enter a space name to create
-create-room = Create Room
-create-space = Create Space
 
 # Main Content
 no-room-selected = No room selected
@@ -49,7 +47,6 @@ reply = 💬
 replies = replies
 open-thread = 🧵
 send = ⤴️
-save = 💾
 delete = 🗑️
 editing = Editing:
 reply-to-thread = Reply to Thread
@@ -60,7 +57,6 @@ type-message = Type a message...
 replying-to = Replying to { $user }:
 cancel-reply = Cancel
 add-reaction = Add Reaction
-close-picker = Close Picker
 close-members = Close Members
 close-pinned = Close Pinned
 pinned-messages = Pinned Messages
@@ -90,15 +86,12 @@ save-changes = Save Changes
 make-changes-to-save = Make changes to save
 enabled = Enabled
 disabled = Disabled
-loading = Loading...
 uploading = Uploading...
 saving = Saving...
 no-avatar = No Avatar
 change-avatar = Change Avatar
 apply = Apply
 remove = Remove
-add = Add
-cancel = Cancel
 
 # App Settings
 general-settings = General Settings
@@ -197,9 +190,6 @@ deactivate-warning = ⚠️ This will permanently delete your account.
 deactivate = Deactivate
 cross-signing = Cross-Signing
 bootstrap-cross-signing = Bootstrap Cross-Signing
-master-key = Master Key
-self-signing-key = Self-Signing Key
-user-signing-key = User-Signing Key
 three-pids = Emails & Phone Numbers
 add-3pid = Add Email/Phone
 verification = Session Verification
@@ -218,7 +208,6 @@ enter-user-id-to-ignore = Enter a user ID to ignore
 space-profile = Space Profile
 space-name-label = Space Name
 space-topic-label = Space Topic
-canonical-alias-label = Canonical Alias
 discovery-access = Discovery & Access
 public-discoverable = Publicly discoverable
 show-in-directory = Show this space in the server's directory
@@ -249,8 +238,6 @@ tooltip-preview = Preview
 tooltip-share-location = Share Location
 download-image = Download Image
 download-file = Download File
-dismiss = Dismiss
-cancel = Cancel
 save = Save
 add = Add
 enter-keyword-to-add = Enter a keyword to add
@@ -263,7 +250,6 @@ send-sms = Send SMS
 done = Done
 changing = Changing...
 bootstrapping = Bootstrapping...
-bootstrap-cross-signing = Bootstrap Cross-signing
 setup-cross-signing = Setup Cross-signing
 user-menu = User Menu
 rename-device = Rename Device
@@ -330,7 +316,72 @@ new-keyword-placeholder = New keyword
 # Video Rooms, Search & Management Drawer
 video-room = Video Room
 manage-spaces-users = Manage Rooms & Users
-manage-members = Manage Members
 jump-to-message = Jump to Message
 call-status-connected = Connected to call
 call-status-not-connected = Not in call
+
+# App & Window
+app-subtitle = Constellations - Matrix Client
+error-no-sliding-sync = Your homeserver does not support Sliding Sync (MSC4186), which is required by Constellations.
+
+# Chat fallbacks
+qr-login-error = An error occurred.
+replying = Replying...
+image-message = 📷 Image: { $body }
+file-message = 📁 File: { $body }
+room-fallback = Room
+unknown-sender = Unknown
+unknown-time = Unknown time
+
+# Search Results
+search-messages-in-room = Messages in this Room
+search-no-room-matches = No matching messages in this room
+public-rooms-spaces = Public Rooms & Spaces
+no-public-rooms = No public rooms or spaces found
+unnamed-room = Unnamed Room
+room-member-count = ({ $count } members)
+joined-button = Joined
+
+# Video Room
+unnamed-video-room = Unnamed Video Room
+participants = Participants ({ $count })
+no-participants = No one is in the call
+
+# Cross-Signing details
+key-present = ✅ Present
+key-missing = ❌ Missing
+public-key = Public Key: { $key }
+master-key = Master Key:
+self-signing-key = Self-signing Key:
+user-signing-key = User-signing Key:
+phone-number = Phone Number
+
+# Error messages
+error-failed-init-engine = Failed to initialize Matrix engine: { $error }
+error-failed-get-location = Failed to retrieve location: { $error }
+error-failed-fetch-space-children = Failed to fetch space children: { $error }
+error-failed-fetch-media = Failed to fetch media: { $error }
+error-failed-registration = Registration failed: { $error }
+error-failed-login = Login failed: { $error }
+error-failed-oidc-login = OIDC login failed to start: { $error }
+error-failed-load-more = Failed to load more messages: { $error }
+error-failed-send-message = Failed to send message: { $error }
+error-failed-send-attachment = Failed to send attachment { $path }: { $error }
+error-failed-edit-message = Failed to edit message: { $error }
+error-failed-redact-message = Failed to redact message: { $error }
+error-failed-toggle-reaction = Failed to toggle reaction: { $error }
+error-failed-invite = Failed to invite: { $error }
+error-failed-create-room = Failed to create room: { $error }
+error-failed-create-space = Failed to create space: { $error }
+error-failed-join-room = Failed to join room: { $error }
+error-failed-search-public-rooms = Failed to search public rooms: { $error }
+error-failed-join-call = Failed to join call: { $error }
+error-failed-leave-call = Failed to leave call: { $error }
+error-failed-fetch-members = Failed to fetch room members: { $error }
+error-failed-fetch-pinned = Failed to fetch pinned events: { $error }
+error-failed-load-message-content = [Failed to load message content: { $error }]
+location-message-body = Location: geo:{ $lat },{ $lon }
+
+# Desktop notifications
+notification-new-message = New message
+notification-body = You have new messages. Open Constellations to view them.

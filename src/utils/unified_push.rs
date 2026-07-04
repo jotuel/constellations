@@ -96,10 +96,12 @@ async fn perform_background_sync_and_notify() -> Result<(), Box<dyn std::error::
 }
 
 async fn show_fallback_notification() {
+    let summary = crate::fl!("notification-new-message");
+    let body = crate::fl!("notification-body");
     let _ = notify_rust::Notification::new()
         .appname("Constellations")
-        .summary("New message")
-        .body("You have new messages. Open Constellations to view them.")
+        .summary(&summary)
+        .body(&body)
         .show_async()
         .await;
 }

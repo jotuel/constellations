@@ -362,13 +362,15 @@ impl<'chat> Constellations {
             MediaSource::Plain(uri) => uri.as_str(),
             MediaSource::Encrypted(file) => file.url.as_str(),
         };
-        bubble_col = bubble_col.push(text::body(format!("📷 Image: {}", image.body)).size(
-            if self.app_settings.compact_mode {
-                12
-            } else {
-                14
-            },
-        ));
+        bubble_col = bubble_col.push(
+            text::body(crate::fl!("image-message", body = image.body.clone())).size(
+                if self.app_settings.compact_mode {
+                    12
+                } else {
+                    14
+                },
+            ),
+        );
 
         if self.user_settings.media_previews_display_policy {
             if let Some(handle) = self.media_cache.get(mxc_url) {
@@ -402,13 +404,15 @@ impl<'chat> Constellations {
             MediaSource::Plain(uri) => uri.as_str(),
             MediaSource::Encrypted(file) => file.url.as_str(),
         };
-        bubble_col = bubble_col.push(text::body(format!("📁 File: {}", file.body)).size(
-            if self.app_settings.compact_mode {
-                12
-            } else {
-                14
-            },
-        ));
+        bubble_col = bubble_col.push(
+            text::body(crate::fl!("file-message", body = file.body.clone())).size(
+                if self.app_settings.compact_mode {
+                    12
+                } else {
+                    14
+                },
+            ),
+        );
         if self.media_cache.contains_key(mxc_url) {
             bubble_col = bubble_col.push(text::body(DOWNLOADED.as_str()));
         } else {
@@ -457,7 +461,8 @@ impl<'chat> Constellations {
             .selected_room
             .as_ref()
             .and_then(|room_id| self.get_room_name(room_id))
-            .unwrap_or("Room");
+            .map(str::to_string)
+            .unwrap_or_else(|| crate::fl!("room-fallback"));
 
         let header = Row::new()
             .spacing(10)
@@ -596,7 +601,7 @@ impl<'chat> Constellations {
                     if !reply_body.is_empty() {
                         reply_snippet.push_str(reply_body);
                     } else {
-                        reply_snippet.push_str("Replying...");
+                        reply_snippet.push_str(&crate::fl!("replying"));
                     }
                 } else {
                     let mut char_indices = reply_body.char_indices();
@@ -971,11 +976,12 @@ impl<'chat> Constellations {
             });
 
             if !final_body.is_empty() {
+                let unknown_sender = crate::fl!("unknown-sender");
                 let sender = latest_sender.unwrap_or({
                     if !fallback_sender_buf.is_empty() {
                         fallback_sender_buf.as_str()
                     } else {
-                        "Unknown"
+                        unknown_sender.as_str()
                     }
                 });
                 let mut text_str = String::with_capacity(64);
@@ -1030,7 +1036,8 @@ impl<'chat> Constellations {
             .height(cosmic::iced::Length::Fill);
 
         if let Some(room_id) = &self.selected_room {
-            let room_name = self.get_room_name(room_id).unwrap_or("Room");
+            let fallback = crate::fl!("room-fallback");
+            let room_name = self.get_room_name(room_id).unwrap_or(&fallback);
 
             // ⚡ Bolt Optimization: Avoid parsing UserId per frame
             let is_in_call = self.user_id.as_ref().is_some_and(|uid| {
@@ -1393,7 +1400,8 @@ impl<'chat> Constellations {
 
         // Section: Messages in this Room
         if !matches.is_empty() {
-            results_col = results_col.push(text::title3("Messages in this Room").size(14));
+            results_col =
+                results_col.push(text::title3(crate::fl!("search-messages-in-room")).size(14));
             let mut message_list = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
             let thread_counts = std::collections::HashMap::new();
             for item in matches {
@@ -1436,7 +1444,7 @@ impl<'chat> Constellations {
                         .spacing(10)
                         .align_x(Alignment::Center)
                         .push(cosmic::widget::icon::from_name("edit-find-symbolic").size(32))
-                        .push(text::body("No matching messages in this room").size(14)),
+                        .push(text::body(crate::fl!("search-no-room-matches")).size(14)),
                 )
                 .width(cosmic::iced::Length::Fill)
                 .align_x(Alignment::Center)
@@ -1447,7 +1455,7 @@ impl<'chat> Constellations {
         results_col = results_col.push(divider::horizontal::default());
 
         // Section: Public Spaces & Rooms
-        results_col = results_col.push(text::title3("Public Rooms & Spaces").size(14));
+        results_col = results_col.push(text::title3(crate::fl!("public-rooms-spaces")).size(14));
 
         if self.is_searching_public {
             results_col = results_col.push(
@@ -1458,7 +1466,7 @@ impl<'chat> Constellations {
             );
         } else if self.public_search_results.is_empty() {
             results_col = results_col.push(
-                container(text::body("No public rooms or spaces found").size(14))
+                container(text::body(crate::fl!("no-public-rooms")).size(14))
                     .width(cosmic::iced::Length::Fill)
                     .align_x(Alignment::Center)
                     .padding(20),
@@ -1470,7 +1478,8 @@ impl<'chat> Constellations {
                     .name
                     .as_deref()
                     .or(room.canonical_alias.as_deref())
-                    .unwrap_or("Unnamed Room");
+                    .map(str::to_string)
+                    .unwrap_or_else(|| crate::fl!("unnamed-room"));
                 let is_joined = self.joined_room_ids.contains(room.id.as_str());
 
                 // Avatar
@@ -1512,7 +1521,11 @@ impl<'chat> Constellations {
                             ..Default::default()
                         }))
                         .push(
-                            text::body(format!("({} members)", room.num_joined_members)).size(10),
+                            text::body(crate::fl!(
+                                "room-member-count",
+                                count = room.num_joined_members
+                            ))
+                            .size(10),
                         ),
                 );
                 if let Some(topic) = &room.topic {
@@ -1521,10 +1534,10 @@ impl<'chat> Constellations {
                 details_col = details_col.push(text::body(room.id.to_string()).size(9));
 
                 let action_btn = if is_joined {
-                    button::text("Joined")
+                    button::text(crate::fl!("joined-button"))
                 } else {
                     let id_arc = std::sync::Arc::from(room.id.as_str());
-                    button::suggested("Join").on_press(Message::JoinRoom(id_arc))
+                    button::suggested(crate::fl!("join")).on_press(Message::JoinRoom(id_arc))
                 };
 
                 let card_row = Row::new()
@@ -1573,7 +1586,11 @@ impl<'chat> Constellations {
         content = content.push(cosmic::widget::icon::from_name("camera-video-symbolic").size(96));
 
         // Room Name
-        let room_name = room_data.name.as_deref().unwrap_or("Unnamed Video Room");
+        let room_name = room_data
+            .name
+            .as_deref()
+            .map(str::to_string)
+            .unwrap_or_else(|| crate::fl!("unnamed-video-room"));
         content = content.push(text::title1(room_name).size(24));
 
         // Call status
@@ -1594,7 +1611,7 @@ impl<'chat> Constellations {
 
         let mut participants_col = Column::new().spacing(10).align_x(Alignment::Center);
         participants_col = participants_col
-            .push(text::title3(format!("Participants ({})", participant_count)).size(16));
+            .push(text::title3(crate::fl!("participants", count = participant_count)).size(16));
 
         if let Some(participants) = call_participants
             && !participants.is_empty()
@@ -1603,7 +1620,8 @@ impl<'chat> Constellations {
                 participants_col = participants_col.push(text::body(participant.as_str()).size(14));
             }
         } else {
-            participants_col = participants_col.push(text::body("No one is in the call").size(14));
+            participants_col =
+                participants_col.push(text::body(crate::fl!("no-participants")).size(14));
         }
 
         content = content.push(

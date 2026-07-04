@@ -201,7 +201,7 @@ impl Constellations {
                 content = content.push(text::body(crate::fl!("login-qr-success")));
             }
             _ => {
-                content = content.push(text::body("An error occurred."));
+                content = content.push(text::body(crate::fl!("qr-login-error")));
             }
         }
 
