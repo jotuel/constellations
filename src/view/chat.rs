@@ -1735,10 +1735,16 @@ impl<'chat> Constellations {
                 // (siblings, not nested, to keep iced happy).
                 let card_row = match matrix_sdk::ruma::EventId::parse(&item.event_id) {
                     Ok(event_id) => {
-                        let jump_btn = button::custom(message_row)
-                            .width(cosmic::iced::Length::Fill)
-                            .class(cosmic::theme::Button::Standard)
-                            .on_press(Message::JumpToMessage(event_id.clone()));
+                        let jump_btn = button::custom(
+                            container(message_row)
+                                .padding(5)
+                                .width(cosmic::iced::Length::Fill),
+                        )
+                        .width(cosmic::iced::Length::Fill)
+                        .class(cosmic::theme::Button::ListItem(
+                            self.core.system_theme().cosmic().corner_radii.radius_m,
+                        ))
+                        .on_press(Message::JumpToMessage(event_id.clone()));
 
                         let unpin_btn = tooltip(
                             button::icon(cosmic::widget::icon::from_name("pin-symbolic"))
@@ -1757,7 +1763,6 @@ impl<'chat> Constellations {
                 };
 
                 let card = container(card_row)
-                    .padding(10)
                     .style(move |theme: &cosmic::Theme| {
                         use cosmic::iced::widget::container::Catalog;
                         theme.style(&cosmic::theme::Container::Card)
