@@ -174,6 +174,13 @@ impl Constellations {
             }
         }
 
+        // Replay a permalink that arrived before the session was restored.
+        if let Some(link) = self.pending_link.take()
+            && self.matrix.is_some()
+        {
+            tasks.push(Task::done(Action::from(Message::OpenMatrixLink(link))));
+        }
+
         Task::batch(tasks)
     }
 
@@ -1437,6 +1444,149 @@ impl Constellations {
         }
     }
 
+    /// Open a Matrix permalink (room/alias/user/event/join) handed to us via
+    /// argv, the URI scheme, or (later) in-app paste.
+    ///
+    /// For not-yet-loaded event targets this only scrolls if the event is
+    /// already in `timeline_items`; the not-yet-loaded fetch path is Phase 3.
+    pub fn open_matrix_link(
+        &mut self,
+        raw: String,
+    ) -> Task<Action<<Constellations as Application>::Message>> {
+        // Not signed in yet: hold the link and replay once login completes.
+        if self.matrix.is_none() {
+            self.pending_link = Some(raw.clone());
+            self.set_error(crate::fl!("sign-in-to-open-link").to_string());
+            return Task::none();
+        }
+
+        match crate::utils::permalink::parse(&raw) {
+            Ok(target) => self.route_permalink_target(target),
+            Err(_) => {
+                // Not a Matrix permalink. If it parses as a URL, open it
+                // externally; otherwise log and drop.
+                if url::Url::parse(&raw).is_ok() {
+                    Task::done(Action::from(Message::OpenUrl(raw)))
+                } else {
+                    tracing::warn!("Ignoring unparseable link: {raw}");
+                    Task::none()
+                }
+            }
+        }
+    }
+
+    /// Map a parsed `PermalinkTarget` onto existing room/jump/join messages.
+    fn route_permalink_target(
+        &mut self,
+        target: crate::utils::permalink::PermalinkTarget,
+    ) -> Task<Action<<Constellations as Application>::Message>> {
+        use super::PendingAliasOp;
+        use crate::utils::permalink::PermalinkTarget;
+
+        match target {
+            PermalinkTarget::Room { room, .. } => {
+                Task::done(Action::from(Message::RoomSelected(room.as_str().into())))
+            }
+            PermalinkTarget::RoomAlias { alias, .. } => {
+                self.pending_alias_op = Some(PendingAliasOp::OpenRoom);
+                self.kick_off_alias_resolution(alias)
+            }
+            PermalinkTarget::User(_) => {
+                // DM-start flow doesn't exist yet; surface a clear message.
+                self.set_error(crate::fl!("open-user-link-unsupported").to_string());
+                Task::none()
+            }
+            PermalinkTarget::Event { room, event, .. } => {
+                // If the room half is an alias, resolve it first and remember
+                // the event to jump to afterwards.
+                if room.is_room_alias_id()
+                    && let Ok(alias) = matrix_sdk::ruma::RoomAliasId::parse(room.as_str())
+                {
+                    self.pending_alias_op = Some(PendingAliasOp::OpenEvent(event));
+                    return self.kick_off_alias_resolution(alias);
+                }
+                // Room half is already an ID: select the room, then jump (the
+                // jump is a no-op if the event isn't loaded yet — Phase 3).
+                let room_id: Arc<str> = room.as_str().into();
+                let event_clone = event.clone();
+                Task::batch(vec![
+                    Task::done(Action::from(Message::RoomSelected(room_id))),
+                    Task::done(Action::from(Message::JumpToMessage(event_clone))),
+                ])
+            }
+            PermalinkTarget::Join { room, .. } => {
+                if room.is_room_alias_id()
+                    && let Ok(alias) = matrix_sdk::ruma::RoomAliasId::parse(room.as_str())
+                {
+                    self.pending_alias_op = Some(PendingAliasOp::JoinRoom);
+                    return self.kick_off_alias_resolution(alias);
+                }
+                Task::done(Action::from(Message::JoinRoom(room.as_str().into())))
+            }
+        }
+    }
+
+    /// Spawn the async `resolve_room_alias` call. Caller must set
+    /// `pending_alias_op` first so the result handler knows what to do.
+    fn kick_off_alias_resolution(
+        &self,
+        alias: matrix_sdk::ruma::OwnedRoomAliasId,
+    ) -> Task<Action<<Constellations as Application>::Message>> {
+        let Some(matrix) = &self.matrix else {
+            return Task::none();
+        };
+        let matrix = matrix.clone();
+        Task::perform(
+            async move {
+                matrix
+                    .resolve_room_alias(&alias)
+                    .await
+                    .map_err(|e| e.to_string())
+            },
+            |res| Action::from(Message::RoomAliasResolved(Box::new(res))),
+        )
+    }
+
+    /// Handle a completed alias resolution: carry out the operation stashed in
+    /// `pending_alias_op` against the resolved room ID.
+    fn handle_room_alias_resolved(
+        &mut self,
+        res: Box<Result<matrix_sdk::ruma::OwnedRoomId, String>>,
+    ) -> Task<Action<<Constellations as Application>::Message>> {
+        use super::PendingAliasOp;
+        let op = self.pending_alias_op.take();
+        match res.as_ref() {
+            Ok(room_id) => {
+                let room_arc: Arc<str> = room_id.as_str().into();
+                match op {
+                    Some(PendingAliasOp::OpenRoom) => {
+                        Task::done(Action::from(Message::RoomSelected(room_arc)))
+                    }
+                    Some(PendingAliasOp::JoinRoom) => {
+                        Task::done(Action::from(Message::JoinRoom(room_arc)))
+                    }
+                    Some(PendingAliasOp::OpenEvent(event)) => Task::batch(vec![
+                        Task::done(Action::from(Message::RoomSelected(room_arc))),
+                        Task::done(Action::from(Message::JumpToMessage(event))),
+                    ]),
+                    // No op stashed (e.g. link superseded): just log.
+                    None => {
+                        tracing::warn!(
+                            "Alias resolved to {room_id} but no pending operation was set"
+                        );
+                        Task::none()
+                    }
+                }
+            }
+            Err(e) => {
+                self.set_error(
+                    crate::fl!("error-failed-join-room", error = e.to_string()).to_string(),
+                );
+                Task::none()
+            }
+        }
+    }
+
     pub fn handle_logout(&mut self) -> Task<Action<<Constellations as Application>::Message>> {
         if let Some(matrix) = &self.matrix {
             let matrix = matrix.clone();
@@ -2344,6 +2494,8 @@ impl Constellations {
             }
             Message::OidcLoginStarted(res) => self.handle_oidc_login_started(res),
             Message::OidcCallback(url) => self.handle_oidc_callback(url),
+            Message::OpenMatrixLink(raw) => self.open_matrix_link(raw),
+            Message::RoomAliasResolved(res) => self.handle_room_alias_resolved(res),
             Message::StartQrLogin => self.handle_start_qr_login(),
             Message::CancelQrLogin => self.handle_cancel_qr_login(),
             Message::QrLoginStepChanged(step) => self.handle_qr_login_step_changed(step),
@@ -2874,6 +3026,8 @@ mod tests {
             filtered_room_list: Vec::new(),
             filtered_other_rooms: Vec::new(),
             selected_room: None,
+            pending_link: None,
+            pending_alias_op: None,
             timeline_items: eyeball_im::Vector::new(),
             composer_content: cosmic::widget::text_editor::Content::new(),
             composer_preview_events: Vec::new(),

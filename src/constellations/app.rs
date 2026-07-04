@@ -10,7 +10,6 @@ use cosmic::widget::{RcElementWrapper, Row, button, menu, text, text_input};
 use cosmic::{Action, Application, Core, Element, Task};
 use eyeball_im::Vector;
 use std::collections::HashMap;
-use url::Url;
 
 impl Application for Constellations {
     type Executor = cosmic::executor::Default;
@@ -97,10 +96,13 @@ impl Application for Constellations {
         let mut tasks = Vec::new();
         tasks.push(task_create_matrix_engine(data_dir));
 
-        if let Some(uri) = flags
-            && let Ok(url) = Url::parse(&uri)
-        {
-            tasks.push(Task::done(Action::from(Message::OidcCallback(url))));
+        if let Some(uri) = flags {
+            // Classify the launch URI the same way the IPC subscription does,
+            // so an OIDC callback completes login while a Matrix permalink
+            // opens the right room/event.
+            tasks.push(Task::done(Action::from(
+                crate::constellations::subscriptions::classify_ipc_uri(&uri),
+            )));
         }
 
         let config = settings::config::Config::load();
@@ -244,6 +246,8 @@ fn app(core: Core, config: settings::config::Config) -> Constellations {
         other_rooms: Vec::new(),
         filtered_other_rooms: Vec::new(),
         selected_room: None,
+        pending_link: None,
+        pending_alias_op: None,
         timeline_items: Vector::new(),
         composer_content: cosmic::widget::text_editor::Content::new(),
         composer_preview_events: Vec::new(),

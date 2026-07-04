@@ -1740,6 +1740,18 @@ impl MatrixEngine {
         Ok(())
     }
 
+    /// Resolve a room alias to its canonical room ID via the homeserver.
+    /// Used when opening a permalink that targets a room by alias
+    /// (`#room:server`) rather than an ID.
+    pub async fn resolve_room_alias(
+        &self,
+        alias: &matrix_sdk::ruma::RoomAliasId,
+    ) -> Result<OwnedRoomId> {
+        let client = self.client().await;
+        let response = client.resolve_room_alias(alias).await?;
+        Ok(response.room_id)
+    }
+
     pub async fn get_room_members(&self, room_id: &str) -> Result<Vec<RoomMemberInfo>> {
         let room_id_parsed = RoomId::parse(room_id)?;
         let client = self.client().await;

@@ -53,9 +53,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .init();
     let args: Vec<String> = std::env::args().collect();
     let is_notify = args.iter().any(|arg| arg == "--notify");
+    // Accept `argv[1]` if it is our own URI scheme (OIDC callback or an
+    // app-wrapped permalink) OR a raw Matrix permalink (`matrix.to` / `matrix:`).
     let uri = args
         .get(1)
-        .filter(|u| u.starts_with("fi.joonastuomi.Constellations://"))
+        .filter(|u| {
+            u.starts_with("fi.joonastuomi.Constellations://") || utils::permalink::parse(u).is_ok()
+        })
         .cloned();
 
     let rt = tokio::runtime::Runtime::new()?;
