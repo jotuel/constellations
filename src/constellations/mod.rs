@@ -45,6 +45,21 @@ pub enum AuthFlow {
     Qr { step: QrLoginStep },
 }
 
+/// What `RoomAliasResolved` should do with the resolved room ID.
+///
+/// Carried across the async alias-resolution hop so a single resolve path can
+/// serve open-room, join-room, and open-event permalink targets.
+#[derive(Debug, Clone)]
+pub(crate) enum PendingAliasOp {
+    /// Select the resolved room.
+    OpenRoom,
+    /// Join the resolved room (the link carried `action=join`).
+    JoinRoom,
+    /// Open the resolved room and scroll to this event (already-loaded only;
+    /// Phase 3 adds the not-yet-loaded fetch path).
+    OpenEvent(matrix_sdk::ruma::OwnedEventId),
+}
+
 pub struct Constellations {
     pub(crate) core: Core,
     pub(crate) matrix: Option<matrix::MatrixEngine>,
@@ -54,6 +69,13 @@ pub struct Constellations {
     pub(crate) other_rooms: Vec<matrix::RoomData>,
     pub(crate) filtered_other_rooms: Vec<usize>,
     pub(crate) selected_room: Option<std::sync::Arc<str>>,
+    /// A Matrix permalink that arrived before login; replayed once the session
+    /// is restored. Set by `OpenMatrixLink` when `matrix` is `None`.
+    pub(crate) pending_link: Option<String>,
+    /// What to do once an in-flight room-alias resolution completes. Set just
+    /// before kicking off `resolve_room_alias` so `RoomAliasResolved` knows
+    /// whether to open the room, join it, or open an event in it.
+    pub(crate) pending_alias_op: Option<PendingAliasOp>,
     pub(crate) timeline_items: Vector<ConstellationsItem>,
     pub(crate) composer_content: cosmic::widget::text_editor::Content,
     pub(crate) composer_preview_events: Vec<PreviewEvent>,
@@ -211,6 +233,8 @@ pub enum Message {
     CancelOidcLogin,
     OidcLoginStarted(Result<Url, String>),
     OidcCallback(Url),
+    OpenMatrixLink(String),
+    RoomAliasResolved(Box<Result<OwnedRoomId, String>>),
     StartQrLogin,
     CancelQrLogin,
     QrLoginStepChanged(QrLoginStep),

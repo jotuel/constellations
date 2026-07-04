@@ -13,11 +13,11 @@ pub struct IpcInterface {
 #[interface(name = "fi.joonastuomi.Constellations.Ipc")]
 impl IpcInterface {
     async fn handle_callback(&self, uri: String) {
-        if !uri.starts_with("fi.joonastuomi.Constellations://callback") {
-            tracing::warn!("Received invalid OIDC callback URI");
-            return;
-        }
-        tracing::info!("Received OIDC callback URI via D-Bus");
+        // Forward every URI unchanged; classification (OIDC callback vs Matrix
+        // permalink) happens at the consumer side in the app layer. This lets
+        // the single-instance relay carry both OIDC login completions and
+        // `matrix.to` / `matrix:` permalinks handed to us by the desktop.
+        tracing::info!("Received URI via D-Bus IPC: {uri}");
         let _ = self.tx.send(uri);
     }
 }
@@ -76,24 +76,20 @@ mod tests {
 
     #[tokio::test]
     #[serial]
-    async fn test_call_handle_callback_invalid_uri() {
+    async fn test_call_handle_callback_forwards_non_oidc_uri() {
         let (tx, mut rx) = mpsc::unbounded_channel();
         // Start the server which claims the DBus name
         let _server_conn = start_server(tx).await.expect("Failed to start DBus server");
 
-        // Invalid URI that does not start with the required prefix
-        let invalid_uri = "https://invalid.com/callback".to_string();
-        call_handle_callback(invalid_uri.clone())
+        // A non-OIDC URI (e.g. a Matrix permalink) is now forwarded unchanged;
+        // classification happens at the consumer side, not in the IPC layer.
+        let permalink = "https://matrix.to/#/!abc:example.org".to_string();
+        call_handle_callback(permalink.clone())
             .await
             .expect("Failed to call proxy");
 
-        // The interface drops invalid URIs and doesn't send them on tx.
-        // Try to read with a timeout to verify nothing is sent.
-        let result = tokio::time::timeout(std::time::Duration::from_millis(100), rx.recv()).await;
-        assert!(
-            result.is_err(),
-            "Expected timeout since invalid URI should not be forwarded"
-        );
+        let received = rx.recv().await.expect("Did not receive URI on channel");
+        assert_eq!(received, permalink);
     }
 
     #[tokio::test]

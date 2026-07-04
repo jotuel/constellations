@@ -41,15 +41,14 @@ impl Constellations {
                 std::future::pending::<()>().await;
             });
             cosmic::iced::futures::stream::unfold(rx, |mut rx| async move {
-                loop {
-                    if let Some(uri) = rx.recv().await {
-                        if let Ok(url) = Url::parse(&uri) {
-                            return Some((Message::OidcCallback(url), rx));
-                        }
-                    } else {
-                        return None;
-                    }
-                }
+                // Each received URI is classified at the consumer side: OIDC
+                // login callbacks keep their existing path; everything else
+                // (Matrix permalinks, app-wrapped links) routes through the
+                // open-link flow.
+                rx.recv().await.map(|uri| {
+                    let msg = classify_ipc_uri(&uri);
+                    (msg, rx)
+                })
             })
         })
     }
@@ -398,4 +397,60 @@ pub(in crate::constellations) async fn get_room_data(
     let room = client.get_room(room_id)?;
 
     engine.fetch_room_data(&room).await.ok()
+}
+
+/// Classify an IPC URI into the right `Message`.
+///
+/// OIDC login completions (`fi.joonastuomi.Constellations://callback…`) keep
+/// their existing `OidcCallback` path; everything else routes through the
+/// open-link flow as a raw string for `permalink::parse` to handle.
+pub(in crate::constellations) fn classify_ipc_uri(uri: &str) -> Message {
+    const OIDC_CALLBACK_PREFIX: &str = "fi.joonastuomi.Constellations://callback";
+    if uri.starts_with(OIDC_CALLBACK_PREFIX)
+        && let Ok(url) = Url::parse(uri)
+    {
+        Message::OidcCallback(url)
+    } else {
+        Message::OpenMatrixLink(uri.to_owned())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::classify_ipc_uri;
+    use crate::Message;
+
+    #[test]
+    fn classify_oidc_callback() {
+        let uri = "fi.joonastuomi.Constellations://callback?code=abc&state=def";
+        assert!(matches!(classify_ipc_uri(uri), Message::OidcCallback(_)));
+    }
+
+    #[test]
+    fn classify_matrix_to_permalink() {
+        let uri = "https://matrix.to/#/!room:example.org/$event:example.org";
+        assert!(matches!(
+            classify_ipc_uri(uri),
+            Message::OpenMatrixLink(s) if s == uri
+        ));
+    }
+
+    #[test]
+    fn classify_app_scheme_non_callback() {
+        // Our own scheme but NOT a callback (e.g. app-wrapped permalink) must
+        // route through OpenMatrixLink, not OidcCallback.
+        let uri = "fi.joonastuomi.Constellations://open?url=https%3A%2F%2Fmatrix.to";
+        assert!(matches!(
+            classify_ipc_uri(uri),
+            Message::OpenMatrixLink(s) if s == uri
+        ));
+    }
+
+    #[test]
+    fn classify_malformed_oidc_prefix() {
+        // Starts with the callback prefix but isn't a valid URL — fall back to
+        // OpenMatrixLink rather than dropping it.
+        let uri = "fi.joonastuomi.Constellations://callback [not a url]";
+        assert!(matches!(classify_ipc_uri(uri), Message::OpenMatrixLink(_)));
+    }
 }

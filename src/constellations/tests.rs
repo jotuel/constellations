@@ -15,6 +15,8 @@ fn create_test_app() -> Constellations {
         other_rooms: Vec::new(),
         filtered_other_rooms: Vec::new(),
         selected_room: None,
+        pending_link: None,
+        pending_alias_op: None,
         timeline_items: eyeball_im::Vector::new(),
         composer_content: cosmic::widget::text_editor::Content::new(),
         composer_preview_events: Vec::new(),

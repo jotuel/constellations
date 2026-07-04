@@ -382,6 +382,10 @@ error-failed-fetch-pinned = Failed to fetch pinned events: { $error }
 error-failed-load-message-content = [Failed to load message content: { $error }]
 location-message-body = Location: geo:{ $lat },{ $lon }
 
+# Matrix permalink / open-link
+sign-in-to-open-link = Sign in to open this link
+open-user-link-unsupported = Opening user profiles is not yet supported
+
 # Desktop notifications
 notification-new-message = New message
 notification-body = You have new messages. Open Constellations to view them.
