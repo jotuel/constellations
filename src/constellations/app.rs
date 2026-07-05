@@ -55,6 +55,13 @@ impl Application for Constellations {
                     &key_binds,
                     vec![
                         menu::Item::Button(
+                            crate::fl!("open-link"),
+                            Some(cosmic::widget::icon::Handle::from(
+                                cosmic::widget::icon::Named::new("web-browser-symbolic"),
+                            )),
+                            MenuAct::OpenLink,
+                        ),
+                        menu::Item::Button(
                             crate::fl!("app-settings"),
                             Some(cosmic::widget::icon::Handle::from(
                                 cosmic::widget::icon::Named::new("applications-system"),
@@ -165,6 +172,14 @@ impl Application for Constellations {
                 cosmic::app::context_drawer::context_drawer(self.view_create_form(), close_msg)
                     .title(title.to_string()),
             )
+        } else if self.open_link_dialog.is_some() {
+            Some(
+                cosmic::app::context_drawer::context_drawer(
+                    self.view_open_link_form(),
+                    Message::ToggleOpenLink,
+                )
+                .title(crate::fl!("open-link-dialog-title").to_string()),
+            )
         } else {
             None
         }
@@ -255,6 +270,7 @@ fn app(core: Core, config: settings::config::Config) -> Constellations {
         pending_link: None,
         pending_event_focus: None,
         active_event_focus: None,
+        open_link_dialog: None,
         pending_alias_op: None,
         timeline_items: Vector::new(),
         composer_content: cosmic::widget::text_editor::Content::new(),

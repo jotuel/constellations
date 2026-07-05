@@ -1479,6 +1479,51 @@ impl Constellations {
         }
     }
 
+    /// Toggle the in-app "Open link…" paste dialog. Requires an active session;
+    /// when the user is signed out, links can't be opened anyway, so we surface
+    /// the same sign-in message instead of an inert dialog.
+    fn handle_toggle_open_link(
+        &mut self,
+    ) -> Task<Action<<Constellations as Application>::Message>> {
+        if self.matrix.is_none() {
+            self.set_error(crate::fl!("sign-in-to-open-link").to_string());
+            return Task::none();
+        }
+        // Mirror the create-room/space drawer: close any other context drawer
+        // so only one is visible at a time.
+        let now_open = self.open_link_dialog.is_none();
+        self.open_link_dialog = now_open.then(String::new);
+        self.creating_room = false;
+        self.creating_space = false;
+        self.current_settings_panel = None;
+        self.core.set_show_context(now_open);
+        Task::none()
+    }
+
+    fn handle_open_link_text_changed(
+        &mut self,
+        text: String,
+    ) -> Task<Action<<Constellations as Application>::Message>> {
+        if self.open_link_dialog.is_some() {
+            self.open_link_dialog = Some(text);
+        }
+        Task::none()
+    }
+
+    /// Submit the paste-link dialog: close it and route the link through the
+    /// shared `open_matrix_link` path. Empty input just closes the dialog.
+    fn handle_submit_open_link(
+        &mut self,
+        text: String,
+    ) -> Task<Action<<Constellations as Application>::Message>> {
+        self.open_link_dialog = None;
+        let trimmed = text.trim().to_owned();
+        if trimmed.is_empty() {
+            return Task::none();
+        }
+        self.open_matrix_link(trimmed)
+    }
+
     /// Map a parsed `PermalinkTarget` onto existing room/jump/join messages.
     fn route_permalink_target(
         &mut self,
@@ -2627,6 +2672,9 @@ impl Constellations {
             Message::OidcLoginStarted(res) => self.handle_oidc_login_started(res),
             Message::OidcCallback(url) => self.handle_oidc_callback(url),
             Message::OpenMatrixLink(raw) => self.open_matrix_link(raw),
+            Message::ToggleOpenLink => self.handle_toggle_open_link(),
+            Message::OpenLinkTextChanged(text) => self.handle_open_link_text_changed(text),
+            Message::SubmitOpenLink(text) => self.handle_submit_open_link(text),
             Message::RoomAliasResolved(res) => self.handle_room_alias_resolved(res),
             Message::StartQrLogin => self.handle_start_qr_login(),
             Message::CancelQrLogin => self.handle_cancel_qr_login(),
@@ -3166,6 +3214,7 @@ mod tests {
             pending_link: None,
             pending_event_focus: None,
             active_event_focus: None,
+            open_link_dialog: None,
             pending_alias_op: None,
             timeline_items: eyeball_im::Vector::new(),
             composer_content: cosmic::widget::text_editor::Content::new(),
@@ -3903,5 +3952,82 @@ mod tests {
             "must scroll to newest on live restore"
         );
         assert!(app.is_timeline_at_bottom);
+    }
+
+    // --- Phase 4: in-app paste-link dialog ---
+
+    /// `ToggleOpenLink` opens the dialog when signed in; when signed out it
+    /// surfaces the sign-in error instead of an inert dialog.
+    #[test]
+    fn test_toggle_open_link_signed_out_surfaces_error() {
+        let mut app = create_dummy_constellations();
+        // create_dummy_constellations leaves matrix as None (signed out).
+        assert!(app.open_link_dialog.is_none());
+
+        // Signed out: handler surfaces sign-in error and does not open.
+        let _ = app.update(Message::ToggleOpenLink);
+        assert!(
+            app.open_link_dialog.is_none(),
+            "dialog must not open when signed out"
+        );
+        assert!(
+            app.error.as_deref().unwrap_or("").contains("Sign in"),
+            "expected a sign-in prompt, got: {:?}",
+            app.error
+        );
+    }
+
+    /// `OpenLinkTextChanged` updates the dialog value when open, and is a no-op
+    /// when the dialog is closed (defensive: a stale input event must not
+    /// secretly open the dialog).
+    #[test]
+    fn test_open_link_text_changed_updates_and_guards() {
+        let mut app = create_dummy_constellations();
+
+        // Closed: changing text must not open the dialog.
+        app.open_link_dialog = None;
+        let _ = app.update(Message::OpenLinkTextChanged("ignored".to_string()));
+        assert!(app.open_link_dialog.is_none());
+
+        // Open: changing text updates the value.
+        app.open_link_dialog = Some(String::new());
+        let _ = app.update(Message::OpenLinkTextChanged(
+            "https://matrix.to/#/!abc:example.org".to_string(),
+        ));
+        assert_eq!(
+            app.open_link_dialog.as_deref(),
+            Some("https://matrix.to/#/!abc:example.org")
+        );
+    }
+
+    /// `SubmitOpenLink` always closes the dialog, regardless of input.
+    #[test]
+    fn test_submit_open_link_closes_dialog() {
+        let mut app = create_dummy_constellations();
+        app.open_link_dialog = Some("https://matrix.to/#/!abc:example.org".to_string());
+
+        let _ = app.update(Message::SubmitOpenLink(
+            "https://matrix.to/#/!abc:example.org".to_string(),
+        ));
+
+        assert!(
+            app.open_link_dialog.is_none(),
+            "submitting must close the dialog"
+        );
+    }
+
+    /// `SubmitOpenLink` with empty input just closes the dialog without error.
+    #[test]
+    fn test_submit_open_link_empty_closes_silently() {
+        let mut app = create_dummy_constellations();
+        app.open_link_dialog = Some(String::new());
+        app.error = None;
+
+        let _ = app.update(Message::SubmitOpenLink("   ".to_string()));
+
+        assert!(app.open_link_dialog.is_none());
+        // Empty/whitespace input must not surface an error (it's a cancel-like
+        // no-op, not a parse failure).
+        assert!(app.error.is_none(), "empty submit must not error");
     }
 }

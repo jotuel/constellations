@@ -512,6 +512,51 @@ impl<'switcher> Constellations {
         content.push(create_btn_widget).into()
     }
 
+    /// In-app "Open link…" paste dialog. A single text input bound to
+    /// [`Message::OpenLinkTextChanged`], submitting (Enter or the button)
+    /// routes the link through the shared `open_matrix_link` path.
+    pub(crate) fn view_open_link_form(&self) -> Element<'_, Message> {
+        // Borrow from self for display so the returned Element borrows from
+        // self (matching the other view helpers); clone only into messages.
+        let value: &str = self.open_link_dialog.as_deref().unwrap_or_default();
+        let is_empty = value.trim().is_empty();
+
+        let mut link_input = text_input(crate::fl!("open-link-placeholder"), value)
+            .on_input(Message::OpenLinkTextChanged);
+
+        let mut open_btn = button::text(crate::fl!("open-link"));
+        if !is_empty {
+            // `on_submit` is `Fn` (may fire repeatedly), so it must clone on
+            // each invocation; `on_press` fires once and can move.
+            let for_submit = value.to_string();
+            let for_press = value.to_string();
+            link_input = link_input.on_submit(move |_| Message::SubmitOpenLink(for_submit.clone()));
+            open_btn = open_btn.on_press(Message::SubmitOpenLink(for_press));
+        }
+
+        let open_btn_widget: Element<'_, Message> = if is_empty {
+            tooltip(
+                open_btn,
+                text::body(crate::fl!("open-link-placeholder")),
+                Position::Top,
+            )
+            .into()
+        } else {
+            open_btn.into()
+        };
+
+        Column::new()
+            .spacing(10)
+            .push(link_input)
+            .push(
+                Row::new()
+                    .spacing(5)
+                    .push(open_btn_widget)
+                    .push(button::text(crate::fl!("cancel")).on_press(Message::ToggleOpenLink)),
+            )
+            .into()
+    }
+
     fn view_avatar_room(
         &self,
         room: &'switcher crate::matrix::RoomData,
