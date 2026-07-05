@@ -119,4 +119,15 @@ mod tests {
         let loaded = Config::load_from(Some(config_path));
         assert_eq!(loaded, Config::default());
     }
+
+    #[test]
+    fn test_config_load_invalid_json() {
+        let tmp_dir = tempdir().unwrap();
+        let config_path = tmp_dir.path().join("invalid.json");
+
+        std::fs::write(&config_path, "{ invalid json }").unwrap();
+
+        let loaded = Config::load_from(Some(config_path));
+        assert_eq!(loaded, Config::default());
+    }
 }
