@@ -68,19 +68,3 @@ matrix-sdk-test = "0.18.0"
 serial_test = "3.4.0"
 tempfile = "3"
 wiremock = "0.6.5"
-
-[lints.rust]
-unused_imports = "warn"
-
-[profile.release]
-opt-level = 3
-lto = true
-codegen-units = 1
-strip = true
-
-[profile.profiling]
-inherits = "release"
-lto = "thin"
-codegen-units = 16
-debug = 1
-strip = false

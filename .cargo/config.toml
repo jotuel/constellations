@@ -1,2 +1,21 @@
+[lints.rust]
+unused_imports = "warn"
+
 [build]
 rustflags = ["-C", "link-arg=-Wl,--no-keep-memory"]
+
+[cache]
+auto-clean-frequency = "1 day"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
+[profile.profiling]
+inherits = "release"
+lto = "thin"
+codegen-units = 16
+debug = 1
+strip = false
