@@ -240,6 +240,35 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_contains_ignore_ascii_case() {
+        // Empty query
+        assert!(contains_ignore_ascii_case("anything", "", None));
+
+        // ASCII query, ASCII haystack
+        assert!(contains_ignore_ascii_case("Hello World", "WORLD", None));
+        assert!(contains_ignore_ascii_case("Hello World", "he", None));
+        assert!(contains_ignore_ascii_case("Hello World", "Lo W", None));
+        assert!(!contains_ignore_ascii_case("Hello World", "foo", None));
+
+        // ASCII query, Non-ASCII haystack
+        assert!(contains_ignore_ascii_case("héllo wörld", "lo w", None));
+        assert!(contains_ignore_ascii_case("Emoji 🚀 Test", "test", None));
+        assert!(!contains_ignore_ascii_case("Emoji 🚀 Test", "foo", None));
+
+        // Non-ASCII query with query_lower_fallback
+        assert!(contains_ignore_ascii_case(
+            "héllo wörld",
+            "WÖRLD",
+            Some("wörld")
+        ));
+        assert!(!contains_ignore_ascii_case("héllo wörld", "Ü", Some("ü")));
+
+        // Non-ASCII query without query_lower_fallback
+        assert!(contains_ignore_ascii_case("héllo wörld", "WÖRLD", None));
+        assert!(!contains_ignore_ascii_case("héllo wörld", "Ü", None));
+    }
+
+    #[test]
     fn test_redact_url() {
         // query params `code` and `state` redacted to "[REDACTED]", while a normal param (e.g. `room`) is preserved
         let url =
@@ -292,5 +321,10 @@ mod tests {
         let url = Url::parse("https://example.com/plain/path").unwrap();
         let redacted_str = redact_url(&url);
         assert_eq!(redacted_str, "https://example.com/plain/path");
+
+        // a URL with query params but no sensitive ones round-trips unchanged
+        let url = Url::parse("https://example.com/search?q=rust&sort=desc").unwrap();
+        let redacted_str = redact_url(&url);
+        assert_eq!(redacted_str, "https://example.com/search?q=rust&sort=desc");
     }
 }

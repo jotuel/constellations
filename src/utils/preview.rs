@@ -236,6 +236,19 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_markdown_skip_fallback_no_blockquote() {
+        let text = "Just some plain text.";
+        let events = parse_markdown(text, true);
+        assert_eq!(
+            events,
+            vec![
+                PreviewEvent::Text("Just some plain text.".to_string()),
+                PreviewEvent::EndBlock
+            ]
+        );
+    }
+
+    #[test]
     fn test_parse_markdown_no_skip_normal_blockquote() {
         let text = "> This is a quote\n\nAnd this is text.";
         let events = parse_markdown(text, false);
