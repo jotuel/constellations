@@ -112,6 +112,19 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
+    fn test_config_save_default() {
+        let tmp_dir = tempdir().unwrap();
+        unsafe {
+            std::env::set_var("HOME", tmp_dir.path());
+            std::env::set_var("XDG_CONFIG_HOME", tmp_dir.path());
+            std::env::set_var("APPDATA", tmp_dir.path());
+        }
+        let config = Config::default();
+        assert!(config.save().is_ok());
+    }
+
+    #[test]
     fn test_config_load_nonexistent() {
         let tmp_dir = tempdir().unwrap();
         let config_path = tmp_dir.path().join("nonexistent.json");
