@@ -72,6 +72,17 @@ pub struct Constellations {
     /// A Matrix permalink that arrived before login; replayed once the session
     /// is restored. Set by `OpenMatrixLink` when `matrix` is `None`.
     pub(crate) pending_link: Option<String>,
+    /// An event a permalink asked us to scroll to, stashed while we wait for
+    /// the target room's timeline to finish initialising. Consumed in the
+    /// `TimelineInitFinished` handler: if the event is already in the loaded
+    /// window we just scroll to it, otherwise we build an event-focused
+    /// timeline around it.
+    pub(crate) pending_event_focus: Option<matrix_sdk::ruma::OwnedEventId>,
+    /// When set, the room is being viewed through an event-focused (permalink
+    /// context) timeline instead of the live one. Drives the "viewing older
+    /// messages" banner and selects the event-focused subscription. Cleared by
+    /// `ReturnToLive` or a room switch.
+    pub(crate) active_event_focus: Option<matrix_sdk::ruma::OwnedEventId>,
     /// What to do once an in-flight room-alias resolution completes. Set just
     /// before kicking off `resolve_room_alias` so `RoomAliasResolved` knows
     /// whether to open the room, join it, or open an event in it.
@@ -259,6 +270,15 @@ pub enum Message {
     PublicSearchResults(Result<Vec<matrix::PublicRoom>, String>),
     NewRoomIsVideoChanged(bool),
     JumpToMessage(matrix_sdk::ruma::OwnedEventId),
+    /// Build an event-focused (permalink context) timeline around an event not
+    /// present in the live window, then scroll to it.
+    LoadEventContext(matrix_sdk::ruma::OwnedEventId),
+    /// Result of building an event-focused timeline. On success the event id is
+    /// the one now centred; on error a reason string for a toast.
+    EventContextLoaded(matrix_sdk::ruma::OwnedEventId, Result<(), String>),
+    /// Leave the event-focused (permalink context) timeline and restore the
+    /// live one at the bottom. Emitted by the "Jump to newest" banner button.
+    ReturnToLive,
     JoinCall,
     LeaveCall,
     CallJoined(Result<(), String>),

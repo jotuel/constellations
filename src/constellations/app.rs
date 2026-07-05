@@ -191,7 +191,13 @@ impl Application for Constellations {
         let mut subs = vec![ipc_sub, sync_sub];
 
         if let Some(room_id) = self.selected_room.clone() {
-            subs.push(self.timeline_subscription(matrix, room_id));
+            if let Some(event_id) = self.active_event_focus.clone() {
+                // Viewing a permalink context: feed the timeline from the
+                // event-focused subscription instead of the live one.
+                subs.push(self.event_timeline_subscription(matrix, room_id, event_id));
+            } else {
+                subs.push(self.timeline_subscription(matrix, room_id));
+            }
         }
 
         if let (Some(room_id), Some(root_id)) =
@@ -247,6 +253,8 @@ fn app(core: Core, config: settings::config::Config) -> Constellations {
         filtered_other_rooms: Vec::new(),
         selected_room: None,
         pending_link: None,
+        pending_event_focus: None,
+        active_event_focus: None,
         pending_alias_op: None,
         timeline_items: Vector::new(),
         composer_content: cosmic::widget::text_editor::Content::new(),
