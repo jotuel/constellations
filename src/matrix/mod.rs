@@ -405,6 +405,20 @@ impl MatrixEngine {
         data_dir.join(format!("{}.fallback", secret_type))
     }
 
+    fn write_secret_file(path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
+        use std::fs::OpenOptions;
+        use std::io::Write;
+        let mut options = OpenOptions::new();
+        options.write(true).create(true).truncate(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.mode(0o600);
+        }
+        let mut file = options.open(path)?;
+        file.write_all(data)
+    }
+
     fn should_bypass_keyring() -> bool {
         cfg!(test) && std::env::var("CONSTELLATIONS_TEST_KEYRING").is_err()
     }
@@ -424,7 +438,7 @@ impl MatrixEngine {
                     e
                 );
                 let path = Self::get_fallback_path("matrix-session");
-                std::fs::write(&path, &secret)?;
+                Self::write_secret_file(&path, &secret)?;
                 return Ok(());
             }
         };
@@ -444,7 +458,7 @@ impl MatrixEngine {
                     e
                 );
                 let path = Self::get_fallback_path("matrix-session");
-                std::fs::write(&path, &secret)?;
+                Self::write_secret_file(&path, &secret)?;
                 Ok(())
             }
         }
@@ -2606,7 +2620,7 @@ impl MatrixEngine {
                 .try_fill_bytes(&mut buf)
                 .context("Failed to generate secure random bytes for store passphrase")?;
             let passphrase: String = buf.iter().map(|b| format!("{:02x}", b)).collect();
-            let _ = std::fs::write(&path, &passphrase);
+            let _ = Self::write_secret_file(&path, passphrase.as_bytes());
             Ok(passphrase)
         };
 
@@ -2696,7 +2710,7 @@ impl MatrixEngine {
                     "Failed to create item in Keyring: {}. Falling back to file-based passphrase storage.",
                     e
                 );
-                let _ = std::fs::write(&path, &passphrase);
+                let _ = Self::write_secret_file(&path, passphrase.as_bytes());
                 Ok(passphrase)
             }
         }

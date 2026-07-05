@@ -1,0 +1,5 @@
+🔒 Implement secure file permissions for fallback session storage
+
+🎯 What: When initializing the Keyring fails, Constellations falls back to saving sensitive session and passphrase data to files. These files were created using `std::fs::write`, which does not enforce secure permissions.
+⚠️ Risk: If the process runs with a relaxed umask, these files could be created world-readable, exposing the plaintext session secrets and store passphrases to other local users.
+🛡️ Solution: Created a `write_secret_file` helper that uses `OpenOptionsExt` to explicitly set file permissions to 0600 on Unix systems, ensuring only the owner can read or write to these files. The insecure `std::fs::write` calls have been updated to use this helper.
