@@ -292,5 +292,10 @@ mod tests {
         let url = Url::parse("https://example.com/plain/path").unwrap();
         let redacted_str = redact_url(&url);
         assert_eq!(redacted_str, "https://example.com/plain/path");
+
+        // a URL with query params but no sensitive ones round-trips unchanged
+        let url = Url::parse("https://example.com/search?q=rust&sort=desc").unwrap();
+        let redacted_str = redact_url(&url);
+        assert_eq!(redacted_str, "https://example.com/search?q=rust&sort=desc");
     }
 }
