@@ -360,6 +360,22 @@ fn is_recent_enough_to_notify(now_ms: u128, event_ts_ms: u64) -> bool {
     now_ms.abs_diff(u128::from(event_ts_ms)) <= NOTIFICATION_MAX_AGE_MS
 }
 
+
+#[cfg(unix)]
+use std::os::unix::fs::OpenOptionsExt;
+
+fn write_secure_fallback_file(path: &std::path::Path, data: impl AsRef<[u8]>) -> std::io::Result<()> {
+    let mut options = std::fs::OpenOptions::new();
+    options.write(true).create(true).truncate(true);
+
+    #[cfg(unix)]
+    options.mode(0o600);
+
+    use std::io::Write;
+    let mut file = options.open(path)?;
+    file.write_all(data.as_ref())
+}
+
 impl MatrixEngine {
     pub async fn new(data_dir: PathBuf) -> Result<Self> {
         let client = Self::setup_client(data_dir.clone(), "https://matrix.org").await?;
@@ -424,7 +440,7 @@ impl MatrixEngine {
                     e
                 );
                 let path = Self::get_fallback_path("matrix-session");
-                std::fs::write(&path, &secret)?;
+                write_secure_fallback_file(&path, &secret)?;
                 return Ok(());
             }
         };
@@ -444,7 +460,7 @@ impl MatrixEngine {
                     e
                 );
                 let path = Self::get_fallback_path("matrix-session");
-                std::fs::write(&path, &secret)?;
+                write_secure_fallback_file(&path, &secret)?;
                 Ok(())
             }
         }
@@ -2606,7 +2622,7 @@ impl MatrixEngine {
                 .try_fill_bytes(&mut buf)
                 .context("Failed to generate secure random bytes for store passphrase")?;
             let passphrase: String = buf.iter().map(|b| format!("{:02x}", b)).collect();
-            let _ = std::fs::write(&path, &passphrase);
+            let _ = write_secure_fallback_file(&path, &passphrase);
             Ok(passphrase)
         };
 
@@ -2696,7 +2712,7 @@ impl MatrixEngine {
                     "Failed to create item in Keyring: {}. Falling back to file-based passphrase storage.",
                     e
                 );
-                let _ = std::fs::write(&path, &passphrase);
+                let _ = write_secure_fallback_file(&path, &passphrase);
                 Ok(passphrase)
             }
         }
