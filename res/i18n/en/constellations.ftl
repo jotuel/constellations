@@ -388,6 +388,9 @@ open-user-link-unsupported = Opening user profiles is not yet supported
 message-not-found = This message could not be loaded
 viewing-older-messages = You're viewing older messages
 jump-to-newest = Jump to newest
+open-link = Open Link
+open-link-placeholder = Paste a Matrix link
+open-link-dialog-title = Open Link
 
 # Desktop notifications
 notification-new-message = New message

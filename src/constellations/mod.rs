@@ -83,6 +83,9 @@ pub struct Constellations {
     /// messages" banner and selects the event-focused subscription. Cleared by
     /// `ReturnToLive` or a room switch.
     pub(crate) active_event_focus: Option<matrix_sdk::ruma::OwnedEventId>,
+    /// In-app "Open link…" dialog state. `Some(text)` shows the paste-link
+    /// context drawer with that input value; `None` hides it.
+    pub(crate) open_link_dialog: Option<String>,
     /// What to do once an in-flight room-alias resolution completes. Set just
     /// before kicking off `resolve_room_alias` so `RoomAliasResolved` knows
     /// whether to open the room, join it, or open an event in it.
@@ -245,6 +248,12 @@ pub enum Message {
     OidcLoginStarted(Result<Url, String>),
     OidcCallback(Url),
     OpenMatrixLink(String),
+    /// Toggle the in-app "Open link…" paste dialog open/closed.
+    ToggleOpenLink,
+    /// The paste-link dialog input changed.
+    OpenLinkTextChanged(String),
+    /// Submit the paste-link dialog; carries the raw link text.
+    SubmitOpenLink(String),
     RoomAliasResolved(Box<Result<OwnedRoomId, String>>),
     StartQrLogin,
     CancelQrLogin,
@@ -305,6 +314,7 @@ pub enum MenuAct {
     AppSettings,
     UserSettings,
     Logout,
+    OpenLink,
     CreateRoom,
     CreateSpace,
     SpaceSettings,
@@ -322,6 +332,7 @@ impl MenuAction for MenuAct {
             MenuAct::AppSettings => Message::OpenSettings(SettingsPanel::App),
             MenuAct::UserSettings => Message::OpenSettings(SettingsPanel::User),
             MenuAct::Logout => Message::Logout,
+            MenuAct::OpenLink => Message::ToggleOpenLink,
             MenuAct::CreateRoom => Message::ToggleCreateRoom,
             MenuAct::CreateSpace => Message::ToggleCreateSpace,
             MenuAct::SpaceSettings => Message::OpenSettings(SettingsPanel::Space),
