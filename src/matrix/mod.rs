@@ -18,7 +18,8 @@ pub use matrix_sdk_ui::room_list_service::{RoomListDynamicEntriesController, Roo
 use matrix_sdk_ui::sync_service::SyncService;
 use matrix_sdk_ui::timeline::{LatestEventValue, MsgLikeKind, TimelineItemContent};
 pub use matrix_sdk_ui::timeline::{
-    RoomExt, Timeline, TimelineEventItemId, TimelineFocus, TimelineItem, VirtualTimelineItem,
+    RoomExt, Timeline, TimelineEventFocusThreadMode, TimelineEventItemId, TimelineFocus,
+    TimelineItem, VirtualTimelineItem,
 };
 use oo7::Keyring;
 use rand::{TryRng, rngs::SysRng};
@@ -294,6 +295,10 @@ struct MatrixEngineInner {
     room_list_controller: Option<Arc<RoomListDynamicEntriesController>>,
     timelines: HashMap<OwnedRoomId, Arc<Timeline>>,
     threaded_timelines: HashMap<(OwnedRoomId, matrix_sdk::ruma::OwnedEventId), Arc<Timeline>>,
+    /// Event-focused timelines, keyed by (room, target event). Built lazily when
+    /// a permalink points at a message not present in the live window; see
+    /// `event_timeline`. Cached so repeated opens are cheap.
+    event_timelines: HashMap<(OwnedRoomId, matrix_sdk::ruma::OwnedEventId), Arc<Timeline>>,
     data_dir: PathBuf,
     sync_handle: Option<tokio::task::JoinHandle<()>>,
     space_hierarchy: SpaceHierarchy,
@@ -323,6 +328,8 @@ impl std::fmt::Debug for MatrixEngineInner {
                     .map(|_| "RoomListDynamicEntriesController"),
             )
             .field("timelines", &self.timelines.keys())
+            .field("threaded_timelines", &self.threaded_timelines.keys())
+            .field("event_timelines", &self.event_timelines.keys())
             .field("data_dir", &self.data_dir)
             .field(
                 "sync_handle",
@@ -370,6 +377,7 @@ impl MatrixEngine {
             room_list_controller: None,
             timelines: HashMap::new(),
             threaded_timelines: HashMap::new(),
+            event_timelines: HashMap::new(),
             data_dir,
             sync_handle: None,
             space_hierarchy: SpaceHierarchy::new(),
@@ -1434,6 +1442,77 @@ impl MatrixEngine {
             .insert((room_id.to_owned(), root_event_id), timeline.clone());
 
         Ok(timeline)
+    }
+
+    /// Build (or fetch from cache) a timeline focused on a specific event, used
+    /// to open permalinks to messages that are not present in the live window.
+    ///
+    /// Uses [`TimelineFocus::Event`] with `num_context_events = 50` so the
+    /// target is centred among surrounding context. Thread handling is
+    /// `Automatic` so an event inside a thread still resolves without forcing
+    /// the whole room into threaded mode.
+    ///
+    /// Repeated opens for the same (room, event) are served from the cache so
+    /// navigating back is cheap.
+    pub async fn event_timeline(
+        &self,
+        room_id: &str,
+        target: matrix_sdk::ruma::OwnedEventId,
+    ) -> Result<Arc<Timeline>> {
+        let room_id_parsed = RoomId::parse(room_id)?;
+
+        {
+            let inner = self.inner.read().await;
+            if let Some(timeline) = inner
+                .event_timelines
+                .get(&(room_id_parsed.clone(), target.clone()))
+            {
+                return Ok(timeline.clone());
+            }
+        }
+
+        let rls = self
+            .room_list_service()
+            .await
+            .context("RoomListService not initialized")?;
+        rls.subscribe_to_rooms(&[&room_id_parsed]).await;
+
+        let room = rls
+            .room(&room_id_parsed)
+            .map_err(|e| anyhow::anyhow!("Failed to get room: {}", e))?;
+        let timeline = Arc::new(
+            room.timeline_builder()
+                .with_focus(TimelineFocus::Event {
+                    target: target.clone(),
+                    num_context_events: 50,
+                    thread_mode: TimelineEventFocusThreadMode::Automatic {
+                        hide_threaded_events: true,
+                    },
+                })
+                .build()
+                .await?,
+        );
+
+        let mut inner = self.inner.write().await;
+        inner
+            .event_timelines
+            .insert((room_id_parsed, target), timeline.clone());
+
+        Ok(timeline)
+    }
+
+    /// Drop a cached event-focused timeline, e.g. when returning to live. The
+    /// underlying matrix-sdk timeline is simply dropped (no server teardown is
+    /// needed); a future open rebuilds it.
+    pub async fn drop_event_timeline(
+        &self,
+        room_id: &str,
+        target: &matrix_sdk::ruma::EventId,
+    ) -> Result<()> {
+        let room_id = RoomId::parse(room_id)?;
+        let mut inner = self.inner.write().await;
+        inner.event_timelines.remove(&(room_id, target.to_owned()));
+        Ok(())
     }
 
     pub async fn paginate_backwards(&self, room_id: &str, limit: u16) -> Result<()> {

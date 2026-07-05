@@ -626,6 +626,10 @@ impl Constellations {
             }
             matrix::MatrixEvent::TimelineInitFinished => {
                 self.is_timeline_initialized = true;
+                // A permalink asked us to focus on a specific event. If it is
+                // already in the loaded window we can just scroll to it;
+                // otherwise we build an event-focused timeline around it.
+                let event_focus_task = self.check_pending_event_focus();
                 if self.needs_scroll_restoration {
                     self.needs_scroll_restoration = false;
                     if self.is_timeline_at_bottom {
@@ -645,7 +649,7 @@ impl Constellations {
                 } else if let Some(task) = self.check_and_perform_initial_scroll() {
                     task
                 } else {
-                    Task::none()
+                    event_focus_task
                 }
             }
             matrix::MatrixEvent::ReactionAdded { .. } => {
@@ -1498,21 +1502,21 @@ impl Constellations {
             }
             PermalinkTarget::Event { room, event, .. } => {
                 // If the room half is an alias, resolve it first and remember
-                // the event to jump to afterwards.
+                // the event to focus on afterwards.
                 if room.is_room_alias_id()
                     && let Ok(alias) = matrix_sdk::ruma::RoomAliasId::parse(room.as_str())
                 {
                     self.pending_alias_op = Some(PendingAliasOp::OpenEvent(event));
                     return self.kick_off_alias_resolution(alias);
                 }
-                // Room half is already an ID: select the room, then jump (the
-                // jump is a no-op if the event isn't loaded yet — Phase 3).
+                // Room half is already an ID: stash the event and select the
+                // room. The jump-vs-fetch decision happens once the room's
+                // timeline finishes initialising (see `TimelineInitFinished`):
+                // if the event is already in the loaded window we scroll to
+                // it, otherwise we build an event-focused timeline around it.
+                self.pending_event_focus = Some(event);
                 let room_id: Arc<str> = room.as_str().into();
-                let event_clone = event.clone();
-                Task::batch(vec![
-                    Task::done(Action::from(Message::RoomSelected(room_id))),
-                    Task::done(Action::from(Message::JumpToMessage(event_clone))),
-                ])
+                Task::done(Action::from(Message::RoomSelected(room_id)))
             }
             PermalinkTarget::Join { room, .. } => {
                 if room.is_room_alias_id()
@@ -1524,6 +1528,126 @@ impl Constellations {
                 Task::done(Action::from(Message::JoinRoom(room.as_str().into())))
             }
         }
+    }
+
+    /// Consume a pending event-focus request once the room's timeline has
+    /// finished initialising.
+    ///
+    /// If the target event is already in the loaded window, scroll to it
+    /// (cheap path, reuses the live timeline). Otherwise emit
+    /// [`Message::LoadEventContext`] to build an event-focused timeline around
+    /// it. Returns `Task::none()` when no focus is pending.
+    fn check_pending_event_focus(
+        &mut self,
+    ) -> Task<Action<<Constellations as Application>::Message>> {
+        let Some(event_id) = self.pending_event_focus.take() else {
+            return Task::none();
+        };
+
+        // Already in the loaded window? Just scroll to it.
+        let already_loaded = self.timeline_items.iter().any(|item| {
+            item.item_id.as_ref().is_some_and(
+                |id| matches!(id, matrix::TimelineEventItemId::EventId(eid) if eid == &event_id),
+            )
+        });
+        if already_loaded {
+            return Task::done(Action::from(Message::JumpToMessage(event_id)));
+        }
+
+        // Not loaded: build an event-focused timeline around it.
+        Task::done(Action::from(Message::LoadEventContext(event_id)))
+    }
+
+    /// Build an event-focused (permalink context) timeline around `event_id`
+    /// and swap the displayed timeline to it. On failure, surface a toast.
+    fn handle_load_event_context(
+        &mut self,
+        event_id: matrix_sdk::ruma::OwnedEventId,
+    ) -> Task<Action<<Constellations as Application>::Message>> {
+        let (matrix, room_id) = match (&self.matrix, &self.selected_room) {
+            (Some(m), Some(r)) => (m.clone(), r.clone()),
+            _ => {
+                tracing::warn!("LoadEventContext without an active room");
+                self.set_error(crate::fl!("message-not-found").to_string());
+                return Task::none();
+            }
+        };
+
+        // Setting `active_event_focus` switches the room's subscription to the
+        // event-focused timeline (see `subscription()`). The timeline items
+        // are repopulated when that subscription initialises.
+        self.active_event_focus = Some(event_id.clone());
+        self.is_timeline_initialized = false;
+        self.timeline_items.clear();
+        self.last_content_height = 0.0;
+        self.last_viewport_height = 0.0;
+
+        let event_id_for_task = event_id.clone();
+        Task::perform(
+            async move {
+                matrix
+                    .event_timeline(&room_id, event_id_for_task)
+                    .await
+                    .map(|_| ())
+                    .map_err(|e| e.to_string())
+            },
+            move |res| Action::from(Message::EventContextLoaded(event_id.clone(), res)),
+        )
+    }
+
+    /// Handle the result of building an event-focused timeline. On success,
+    /// schedule a jump to the centred event; on failure, surface a toast and
+    /// return to live.
+    fn handle_event_context_loaded(
+        &mut self,
+        event_id: matrix_sdk::ruma::OwnedEventId,
+        res: Result<(), String>,
+    ) -> Task<Action<<Constellations as Application>::Message>> {
+        match res {
+            Ok(()) => {
+                // The event-focused subscription is now feeding the timeline;
+                // jump to the event once it appears.
+                Task::done(Action::from(Message::JumpToMessage(event_id)))
+            }
+            Err(e) => {
+                tracing::warn!("Failed to load event context for {event_id}: {e}");
+                // Roll back to the live timeline.
+                self.active_event_focus = None;
+                self.set_error(crate::fl!("message-not-found").to_string());
+                Task::none()
+            }
+        }
+    }
+
+    /// Leave the event-focused timeline and restore the live one at the bottom.
+    /// Triggered by the "Jump to newest" button in the viewing-older-messages
+    /// banner.
+    fn handle_return_to_live(&mut self) -> Task<Action<<Constellations as Application>::Message>> {
+        // If we were viewing an event-focused timeline, optionally drop the
+        // cached entry so a later re-open rebuilds it fresh.
+        if let (Some(matrix), Some(room_id), Some(event_id)) =
+            (&self.matrix, &self.selected_room, &self.active_event_focus)
+        {
+            let matrix = matrix.clone();
+            let room_id = room_id.clone();
+            let event_id = event_id.clone();
+            // Best-effort cache drop; ignore errors.
+            tokio::spawn(async move {
+                let _ = matrix.drop_event_timeline(&room_id, &event_id).await;
+            });
+        }
+
+        self.active_event_focus = None;
+        // Clearing items + the init flag lets the live subscription (now
+        // re-selected because active_event_focus is None) repopulate the
+        // timeline, and the existing initial-scroll path snaps to the end.
+        self.timeline_items.clear();
+        self.is_timeline_initialized = false;
+        self.is_timeline_at_bottom = true;
+        self.needs_initial_scroll = true;
+        self.last_content_height = 0.0;
+        self.last_viewport_height = 0.0;
+        Task::none()
     }
 
     /// Spawn the async `resolve_room_alias` call. Caller must set
@@ -1565,10 +1689,13 @@ impl Constellations {
                     Some(PendingAliasOp::JoinRoom) => {
                         Task::done(Action::from(Message::JoinRoom(room_arc)))
                     }
-                    Some(PendingAliasOp::OpenEvent(event)) => Task::batch(vec![
-                        Task::done(Action::from(Message::RoomSelected(room_arc))),
-                        Task::done(Action::from(Message::JumpToMessage(event))),
-                    ]),
+                    Some(PendingAliasOp::OpenEvent(event)) => {
+                        // Stash the event to focus on once the room's timeline
+                        // initialises; same deferred jump-vs-fetch path as the
+                        // room-id case above.
+                        self.pending_event_focus = Some(event);
+                        Task::done(Action::from(Message::RoomSelected(room_arc)))
+                    }
                     // No op stashed (e.g. link superseded): just log.
                     None => {
                         tracing::warn!(
@@ -2025,6 +2152,11 @@ impl Constellations {
                 self.pinned_events_details.clear();
                 self.inviting_to_room = false;
                 self.invite_to_room_id.clear();
+                // A room switch always leaves the event-focused (permalink
+                // context) view: clear any pending/active event focus so the
+                // new room opens on its live timeline and the banner hides.
+                self.pending_event_focus = None;
+                self.active_event_focus = None;
                 let fetch_members_task = if self.show_members_panel {
                     self.is_loading_members = true;
                     self.fetch_members_task()
@@ -2770,6 +2902,11 @@ impl Constellations {
                     Task::none()
                 }
             }
+            Message::LoadEventContext(event_id) => self.handle_load_event_context(event_id),
+            Message::EventContextLoaded(event_id, res) => {
+                self.handle_event_context_loaded(event_id, res)
+            }
+            Message::ReturnToLive => self.handle_return_to_live(),
             Message::JoinCall => self.handle_join_call(),
             Message::LeaveCall => self.handle_leave_call(),
             Message::CallJoined(res) => {
@@ -3027,6 +3164,8 @@ mod tests {
             filtered_other_rooms: Vec::new(),
             selected_room: None,
             pending_link: None,
+            pending_event_focus: None,
+            active_event_focus: None,
             pending_alias_op: None,
             timeline_items: eyeball_im::Vector::new(),
             composer_content: cosmic::widget::text_editor::Content::new(),
@@ -3654,5 +3793,115 @@ mod tests {
 
         // No event-bearing items were counted.
         assert!(app.thread_counts.is_empty());
+    }
+
+    // --- Phase 3: event-focused (permalink context) timeline ---
+
+    /// A room switch must always leave the event-focused view, clearing any
+    /// pending or active event focus so the new room opens on its live timeline
+    /// and the "viewing older messages" banner hides.
+    #[test]
+    fn test_room_selected_clears_event_focus() {
+        use std::sync::Arc;
+        let mut app = create_dummy_constellations();
+        let event_id: OwnedEventId =
+            matrix_sdk::ruma::EventId::parse("$target:example.com").unwrap();
+        app.pending_event_focus = Some(event_id.clone());
+        app.active_event_focus = Some(event_id.clone());
+        app.selected_room = Some(Arc::from("!old:example.com"));
+
+        // RoomSelected needs a room present in room_list to cache its name; an
+        // empty list exercises the no-match path without panicking.
+        let room_id: Arc<str> = Arc::from("!new:example.com");
+        let _ = app.update(Message::RoomSelected(room_id.clone()));
+
+        assert!(
+            app.pending_event_focus.is_none(),
+            "pending_event_focus must clear on room switch"
+        );
+        assert!(
+            app.active_event_focus.is_none(),
+            "active_event_focus must clear on room switch"
+        );
+        assert_eq!(app.selected_room.as_deref(), Some("!new:example.com"));
+    }
+
+    /// `check_pending_event_focus` consumes a pending event that is already in
+    /// the loaded window by scrolling to it (state is consumed, no event-focus
+    /// timeline is built — i.e. active_event_focus stays None).
+    #[test]
+    fn test_pending_event_focus_loaded_event_jumps() {
+        let mut app = create_dummy_constellations();
+        let event_id: OwnedEventId =
+            matrix_sdk::ruma::EventId::parse("$loaded:example.com").unwrap();
+
+        // Simulate the event already being in the loaded window.
+        let mut item = ConstellationsItem::mock("alice", "loaded msg", "12:00", false);
+        item.item_id = Some(matrix::TimelineEventItemId::EventId(event_id.clone()));
+        app.timeline_items.push_back(item);
+        app.pending_event_focus = Some(event_id.clone());
+
+        let _ = app.check_pending_event_focus();
+
+        assert!(
+            app.pending_event_focus.is_none(),
+            "pending focus must be consumed"
+        );
+        assert!(
+            app.active_event_focus.is_none(),
+            "loaded event must not build an event-focused timeline"
+        );
+    }
+
+    /// `check_pending_event_focus` consumes a pending event that is NOT in the
+    /// loaded window by handing off to LoadEventContext. We can't drive the
+    /// async matrix call in a unit test, but we verify the intent: the helper
+    /// consumes the pending focus and the follow-up LoadEventContext handler
+    /// sets active_event_focus (when a room + engine are present, which they
+    /// aren't here, so it surfaces an error and leaves focus clear).
+    #[test]
+    fn test_pending_event_focus_missing_event_defers_to_load() {
+        let mut app = create_dummy_constellations();
+        let event_id: OwnedEventId =
+            matrix_sdk::ruma::EventId::parse("$missing:example.com").unwrap();
+
+        // Empty timeline: the event is not loaded.
+        app.pending_event_focus = Some(event_id.clone());
+
+        let _ = app.check_pending_event_focus();
+
+        assert!(
+            app.pending_event_focus.is_none(),
+            "pending focus must be consumed"
+        );
+        // active_event_focus is only set inside handle_load_event_context, which
+        // requires a live matrix engine; here it must stay None.
+        assert!(app.active_event_focus.is_none());
+    }
+
+    /// `ReturnToLive` clears the active event focus and resets the timeline so
+    /// the live subscription reinitialises at the newest messages.
+    #[test]
+    fn test_return_to_live_clears_active_focus() {
+        let mut app = create_dummy_constellations();
+        let event_id: OwnedEventId =
+            matrix_sdk::ruma::EventId::parse("$focused:example.com").unwrap();
+        app.active_event_focus = Some(event_id);
+        app.is_timeline_initialized = true;
+        app.is_timeline_at_bottom = false;
+        app.needs_initial_scroll = false;
+
+        let _ = app.update(Message::ReturnToLive);
+
+        assert!(
+            app.active_event_focus.is_none(),
+            "active_event_focus must clear on return to live"
+        );
+        assert!(!app.is_timeline_initialized, "timeline must reinitialise");
+        assert!(
+            app.needs_initial_scroll,
+            "must scroll to newest on live restore"
+        );
+        assert!(app.is_timeline_at_bottom);
     }
 }

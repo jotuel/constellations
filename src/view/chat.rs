@@ -122,6 +122,26 @@ impl<'chat> Constellations {
             .into()
     }
 
+    /// Persistent banner shown while the room is viewed through an
+    /// event-focused (permalink context) timeline. Explains that the user is
+    /// not at the newest messages and offers a one-click return to live.
+    fn view_older_messages_banner(&self) -> Element<'_, Message> {
+        let label = text::body(crate::fl!("viewing-older-messages"));
+        let jump_btn = button::text(crate::fl!("jump-to-newest")).on_press(Message::ReturnToLive);
+        // Wrap in a container so the banner reads as a distinct, themed strip
+        // (uses the default theme surface rather than a hardcoded color).
+        container(
+            Row::new()
+                .spacing(10)
+                .align_y(Alignment::Center)
+                .push(label)
+                .push(jump_btn),
+        )
+        .padding([6, 10])
+        .width(cosmic::iced::Length::Fill)
+        .into()
+    }
+
     fn view_reactions<'reaction>(
         &'reaction self,
         event: &'reaction matrix_sdk_ui::timeline::EventTimelineItem,
@@ -1173,8 +1193,13 @@ impl<'chat> Constellations {
                 let mut chat_area = Column::new()
                     .spacing(10)
                     .width(cosmic::iced::Length::Fill)
-                    .height(cosmic::iced::Length::Fill)
-                    .push(self.view_timeline());
+                    .height(cosmic::iced::Length::Fill);
+                // When viewing an event-focused (permalink context) timeline,
+                // show a persistent banner offering to return to live.
+                if self.active_event_focus.is_some() {
+                    chat_area = chat_area.push(self.view_older_messages_banner());
+                }
+                chat_area = chat_area.push(self.view_timeline());
                 if !is_video_room {
                     chat_area = chat_area.push(self.view_composer());
                 }

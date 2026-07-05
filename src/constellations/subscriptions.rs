@@ -387,6 +387,62 @@ impl Constellations {
             },
         )
     }
+
+    /// Subscription for an event-focused (permalink context) timeline.
+    ///
+    /// This feeds the same `MatrixEvent::TimelineReset` / `TimelineDiff` /
+    /// `TimelineInitFinished` stream the live timeline uses, so the existing
+    /// render and scroll path works unchanged while the room is being viewed
+    /// through the event-focused timeline. Keyed on `(room, target event)` so
+    /// iced recreates the subscription when the focus changes.
+    pub(in crate::constellations) fn event_timeline_subscription(
+        &self,
+        matrix: &matrix::MatrixEngine,
+        room_id: Arc<str>,
+        target_event_id: matrix_sdk::ruma::OwnedEventId,
+    ) -> Subscription<Message> {
+        Subscription::run_with(
+            (
+                MatrixEngineWrapper(matrix.clone()),
+                room_id.clone(),
+                target_event_id.clone(),
+            ),
+            |(wrapper, room_id, target_event_id)| {
+                let engine = wrapper.0.clone();
+                let room_id = room_id.clone();
+                let target_event_id = target_event_id.clone();
+                let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+
+                tokio::spawn(async move {
+                    let timeline = match engine.event_timeline(&room_id, target_event_id).await {
+                        Ok(t) => t,
+                        Err(_) => return,
+                    };
+
+                    let (items, mut stream) = timeline.subscribe().await;
+                    let _ = tx.send(Message::Matrix(matrix::MatrixEvent::TimelineReset));
+
+                    for (index, item) in items.into_iter().enumerate() {
+                        let _ = tx.send(Message::Matrix(matrix::MatrixEvent::TimelineDiff(
+                            eyeball_im::VectorDiff::Insert { index, value: item },
+                        )));
+                    }
+                    let _ = tx.send(Message::Matrix(matrix::MatrixEvent::TimelineInitFinished));
+
+                    use cosmic::iced::futures::StreamExt;
+                    while let Some(diff) = stream.next().await {
+                        for d in diff {
+                            let _ = tx.send(Message::Matrix(matrix::MatrixEvent::TimelineDiff(d)));
+                        }
+                    }
+                });
+
+                cosmic::iced::futures::stream::unfold(rx, |mut rx| async move {
+                    rx.recv().await.map(|msg| (msg, rx))
+                })
+            },
+        )
+    }
 }
 
 pub(in crate::constellations) async fn get_room_data(
