@@ -3093,31 +3093,35 @@ impl Constellations {
                     .get_pinned_events(&room_id)
                     .await
                     .map_err(|e| e.to_string())?;
-                let mut details = Vec::new();
-                for id in ids {
-                    match matrix.fetch_pinned_event_details(&room_id, &id).await {
-                        Ok(detail) => details.push(detail),
-                        Err(e) => {
-                            tracing::error!(
-                                "Failed to fetch details for pinned event {}: {}",
-                                id,
-                                e
-                            );
-                            details.push(matrix::PinnedEventInfo {
-                                event_id: id.to_string(),
-                                sender_id: "@unknown:example.com".to_string(),
-                                sender_name: crate::fl!("unknown-sender").to_string(),
-                                avatar_url: None,
-                                timestamp: crate::fl!("unknown-time").to_string(),
-                                body: crate::fl!(
-                                    "error-failed-load-message-content",
-                                    error = e.to_string()
-                                )
-                                .to_string(),
-                            });
+                let futures = ids.into_iter().map(|id| {
+                    let matrix = matrix.clone();
+                    let room_id = room_id.clone();
+                    async move {
+                        match matrix.fetch_pinned_event_details(&room_id, &id).await {
+                            Ok(detail) => detail,
+                            Err(e) => {
+                                tracing::error!(
+                                    "Failed to fetch details for pinned event {}: {}",
+                                    id,
+                                    e
+                                );
+                                matrix::PinnedEventInfo {
+                                    event_id: id.to_string(),
+                                    sender_id: "@unknown:example.com".to_string(),
+                                    sender_name: crate::fl!("unknown-sender").to_string(),
+                                    avatar_url: None,
+                                    timestamp: crate::fl!("unknown-time").to_string(),
+                                    body: crate::fl!(
+                                        "error-failed-load-message-content",
+                                        error = e.to_string()
+                                    )
+                                    .to_string(),
+                                }
+                            }
                         }
                     }
-                }
+                });
+                let details = futures::future::join_all(futures).await;
                 Ok(details)
             },
             |res| Action::from(Message::PinnedEventsFetched(res)),
@@ -3160,31 +3164,35 @@ impl Constellations {
                     .get_pinned_events(&room_id)
                     .await
                     .map_err(|e| e.to_string())?;
-                let mut details = Vec::new();
-                for id in ids {
-                    match matrix.fetch_pinned_event_details(&room_id, &id).await {
-                        Ok(detail) => details.push(detail),
-                        Err(e) => {
-                            tracing::error!(
-                                "Failed to fetch details for pinned event {}: {}",
-                                id,
-                                e
-                            );
-                            details.push(matrix::PinnedEventInfo {
-                                event_id: id.to_string(),
-                                sender_id: "@unknown:example.com".to_string(),
-                                sender_name: crate::fl!("unknown-sender").to_string(),
-                                avatar_url: None,
-                                timestamp: crate::fl!("unknown-time").to_string(),
-                                body: crate::fl!(
-                                    "error-failed-load-message-content",
-                                    error = e.to_string()
-                                )
-                                .to_string(),
-                            });
+                let futures = ids.into_iter().map(|id| {
+                    let matrix = matrix.clone();
+                    let room_id = room_id.clone();
+                    async move {
+                        match matrix.fetch_pinned_event_details(&room_id, &id).await {
+                            Ok(detail) => detail,
+                            Err(e) => {
+                                tracing::error!(
+                                    "Failed to fetch details for pinned event {}: {}",
+                                    id,
+                                    e
+                                );
+                                matrix::PinnedEventInfo {
+                                    event_id: id.to_string(),
+                                    sender_id: "@unknown:example.com".to_string(),
+                                    sender_name: crate::fl!("unknown-sender").to_string(),
+                                    avatar_url: None,
+                                    timestamp: crate::fl!("unknown-time").to_string(),
+                                    body: crate::fl!(
+                                        "error-failed-load-message-content",
+                                        error = e.to_string()
+                                    )
+                                    .to_string(),
+                                }
+                            }
                         }
                     }
-                }
+                });
+                let details = futures::future::join_all(futures).await;
                 Ok(details)
             },
             |res| Action::from(Message::PinnedEventsFetched(res)),
