@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Copyright (c) 2025 Joonas Tuomi -->
+<component type="desktop-application">
+  <id>fi.joonastuomi.Constellations</id>
+
+  <name>Constellations</name>
+  <summary>Matrix client for the COSMIC desktop</summary>
+  <developer id="fi.joonastuomi">
+    <name>Joonas Tuomi</name>
+  </developer>
+
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+
+  <description>
+    <p>
+      Constellations is a Matrix client built with libcosmic for the COSMIC
+      desktop and powered by matrix-rust-sdk.
+    </p>
+    <p>
+      This is alpha-quality software. It is usable, but you should expect bugs,
+      missing features, and potential breaking changes between releases.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">fi.joonastuomi.Constellations.desktop</launchable>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Constellations main chat view</caption>
+      <image type="source">https://raw.githubusercontent.com/jotuel/cosmic-ext-constellations/main/res/screenshots/main.png</image>
+    </screenshot>
+  </screenshots>
+
+  <url type="homepage">https://github.com/jotuel/cosmic-ext-constellations</url>
+  <url type="bugtracker">https://github.com/jotuel/cosmic-ext-constellations/issues</url>
+  <url type="vcs-browser">https://github.com/jotuel/cosmic-ext-constellations</url>
+  <url type="donation">https://github.com/sponsors/jotuel</url>
+
+  <categories>
+    <category>Network</category>
+    <category>InstantMessaging</category>
+    <category>Chat</category>
+  </categories>
+
+  <content_rating type="oars-1.1">
+    <content_attribute id="social-chat">intense</content_attribute>
+    <content_attribute id="social-audio">intense</content_attribute>
+    <content_attribute id="money-purchasing">mild</content_attribute>
+  </content_rating>
+
+  <recommends>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>touch</control>
+  </recommends>
+
+  <releases>
+    <release version="0.1.0" date="2025-07-09" type="development">
+      <url type="details">https://github.com/jotuel/cosmic-ext-constellations/releases/tag/v0.1.0-alpha</url>
+      <description>
+        <p>First alpha release of Constellations.</p>
+        <p>Highlights:</p>
+        <ul>
+          <li>UnifiedPush background notifications</li>
+          <li>QR code login</li>
+          <li>End-to-end encryption with session verification</li>
+          <li>Location sharing</li>
+          <li>Room members &amp; pinned messages panels</li>
+          <li>Stable timeline scrolling, start from oldest unread</li>
+          <li>MatrixRTC group calls (experimental, powered by LiveKit)</li>
+        </ul>
+      </description>
+    </release>
+  </releases>
+</component>
