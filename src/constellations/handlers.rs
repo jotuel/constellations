@@ -1799,7 +1799,14 @@ impl Constellations {
             step: QrLoginStep::Initiating,
         };
         self.error = None;
+        self.qr_code_bytes = None;
+        self.qr_check_code_sender = None;
+        self.qr_user_code = None;
+        self.qr_check_code_input.clear();
 
+        let Some(matrix) = self.matrix.clone() else {
+            return Task::none();
+        };
         let mut hs = self.login_homeserver.trim().to_string();
         if hs.is_empty() {
             hs = "https://matrix.org".to_string();
@@ -1807,62 +1814,169 @@ impl Constellations {
         if !hs.starts_with("http://") && !hs.starts_with("https://") {
             hs = format!("https://{}", hs);
         }
-        let hs_trimmed = hs.trim_end_matches('/');
 
-        // Generate a high-fidelity random rendezvous URL
-        let random_id: u64 = rand::random();
-        let rendezvous_endpoint = format!(
-            "{}/_matrix/client/unstable/org.matrix.msc3886/rendezvous/constellations-{:x}",
-            hs_trimmed, random_id
-        );
+        // Stream MSC4108 QR-login progress from the background task into the
+        // MVU loop. The state machine first awaits `start_qr_login` (which
+        // builds the client and spawns the login task), then drains the
+        // progress receiver until it closes.
+        enum QrStreamState {
+            Starting(matrix::MatrixEngine, String),
+            Draining(tokio::sync::mpsc::UnboundedReceiver<matrix::QrLoginProgress>),
+            Done,
+        }
 
-        let encoded_endpoint: String =
-            url::form_urlencoded::byte_serialize(rendezvous_endpoint.as_bytes()).collect();
-        let rendezvous_url = format!("https://matrix.to/#/login?rendezvous={}", encoded_endpoint);
-        self.qr_rendezvous_url = Some(rendezvous_url);
-
-        // Transition to ShowingQr step after a small simulated initiation delay (500ms)
-        Task::perform(
-            async {
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        let stream = cosmic::iced::futures::stream::unfold(
+            QrStreamState::Starting(matrix, hs),
+            |state| async move {
+                match state {
+                    QrStreamState::Starting(matrix, hs) => match matrix.start_qr_login(&hs).await {
+                        Ok(rx) => Some((None, QrStreamState::Draining(rx))),
+                        Err(e) => Some((
+                            Some(matrix::QrLoginProgress::Finished(Err(e.to_string()))),
+                            QrStreamState::Done,
+                        )),
+                    },
+                    QrStreamState::Draining(mut rx) => match rx.recv().await {
+                        Some(progress) => Some((Some(progress), QrStreamState::Draining(rx))),
+                        None => Some((None, QrStreamState::Done)),
+                    },
+                    QrStreamState::Done => None,
+                }
             },
-            |_| Action::from(Message::QrLoginStepChanged(QrLoginStep::ShowingQr)),
         )
+        .filter_map(|opt| async move { opt });
+
+        Task::run(stream, |progress| {
+            Action::from(Message::QrLoginProgress(progress))
+        })
     }
 
     pub fn handle_cancel_qr_login(
         &mut self,
     ) -> Task<Action<<Constellations as Application>::Message>> {
         self.auth_flow = AuthFlow::Idle;
-        self.qr_rendezvous_url = None;
+        self.qr_code_bytes = None;
+        self.qr_check_code_sender = None;
+        self.qr_user_code = None;
+        self.qr_check_code_input.clear();
+
+        if let Some(matrix) = self.matrix.clone() {
+            Task::perform(async move { matrix.cancel_qr_login().await }, |_| {
+                Action::from(Message::NoOp)
+            })
+        } else {
+            Task::none()
+        }
+    }
+
+    pub fn handle_qr_login_progress(
+        &mut self,
+        progress: matrix::QrLoginProgress,
+    ) -> Task<Action<<Constellations as Application>::Message>> {
+        use matrix::QrLoginProgress as P;
+        match progress {
+            P::QrReady(bytes) => {
+                self.qr_code_bytes = Some(bytes);
+                self.auth_flow = AuthFlow::Qr {
+                    step: QrLoginStep::ShowingQr,
+                };
+                Task::none()
+            }
+            P::QrScanned(sender) => {
+                self.qr_check_code_sender = Some(sender);
+                self.qr_check_code_input.clear();
+                self.auth_flow = AuthFlow::Qr {
+                    step: QrLoginStep::AwaitingCheckCode,
+                };
+                Task::none()
+            }
+            P::WaitingForToken { user_code } => {
+                self.qr_user_code = Some(user_code);
+                self.auth_flow = AuthFlow::Qr {
+                    step: QrLoginStep::Authenticating,
+                };
+                Task::none()
+            }
+            P::SyncingSecrets => {
+                self.auth_flow = AuthFlow::Qr {
+                    step: QrLoginStep::SyncingSecrets,
+                };
+                Task::none()
+            }
+            P::Finished(res) => {
+                self.qr_code_bytes = None;
+                self.qr_check_code_sender = None;
+                self.qr_user_code = None;
+                self.qr_check_code_input.clear();
+                match res {
+                    Ok(user_id) => {
+                        self.auth_flow = AuthFlow::Qr {
+                            step: QrLoginStep::Success,
+                        };
+                        // Sliding sync already started inside the background
+                        // task (after finalize_oauth_login). Route through the
+                        // shared login-finished path: sets user_id and resets
+                        // auth_flow to Idle.
+                        self.handle_login_finished(Ok(user_id))
+                    }
+                    Err(e) => {
+                        self.auth_flow = AuthFlow::Qr {
+                            step: QrLoginStep::Error,
+                        };
+                        self.set_error(
+                            crate::fl!("error-failed-qr-login", error = e.to_string()).to_string(),
+                        );
+                        Task::none()
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn handle_qr_check_code_changed(
+        &mut self,
+        code: String,
+    ) -> Task<Action<<Constellations as Application>::Message>> {
+        // Keep only digits, max two.
+        let filtered: String = code
+            .chars()
+            .filter(|c| c.is_ascii_digit())
+            .take(2)
+            .collect();
+        self.qr_check_code_input = filtered;
         Task::none()
     }
 
-    pub fn handle_qr_login_step_changed(
+    pub fn handle_submit_qr_check_code(
         &mut self,
-        step: QrLoginStep,
     ) -> Task<Action<<Constellations as Application>::Message>> {
-        self.auth_flow = AuthFlow::Qr { step };
-        match step {
-            QrLoginStep::ShowingQr => Task::none(),
-            QrLoginStep::Authenticating => {
-                // Step 3: Transition to Success after 1.5s
-                Task::perform(
-                    async {
-                        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
-                    },
-                    |_| Action::from(Message::QrLoginStepChanged(QrLoginStep::Success)),
-                )
+        let Some(sender) = self.qr_check_code_sender.take() else {
+            return Task::none();
+        };
+        let code_str = std::mem::take(&mut self.qr_check_code_input);
+        // Parse the two-digit check code; on failure, surface an error and
+        // return to the QR-display step so the user can retry.
+        let parsed: Result<u8, _> = code_str.parse();
+        match parsed {
+            Ok(code) => {
+                self.auth_flow = AuthFlow::Qr {
+                    step: QrLoginStep::Authenticating,
+                };
+                Task::perform(async move { sender.send(code).await }, |res| match res {
+                    Ok(()) => Action::from(Message::NoOp),
+                    Err(e) => {
+                        tracing::warn!("Failed to submit QR check code: {e}");
+                        Action::from(Message::NoOp)
+                    }
+                })
             }
-            QrLoginStep::Success => {
-                // Step 4: Login complete!
-                self.auth_flow = AuthFlow::Idle;
-                self.qr_rendezvous_url = None;
-
-                // Complete login with simulated user session
-                self.handle_login_finished(Ok("@simulated_user:matrix.org".to_string()))
+            Err(_) => {
+                self.set_error(crate::fl!("login-qr-check-code-invalid").to_string());
+                self.auth_flow = AuthFlow::Qr {
+                    step: QrLoginStep::ShowingQr,
+                };
+                Task::none()
             }
-            _ => Task::none(),
         }
     }
 
@@ -2678,7 +2792,9 @@ impl Constellations {
             Message::RoomAliasResolved(res) => self.handle_room_alias_resolved(res),
             Message::StartQrLogin => self.handle_start_qr_login(),
             Message::CancelQrLogin => self.handle_cancel_qr_login(),
-            Message::QrLoginStepChanged(step) => self.handle_qr_login_step_changed(step),
+            Message::QrLoginProgress(progress) => self.handle_qr_login_progress(progress),
+            Message::QrCheckCodeChanged(code) => self.handle_qr_check_code_changed(code),
+            Message::SubmitQrCheckCode => self.handle_submit_qr_check_code(),
             Message::JoinRoom(room_id) => {
                 if let Some(matrix) = &self.matrix {
                     let matrix = matrix.clone();
@@ -3291,7 +3407,10 @@ mod tests {
             emoji_search_query: String::new(),
             selected_emoji_group: None,
             is_composer_emoji_picker_active: false,
-            qr_rendezvous_url: None,
+            qr_code_bytes: None,
+            qr_check_code_sender: None,
+            qr_user_code: None,
+            qr_check_code_input: String::new(),
             room_name_cache: HashMap::new(),
             thread_counts: HashMap::new(),
             show_pinned_panel: false,
@@ -3633,74 +3752,92 @@ mod tests {
     }
 
     #[test]
-    fn test_qr_login_handlers() {
+    fn test_qr_login_progress_step_transitions() {
         let mut app = create_dummy_constellations();
+        app.auth_flow = AuthFlow::Qr {
+            step: QrLoginStep::Initiating,
+        };
 
-        // 1. Initial State
-        assert!(!matches!(app.auth_flow, AuthFlow::Qr { .. }));
-        assert_eq!(app.auth_flow, AuthFlow::Idle);
-        assert!(app.qr_rendezvous_url.is_none());
-
-        // 2. Start QR Login
-        let _task = app.handle_start_qr_login();
-        assert!(matches!(app.auth_flow, AuthFlow::Qr { .. }));
-        assert_eq!(
-            app.auth_flow,
-            AuthFlow::Qr {
-                step: QrLoginStep::Initiating
-            }
-        );
-        assert!(app.qr_rendezvous_url.is_some());
-
-        let url = app.qr_rendezvous_url.clone().unwrap();
-        assert!(url.starts_with("https://matrix.to/#/login?rendezvous="));
-
-        // 3. Step Changed to ShowingQr
-        let _task = app.handle_qr_login_step_changed(QrLoginStep::ShowingQr);
+        // QrReady → ShowingQr with bytes stored for rendering.
+        let _task = app.handle_qr_login_progress(matrix::QrLoginProgress::QrReady(vec![
+            0x4d, 0x41, 0x54, 0x52, 0x49, 0x58,
+        ]));
         assert_eq!(
             app.auth_flow,
             AuthFlow::Qr {
                 step: QrLoginStep::ShowingQr
             }
         );
+        assert!(app.qr_code_bytes.is_some());
+        assert!(!app.qr_code_bytes.as_ref().unwrap().is_empty());
 
-        // 4. Rendezvous Established
-        let _task = app.handle_qr_login_step_changed(QrLoginStep::RendezvousEstablished);
+        // SyncingSecrets → SyncingSecrets step.
+        let _task = app.handle_qr_login_progress(matrix::QrLoginProgress::SyncingSecrets);
         assert_eq!(
             app.auth_flow,
             AuthFlow::Qr {
-                step: QrLoginStep::RendezvousEstablished
+                step: QrLoginStep::SyncingSecrets
             }
         );
 
-        // 5. Step Changed to Authenticating
-        let _task = app.handle_qr_login_step_changed(QrLoginStep::Authenticating);
+        // WaitingForToken → Authenticating with user code stored.
+        let _task = app.handle_qr_login_progress(matrix::QrLoginProgress::WaitingForToken {
+            user_code: "AB12CD".to_string(),
+        });
         assert_eq!(
             app.auth_flow,
             AuthFlow::Qr {
                 step: QrLoginStep::Authenticating
             }
         );
+        assert_eq!(app.qr_user_code.as_deref(), Some("AB12CD"));
 
-        // 6. Step Changed to Success
-        // Calling handle_qr_login_step_changed(Success) will trigger handle_login_finished,
-        // which cleans up QR state and sets the user session.
-        let _task = app.handle_qr_login_step_changed(QrLoginStep::Success);
-        assert!(!matches!(app.auth_flow, AuthFlow::Qr { .. }));
-        assert_eq!(app.auth_flow, AuthFlow::Idle);
-        assert!(app.qr_rendezvous_url.is_none());
-        assert_eq!(app.user_id, Some("@simulated_user:matrix.org".to_string()));
+        // Finished(Err) → Error step, error set, QR fields cleared.
+        let _task = app
+            .handle_qr_login_progress(matrix::QrLoginProgress::Finished(Err("boom".to_string())));
+        assert_eq!(
+            app.auth_flow,
+            AuthFlow::Qr {
+                step: QrLoginStep::Error
+            }
+        );
+        assert!(app.qr_code_bytes.is_none());
+        assert!(app.qr_user_code.is_none());
+        assert!(app.error.is_some());
+    }
 
-        // 7. Cancel QR Login
+    #[test]
+    fn test_qr_check_code_input_filtering() {
         let mut app = create_dummy_constellations();
-        let _task = app.handle_start_qr_login();
-        assert!(matches!(app.auth_flow, AuthFlow::Qr { .. }));
-        assert!(app.qr_rendezvous_url.is_some());
+
+        // Only digits are kept, max two characters.
+        let _task = app.handle_qr_check_code_changed("a1b2c3".to_string());
+        assert_eq!(app.qr_check_code_input, "12");
+
+        // A short valid input is kept as-is.
+        let _task = app.handle_qr_check_code_changed("7".to_string());
+        assert_eq!(app.qr_check_code_input, "7");
+
+        // Non-digit input is rejected entirely.
+        let _task = app.handle_qr_check_code_changed("abc".to_string());
+        assert_eq!(app.qr_check_code_input, "");
+    }
+
+    #[test]
+    fn test_qr_login_cancel_clears_state() {
+        let mut app = create_dummy_constellations();
+        app.auth_flow = AuthFlow::Qr {
+            step: QrLoginStep::ShowingQr,
+        };
+        app.qr_code_bytes = Some(vec![1, 2, 3]);
+        app.qr_user_code = Some("XY".to_string());
+        app.qr_check_code_input = "42".to_string();
 
         let _task = app.handle_cancel_qr_login();
-        assert!(!matches!(app.auth_flow, AuthFlow::Qr { .. }));
         assert_eq!(app.auth_flow, AuthFlow::Idle);
-        assert!(app.qr_rendezvous_url.is_none());
+        assert!(app.qr_code_bytes.is_none());
+        assert!(app.qr_user_code.is_none());
+        assert!(app.qr_check_code_input.is_empty());
     }
 
     #[test]

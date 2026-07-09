@@ -1,6 +1,10 @@
 use anyhow::{Context, Result};
 use eyeball_im::VectorDiff;
+use futures::StreamExt;
 use matrix_sdk::authentication::matrix::MatrixSession;
+use matrix_sdk::authentication::oauth::qrcode::{
+    CheckCodeSender, GeneratedQrProgress, LoginProgress,
+};
 use matrix_sdk::media::MediaFormat;
 pub use matrix_sdk::room::edit::EditedContent;
 use matrix_sdk::room::power_levels::RoomPowerLevelChanges;
@@ -28,7 +32,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::Arc;
 use thiserror::Error;
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, mpsc};
 use tracing::{error, info};
 use url::Url;
 
@@ -107,6 +111,52 @@ impl From<anyhow::Error> for SyncError {
             source = cause.source();
         }
         Self::Anyhow(s)
+    }
+}
+
+/// Progress events for the QR-code (MSC4108) sign-in flow.
+///
+/// Produced by [`MatrixEngine::start_qr_login`] and streamed back to the UI so
+/// it can render the QR, prompt for the check code, and show progress. The
+/// terminal event is [`QrLoginProgress::Finished`].
+#[derive(Debug, Clone)]
+pub enum QrLoginProgress {
+    /// The QR code is ready to display. Carries the raw MSC4108 payload bytes
+    /// (a binary `MATRIX…` structure, *not* a URL string).
+    QrReady(Vec<u8>),
+    /// The other device has scanned the QR. The UI must now prompt the user
+    /// for the two-digit check code shown on that device and feed it back via
+    /// the [`CheckCodeSender`].
+    QrScanned(CheckCodeSender),
+    /// Waiting for the existing device to approve the login on the server.
+    /// `user_code` may be shown for the user to cross-check.
+    WaitingForToken { user_code: String },
+    /// Transferring end-to-end encryption secrets from the existing device.
+    SyncingSecrets,
+    /// Terminal: `Ok(user_id)` on success, `Err(message)` on failure.
+    Finished(Result<String, String>),
+}
+
+impl QrLoginProgress {
+    /// Map an SDK [`LoginProgress<GeneratedQrProgress>`] into our
+    /// [`QrLoginProgress`]. `Starting` and `Done` are dropped: `Starting` has
+    /// no useful payload, and `Done` is implied by the login future resolving
+    /// (which produces the terminal [`QrLoginProgress::Finished`]).
+    fn from_sdk(progress: LoginProgress<GeneratedQrProgress>) -> Option<Self> {
+        match progress {
+            LoginProgress::Starting => None,
+            LoginProgress::EstablishingSecureChannel(GeneratedQrProgress::QrReady(data)) => {
+                Some(Self::QrReady(data.to_bytes()))
+            }
+            LoginProgress::EstablishingSecureChannel(GeneratedQrProgress::QrScanned(sender)) => {
+                Some(Self::QrScanned(sender))
+            }
+            LoginProgress::WaitingForToken { user_code } => {
+                Some(Self::WaitingForToken { user_code })
+            }
+            LoginProgress::SyncingSecrets => Some(Self::SyncingSecrets),
+            LoginProgress::Done => None,
+        }
     }
 }
 
@@ -314,6 +364,9 @@ struct MatrixEngineInner {
     space_hierarchy: SpaceHierarchy,
     oidc_client: Option<Client>,
     session_change_handle: Option<tokio::task::JoinHandle<()>>,
+    /// Background task driving a QR-code (MSC4108) login. Held so that
+    /// cancellation can abort it cleanly.
+    qr_login_handle: Option<tokio::task::JoinHandle<()>>,
     call_participants: HashMap<OwnedRoomId, HashSet<matrix_sdk::ruma::OwnedUserId>>,
     active_call: Option<Arc<livekit::Room>>,
 }
@@ -350,6 +403,10 @@ impl std::fmt::Debug for MatrixEngineInner {
             .field(
                 "session_change_handle",
                 &self.session_change_handle.as_ref().map(|_| "JoinHandle"),
+            )
+            .field(
+                "qr_login_handle",
+                &self.qr_login_handle.as_ref().map(|_| "JoinHandle"),
             )
             .finish()
     }
@@ -393,6 +450,7 @@ impl MatrixEngine {
             space_hierarchy: SpaceHierarchy::new(),
             oidc_client: None,
             session_change_handle: None,
+            qr_login_handle: None,
             call_participants: HashMap::new(),
             active_call: None,
         };
@@ -2596,11 +2654,26 @@ impl MatrixEngine {
             .await
             .context("Failed to complete OIDC login")?;
 
+        self.finalize_oauth_login(client).await?;
+        Ok(())
+    }
+
+    /// Finish an OAuth-based login (OIDC callback or QR sign-in) by wiring up
+    /// the sync service, event handlers, and keyring persistence. Shared by
+    /// [`complete_oidc_login`] (after `finish_login`) and the QR-login task
+    /// (after the MSC4108 login future resolves, which completes the login
+    /// itself). Returns the logged-in user id.
+    async fn finalize_oauth_login(&self, client: Client) -> Result<String> {
         let sync_service: Arc<SyncService> =
             Arc::new(SyncService::builder(client.clone()).build().await?);
         let room_list_service = sync_service.room_list_service();
 
         self.setup_event_handlers(&client);
+
+        let user_id = client
+            .user_id()
+            .context("OAuth login finished but client has no user id")?
+            .to_string();
 
         // Save session to oo7
         if let Some(session) = client.oauth().user_session() {
@@ -2625,7 +2698,106 @@ impl MatrixEngine {
         drop(inner);
         self.spawn_session_change_handler(client).await;
 
-        Ok(())
+        Ok(user_id)
+    }
+
+    /// Start a QR-code (MSC4108) sign-in: build a fresh OAuth client against
+    /// `homeserver`, then drive `login_with_qr_code().generate()` on a
+    /// background task. Returns a receiver that streams [`QrLoginProgress`]
+    /// events (QR bytes, check-code prompt, progress) ending in
+    /// [`QrLoginProgress::Finished`]. Cancel with [`cancel_qr_login`].
+    ///
+    /// This device *displays* the QR for an existing device to scan (the
+    /// "generate" side of MSC4108). The "scan" side is not implemented.
+    pub async fn start_qr_login(
+        &self,
+        homeserver: &str,
+    ) -> Result<mpsc::UnboundedReceiver<QrLoginProgress>> {
+        let homeserver_url = if homeserver.starts_with("https://")
+            || homeserver.starts_with("http://localhost")
+            || homeserver.starts_with("http://127.0.0.1")
+            || homeserver.starts_with("http://[::1]")
+        {
+            homeserver.to_string()
+        } else {
+            let stripped = homeserver.strip_prefix("http://").unwrap_or(homeserver);
+            format!("https://{}", stripped)
+        };
+
+        let client = {
+            let mut inner = self.inner.write().await;
+            if let Some(handle) = inner.sync_handle.take() {
+                handle.abort();
+            }
+            if let Some(handle) = inner.session_change_handle.take() {
+                handle.abort();
+            }
+            if let Some(handle) = inner.qr_login_handle.take() {
+                handle.abort();
+            }
+            let data_dir = inner.data_dir.clone();
+            Self::reset_store(&data_dir);
+            let new_client = Self::setup_client(data_dir, &homeserver_url).await?;
+            inner.client = new_client.clone();
+            new_client
+        };
+
+        client
+            .oauth()
+            .restore_registered_client(matrix_sdk::authentication::oauth::ClientId::new(
+                OIDC_CLIENT_ID.to_string(),
+            ));
+
+        let (tx, rx) = mpsc::unbounded_channel::<QrLoginProgress>();
+        let engine = self.clone();
+        let tx_result = tx.clone();
+
+        let handle = tokio::spawn(async move {
+            // `login` borrows `oauth` which borrows `client`, so both must
+            // outlive the login future. Keep them on this task's stack.
+            let oauth = client.oauth();
+            let login = oauth.login_with_qr_code(None).generate();
+            let mut progress = login.subscribe_to_progress();
+
+            // Forward SDK progress to the UI until the stream ends.
+            while let Some(state) = progress.next().await {
+                if let Some(mapped) = QrLoginProgress::from_sdk(state)
+                    && tx.send(mapped).is_err()
+                {
+                    // Receiver dropped (UI cancelled); stop forwarding.
+                    break;
+                }
+            }
+
+            // Drive the login future to completion. On success the SDK has
+            // already finished the OAuth login + E2EE secret import; we just
+            // wire up the sync service / keyring and start sliding sync.
+            let result = login.await;
+            let finished = match result {
+                Ok(()) => match engine.finalize_oauth_login(client).await {
+                    Ok(user_id) => match engine.start_sync().await {
+                        Ok(()) => QrLoginProgress::Finished(Ok(user_id)),
+                        Err(e) => QrLoginProgress::Finished(Err(e.to_string())),
+                    },
+                    Err(e) => QrLoginProgress::Finished(Err(e.to_string())),
+                },
+                Err(e) => QrLoginProgress::Finished(Err(e.to_string())),
+            };
+            let _ = tx_result.send(finished);
+        });
+
+        let mut inner = self.inner.write().await;
+        inner.qr_login_handle = Some(handle);
+
+        Ok(rx)
+    }
+
+    /// Abort an in-progress QR-code login, if any.
+    pub async fn cancel_qr_login(&self) {
+        let mut inner = self.inner.write().await;
+        if let Some(handle) = inner.qr_login_handle.take() {
+            handle.abort();
+        }
     }
 
     pub(crate) async fn get_or_create_store_passphrase() -> Result<String> {

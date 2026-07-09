@@ -306,7 +306,11 @@ mod tests {
             Some("[REDACTED]")
         );
 
-        // fragment redacted: build a matrix.to-style URL with a fragment secret and assert the returned string does NOT contain the secret text and DOES contain "#REDACTED"
+        // fragment redacted: build a URL with a fragment secret and assert the
+        // returned string does NOT contain the secret text and DOES contain
+        // "#REDACTED". (This fixture is a generic URL-with-fragment; the QR
+        // login no longer produces a matrix.to URL — it uses binary MSC4108
+        // bytes — but `redact_url` must still redact any URL fragment.)
         let secret_text = "SECRET_RENDEZVOUS_123456";
         let url = Url::parse(&format!(
             "https://matrix.to/#/login?rendezvous={}",
