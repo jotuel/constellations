@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.0] - 2025-07-09
+
+First alpha release. Usable, but expect bugs, missing features, and breaking changes before the eventual 1.0.
+
+
 ### New Features
 
 - **UnifiedPush notifications** — Added support for UnifiedPush background notification handler, allowing real-time push notifications.

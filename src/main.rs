@@ -94,11 +94,30 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     if is_notify {
-        rt.block_on(async {
-            if let Err(e) = unified_push::run_headless_notification_handler().await {
-                tracing::error!("Failed to run headless notification handler: {}", e);
-            }
+        // Run the headless push handler on a dedicated thread with its own
+        // runtime. unifiedpush's internals call `block_on`, which panics with
+        // "Cannot start a runtime from within a runtime" if invoked from inside
+        // the main multi-thread runtime via `rt.block_on`.
+        let handle = std::thread::spawn(|| {
+            let rt = match tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+            {
+                Ok(rt) => rt,
+                Err(e) => {
+                    tracing::error!("Failed to build headless runtime: {e}");
+                    return;
+                }
+            };
+            rt.block_on(async {
+                if let Err(e) = unified_push::run_headless_notification_handler().await {
+                    tracing::error!("Failed to run headless notification handler: {e}");
+                }
+            });
         });
+        if handle.join().is_err() {
+            return Err(anyhow::anyhow!("headless notification handler thread panicked").into());
+        }
         return Ok(());
     }
 

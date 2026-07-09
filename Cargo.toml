@@ -1,7 +1,8 @@
 [package]
 name = "constellations"
 version = "0.1.0"
-author = "Joonas Tuomi <me@joonastuomi.fi>"
+authors = ["Joonas Tuomi <me@joonastuomi.fi>"]
+license = "Apache-2.0"
 edition = "2024"
 [features]
 default = []

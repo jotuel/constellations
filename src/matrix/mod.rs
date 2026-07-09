@@ -96,7 +96,17 @@ impl From<matrix_sdk::HttpError> for SyncError {
 
 impl From<anyhow::Error> for SyncError {
     fn from(e: anyhow::Error) -> Self {
-        Self::Anyhow(e.to_string())
+        // Use the full error chain, not just the top-level context, so the
+        // real failure (e.g. a TLS or store error hidden behind
+        // `.context("Failed to login")`) is surfaced to the user.
+        use std::fmt::Write as _;
+        let mut s = format!("{e}");
+        let mut source = e.source();
+        while let Some(cause) = source {
+            let _ = write!(s, ": {cause}");
+            source = cause.source();
+        }
+        Self::Anyhow(s)
     }
 }
 
@@ -760,6 +770,7 @@ impl MatrixEngine {
                 handle.abort();
             }
             let data_dir = inner.data_dir.clone();
+            Self::reset_store(&data_dir);
             let new_client = Self::setup_client(data_dir, &homeserver_url).await?;
             inner.client = new_client.clone();
             new_client
@@ -830,6 +841,9 @@ impl MatrixEngine {
                 handle.abort();
             }
             let data_dir = inner.data_dir.clone();
+            // Fresh login → drop any stale Olm account from a previous session
+            // so matrix-sdk can create a new device identity cleanly.
+            Self::reset_store(&data_dir);
             let new_client = Self::setup_client(data_dir, &homeserver_url).await?;
             inner.client = new_client.clone();
             new_client
@@ -2541,6 +2555,7 @@ impl MatrixEngine {
                 handle.abort();
             }
             let data_dir = inner.data_dir.clone();
+            Self::reset_store(&data_dir);
             let new_client = Self::setup_client(data_dir, &homeserver_url).await?;
             inner.client = new_client.clone();
             new_client
@@ -2938,6 +2953,35 @@ impl MatrixEngine {
                 .unwrap_or_default()
         } else {
             Vec::new()
+        }
+    }
+
+    /// Wipe the encrypted crypto store and search index so a fresh login can
+    /// create a brand-new Olm account.
+    ///
+    /// A previous session's Olm identity (device keys) is persisted in the
+    /// crypto store and tied to that session's device id. Logging in again
+    /// allocates a *new* device id, and matrix-sdk refuses to overwrite the
+    /// stored account: "the account in the crypto store doesn't match the
+    /// account in the constructor". Only `restore_session` may reuse an
+    /// existing store; every fresh authentication (`login`, `register`,
+    /// `login_oidc`) must start from a clean store.
+    fn reset_store(data_dir: &std::path::Path) {
+        let store_path = data_dir.join("matrix-store");
+        let search_index_path = data_dir.join("search-index");
+        if store_path.exists() {
+            tracing::info!(
+                "Resetting crypto store at {} before a fresh login.",
+                store_path.display()
+            );
+            if let Err(e) = std::fs::remove_dir_all(&store_path) {
+                tracing::warn!("Failed to remove crypto store: {e}");
+            }
+        }
+        if search_index_path.exists()
+            && let Err(e) = std::fs::remove_dir_all(&search_index_path)
+        {
+            tracing::warn!("Failed to remove search index: {e}");
         }
     }
 
