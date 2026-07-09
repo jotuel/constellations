@@ -179,16 +179,19 @@ impl Constellations {
             QrLoginStep::ShowingQr => {
                 content = content.push(text::body(crate::fl!("login-qr-scanning")));
 
-                if let Some(ref url) = self.qr_rendezvous_url {
-                    content = content.push(container(QrCodeWidget::new(url.clone())).padding(15));
+                if let Some(ref bytes) = self.qr_code_bytes {
+                    content = content.push(container(QrCodeWidget::new(bytes.clone())).padding(15));
                 }
             }
-            QrLoginStep::RendezvousEstablished => {
-                content = content
-                    .push(container(
-                        cosmic::widget::progress_bar::indeterminate_circular().size(32.0),
-                    ))
-                    .push(text::body(crate::fl!("login-qr-established")));
+            QrLoginStep::AwaitingCheckCode => {
+                content = content.push(text::body(crate::fl!("login-qr-check-code-prompt")));
+                let input = text_input(
+                    crate::fl!("login-qr-check-code-placeholder"),
+                    &self.qr_check_code_input,
+                )
+                .on_input(Message::QrCheckCodeChanged)
+                .on_submit(|_| Message::SubmitQrCheckCode);
+                content = content.push(input);
             }
             QrLoginStep::Authenticating => {
                 content = content
@@ -197,10 +200,20 @@ impl Constellations {
                     ))
                     .push(text::body(crate::fl!("login-qr-authenticating")));
             }
+            QrLoginStep::SyncingSecrets => {
+                content = content
+                    .push(container(
+                        cosmic::widget::progress_bar::indeterminate_circular().size(32.0),
+                    ))
+                    .push(text::body(crate::fl!("login-qr-syncing")));
+            }
             QrLoginStep::Success => {
                 content = content.push(text::body(crate::fl!("login-qr-success")));
             }
-            _ => {
+            QrLoginStep::Error => {
+                content = content.push(text::body(crate::fl!("qr-login-error")));
+            }
+            QrLoginStep::NotStarted => {
                 content = content.push(text::body(crate::fl!("qr-login-error")));
             }
         }
@@ -219,12 +232,12 @@ impl Constellations {
 }
 
 pub struct QrCodeWidget {
-    url: String,
+    bytes: Vec<u8>,
 }
 
 impl QrCodeWidget {
-    pub fn new(url: String) -> Self {
-        Self { url }
+    pub fn new(bytes: Vec<u8>) -> Self {
+        Self { bytes }
     }
 }
 
@@ -272,7 +285,7 @@ where
             cosmic::iced::Color::WHITE,
         );
 
-        if let Ok(code) = qrcode::QrCode::new(self.url.as_bytes()) {
+        if let Ok(code) = qrcode::QrCode::new(&self.bytes) {
             let width = code.width();
             let quiet_zone = 2;
             let side_cells = width + 2 * quiet_zone;

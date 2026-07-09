@@ -26,8 +26,12 @@ pub enum QrLoginStep {
     NotStarted,
     Initiating,
     ShowingQr,
-    RendezvousEstablished,
+    /// The other device scanned the QR; the UI must collect the two-digit
+    /// check code from the user and submit it.
+    AwaitingCheckCode,
     Authenticating,
+    /// Transferring end-to-end encryption secrets from the existing device.
+    SyncingSecrets,
     Success,
     Error,
 }
@@ -109,7 +113,16 @@ pub struct Constellations {
     pub(crate) login_username: String,
     pub(crate) login_password: String,
     pub(crate) auth_flow: AuthFlow,
-    pub(crate) qr_rendezvous_url: Option<String>,
+    /// Raw MSC4108 QR payload bytes to render during `QrLoginStep::ShowingQr`.
+    pub(crate) qr_code_bytes: Option<Vec<u8>>,
+    /// Held while `QrLoginStep::AwaitingCheckCode`: the user submits the
+    /// two-digit code via this sender.
+    pub(crate) qr_check_code_sender:
+        Option<matrix_sdk::authentication::oauth::qrcode::CheckCodeSender>,
+    /// The user code to display during `WaitingForToken`, if any.
+    pub(crate) qr_user_code: Option<String>,
+    /// Buffer for the check-code text input.
+    pub(crate) qr_check_code_input: String,
     pub(crate) is_registering_mode: bool,
     pub(crate) is_registering: bool,
     pub(crate) is_initializing: bool,
@@ -257,7 +270,12 @@ pub enum Message {
     RoomAliasResolved(Box<Result<OwnedRoomId, String>>),
     StartQrLogin,
     CancelQrLogin,
-    QrLoginStepChanged(QrLoginStep),
+    /// A progress event from the MSC4108 QR-login background task.
+    QrLoginProgress(matrix::QrLoginProgress),
+    /// The check-code text input changed during `AwaitingCheckCode`.
+    QrCheckCodeChanged(String),
+    /// Submit the entered check code back to the QR-login task.
+    SubmitQrCheckCode,
     JoinRoom(std::sync::Arc<str>),
     RoomJoined(Result<OwnedRoomId, String>),
     Logout,
