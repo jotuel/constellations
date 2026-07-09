@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### New Features
+
+- **Real QR code login (MSC4108)** — Replaced the non-functional QR login stub (which generated an invalid `matrix.to` URL no scanner could read) with the real MSC4108 sign-in flow from matrix-rust-sdk. The QR now encodes a valid binary `QrCodeData` payload that an existing Matrix device (e.g. Element Mobile) can scan to grant login, with full secure-channel establishment, check-code confirmation, OAuth device-authorization, and end-to-end encryption secret transfer.
+
 ## [0.1.0] - 2025-07-09
 
 First alpha release. Usable, but expect bugs, missing features, and breaking changes before the eventual 1.0.
