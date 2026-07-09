@@ -3,3 +3,8 @@ script.sh
 test_src/
 test_opt
 bench_hashset/
+
+# Packaging build artifacts (keep the build script itself)
+/dist/*.AppImage
+/dist/*.AppDir
+/dist/*.AppDir.zsync
