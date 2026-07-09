@@ -5,6 +5,10 @@ use matrix_sdk::authentication::matrix::MatrixSession;
 use matrix_sdk::authentication::oauth::qrcode::{
     CheckCodeSender, GeneratedQrProgress, LoginProgress,
 };
+use matrix_sdk::authentication::oauth::registration::{
+    ApplicationType, ClientMetadata, Localized, OAuthGrantType,
+};
+use matrix_sdk::authentication::oauth::{ClientRegistrationData, OAuthError};
 use matrix_sdk::media::MediaFormat;
 pub use matrix_sdk::room::edit::EditedContent;
 use matrix_sdk::room::power_levels::RoomPowerLevelChanges;
@@ -61,7 +65,59 @@ struct LiveKitAuthResponse {
 }
 
 const OIDC_CALLBACK_URL: &str = "fi.joonastuomi.Constellations://callback";
+/// Static client ID used as a fallback for sessions saved before the client
+/// began using dynamic client registration. Modern logins register with the
+/// homeserver and persist the server-assigned client ID in [`SessionData`].
 const OIDC_CLIENT_ID: &str = "fi.joonastuomi.Constellations";
+/// Home page URL of the client, advertised to the authorization server during
+/// OAuth 2.0 dynamic client registration (shown to the user when they authorize
+/// the login).
+const OIDC_CLIENT_URI: &str = "https://joonastuomi.fi/constellations";
+
+/// Sentinel returned (as an `anyhow::Error` message) by [`MatrixEngine::login_oidc`]
+/// when the homeserver doesn't support OAuth 2.0 / OIDC. The login handler
+/// recognizes it to show a dedicated message instead of a generic failure.
+pub(crate) const OIDC_NOT_SUPPORTED_SENTINEL: &str = "__constellations_oidc_not_supported__";
+
+/// Build the [`ClientRegistrationData`] used for OAuth 2.0 dynamic client
+/// registration ([RFC 7591]). The server assigns the client ID during login;
+/// we do not assume a pre-registered static ID (which most homeservers —
+/// including matrix.org via MAS — do not know).
+///
+/// [RFC 7591]: https://datatracker.ietf.org/doc/html/rfc7591
+fn oauth_registration_data() -> Result<ClientRegistrationData> {
+    let metadata = ClientMetadata::new(
+        ApplicationType::Native,
+        vec![OAuthGrantType::AuthorizationCode {
+            redirect_uris: vec![Url::parse(OIDC_CALLBACK_URL)?],
+        }],
+        Localized::new(Url::parse(OIDC_CLIENT_URI)?, []),
+    );
+    Ok(ClientRegistrationData::from(
+        matrix_sdk::ruma::serde::Raw::new(&metadata)?,
+    ))
+}
+
+/// Inspect an error from the OIDC login *start* (`login().build()`) and, when
+/// the homeserver doesn't support OAuth 2.0 / OIDC at all, replace it with the
+/// [`OIDC_NOT_SUPPORTED_SENTINEL`] so the UI can show a targeted message.
+/// Anything else is preserved verbatim.
+fn classify_oidc_start_error(e: OAuthError) -> anyhow::Error {
+    // `login().build()` fails with discovery or registration errors. The
+    // "OAuth not supported" case surfaces as `Discovery(NotSupported)`. The
+    // `ClientRegistration(NotSupported)` variant (server has no dynamic
+    // registration endpoint) is also reported as not-supported.
+    let not_supported = match &e {
+        OAuthError::Discovery(d) => d.is_not_supported(),
+        OAuthError::ClientRegistration(r) => r.to_string().contains("not supported"),
+        _ => false,
+    };
+    if not_supported {
+        anyhow::anyhow!(OIDC_NOT_SUPPORTED_SENTINEL)
+    } else {
+        anyhow::Error::from(e)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SyncStatus {
@@ -341,6 +397,12 @@ struct SessionData {
     device_id: String,
     #[serde(default)]
     is_oidc: bool,
+    /// OAuth 2.0 client ID assigned by the homeserver during dynamic client
+    /// registration. Absent for password-logins and for OIDC sessions saved
+    /// before this field existed; `restore_session` falls back to
+    /// [`OIDC_CLIENT_ID`] in that case.
+    #[serde(default)]
+    client_id: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -430,12 +492,6 @@ fn is_recent_enough_to_notify(now_ms: u128, event_ts_ms: u64) -> bool {
 impl MatrixEngine {
     pub async fn new(data_dir: PathBuf) -> Result<Self> {
         let client = Self::setup_client(data_dir.clone(), "https://matrix.org").await?;
-
-        client
-            .oauth()
-            .restore_registered_client(matrix_sdk::authentication::oauth::ClientId::new(
-                OIDC_CLIENT_ID.to_string(),
-            ));
 
         let inner = MatrixEngineInner {
             client: client.clone(),
@@ -552,6 +608,7 @@ impl MatrixEngine {
                                     id_token: None,
                                     device_id: session.meta.device_id.to_string(),
                                     is_oidc: true,
+                                    client_id: client.oauth().client_id().map(|id| id.to_string()),
                                 };
 
                                 if let Err(e) = Self::save_session_to_keyring(&session_data).await {
@@ -568,6 +625,7 @@ impl MatrixEngine {
                                     id_token: None,
                                     device_id: session.meta.device_id.to_string(),
                                     is_oidc: false,
+                                    client_id: None,
                                 };
 
                                 if let Err(e) = Self::save_session_to_keyring(&session_data).await {
@@ -860,6 +918,7 @@ impl MatrixEngine {
                 id_token: None,
                 device_id: session.meta.device_id.to_string(),
                 is_oidc: false,
+                client_id: None,
             };
 
             Self::save_session_to_keyring(&session_data).await?;
@@ -929,6 +988,7 @@ impl MatrixEngine {
                 id_token: None,
                 device_id: session.meta.device_id.to_string(),
                 is_oidc: false,
+                client_id: None,
             };
 
             Self::save_session_to_keyring(&session_data).await?;
@@ -1009,16 +1069,21 @@ impl MatrixEngine {
         let client = Self::setup_client(data_dir, &session_data.homeserver).await?;
 
         if session_data.is_oidc {
-            client.oauth().restore_registered_client(
-                matrix_sdk::authentication::oauth::ClientId::new(OIDC_CLIENT_ID.to_string()),
-            );
+            // Use the client ID assigned by the homeserver during dynamic
+            // registration, falling back to the legacy static ID for sessions
+            // saved before that was persisted.
+            let client_id = session_data
+                .client_id
+                .clone()
+                .unwrap_or_else(|| OIDC_CLIENT_ID.to_string());
+            let client_id = matrix_sdk::authentication::oauth::ClientId::new(client_id);
+
+            client.oauth().restore_registered_client(client_id.clone());
             client
                 .oauth()
                 .restore_session(
                     matrix_sdk::authentication::oauth::OAuthSession {
-                        client_id: matrix_sdk::authentication::oauth::ClientId::new(
-                            OIDC_CLIENT_ID.to_string(),
-                        ),
+                        client_id,
                         user: matrix_sdk::authentication::oauth::UserSession {
                             meta: matrix_sdk::SessionMeta {
                                 user_id: UserId::parse(session_data.user_id.clone())?,
@@ -2619,18 +2684,21 @@ impl MatrixEngine {
             new_client
         };
 
-        client
-            .oauth()
-            .restore_registered_client(matrix_sdk::authentication::oauth::ClientId::new(
-                OIDC_CLIENT_ID.to_string(),
-            ));
-
+        // Register the OAuth client dynamically (RFC 7591). We must NOT call
+        // `restore_registered_client()` here with a hardcoded ID: that sets the
+        // ID locally without contacting the server, which makes the SDK skip
+        // registration, and the homeserver (MAS on matrix.org, etc.) then
+        // rejects the unknown `client_id` in the authorization URL. Passing the
+        // registration data to `login()` lets the SDK POST our metadata to the
+        // server's registration endpoint and use the server-assigned client ID.
         let redirect_uri = Url::parse(OIDC_CALLBACK_URL)?;
+        let registration_data = oauth_registration_data()?;
         let login_url = client
             .oauth()
-            .login(redirect_uri, None, None, None)
+            .login(redirect_uri, None, Some(registration_data), None)
             .build()
-            .await?
+            .await
+            .map_err(classify_oidc_start_error)?
             .url;
 
         let mut inner = self.inner.write().await;
@@ -2685,6 +2753,7 @@ impl MatrixEngine {
                 id_token: None,
                 device_id: session.meta.device_id.to_string(),
                 is_oidc: true,
+                client_id: client.oauth().client_id().map(|id| id.to_string()),
             };
 
             Self::save_session_to_keyring(&session_data).await?;
@@ -2742,11 +2811,9 @@ impl MatrixEngine {
             new_client
         };
 
-        client
-            .oauth()
-            .restore_registered_client(matrix_sdk::authentication::oauth::ClientId::new(
-                OIDC_CLIENT_ID.to_string(),
-            ));
+        // Register the OAuth client dynamically (see `login_oidc` for why a
+        // hardcoded static client ID does not work).
+        let registration_data = oauth_registration_data()?;
 
         let (tx, rx) = mpsc::unbounded_channel::<QrLoginProgress>();
         let engine = self.clone();
@@ -2756,7 +2823,9 @@ impl MatrixEngine {
             // `login` borrows `oauth` which borrows `client`, so both must
             // outlive the login future. Keep them on this task's stack.
             let oauth = client.oauth();
-            let login = oauth.login_with_qr_code(None).generate();
+            let login = oauth
+                .login_with_qr_code(Some(&registration_data))
+                .generate();
             let mut progress = login.subscribe_to_progress();
 
             // Forward SDK progress to the UI until the stream ends.

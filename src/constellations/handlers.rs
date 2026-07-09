@@ -1411,9 +1411,16 @@ impl Constellations {
             }
             Err(e) => {
                 self.auth_flow = AuthFlow::Idle;
-                self.set_error(
-                    crate::fl!("error-failed-oidc-login", error = e.to_string()).to_string(),
-                );
+                // Distinguish "OAuth not supported by this homeserver" from
+                // other failures so the message can guide the user (e.g. use a
+                // password login instead).
+                if e == crate::matrix::OIDC_NOT_SUPPORTED_SENTINEL {
+                    self.set_error(crate::fl!("error-oidc-not-supported").to_string());
+                } else {
+                    self.set_error(
+                        crate::fl!("error-failed-oidc-login", error = e.to_string()).to_string(),
+                    );
+                }
             }
         }
         Task::none()
