@@ -61,7 +61,7 @@ Runtime: single Tokio runtime; E2E encryption, SSO login, and SQLite store via m
 ## Gotchas
 
 - **Single-instance lock:** the `single-instance` libcosmic feature is active. If the app is already running, `main.rs` short-circuits (notifies the existing instance). Kill stray processes before debugging if a new run won't start.
-- **Custom URI scheme:** `fi.joonastuomi.Constellations://` is handled as `argv[1]` in `main.rs`. `--notify` is a special argv flag for notification relaunch.
+- **Custom URI scheme:** `fi.joonastuomi.constellations` is handled as `argv[1]` in `main.rs`. OIDC callbacks use the single-slash form `fi.joonastuomi.constellations:/callback` (required by MAS); the internal permalink wrapper uses `fi.joonastuomi.constellations://open?url=…`. `--notify` is a special argv flag for notification relaunch.
 - **Lazy store decryption:** if the matrix SQLite store is recreated/cleared (e.g. keyring reset), clear associated lazy cache/search directories too, or you get `invalid MAC of the store key` later. See `cosmic-development` skill §4.
 - **`edition = "2024"`** — use 2024-era Rust idioms; keep the toolchain current via `rustup`.
 

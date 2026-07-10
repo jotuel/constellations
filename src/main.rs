@@ -55,10 +55,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let is_notify = args.iter().any(|arg| arg == "--notify");
     // Accept `argv[1]` if it is our own URI scheme (OIDC callback or an
     // app-wrapped permalink) OR a raw Matrix permalink (`matrix.to` / `matrix:`).
+    // The scheme is lowercase; OIDC callbacks use the single-slash `:/callback`
+    // form (required by MAS), while the internal permalink wrapper uses `://`.
     let uri = args
         .get(1)
         .filter(|u| {
-            u.starts_with("fi.joonastuomi.Constellations://") || utils::permalink::parse(u).is_ok()
+            u.starts_with("fi.joonastuomi.constellations:/")
+                || u.starts_with("fi.joonastuomi.constellations://")
+                || utils::permalink::parse(u).is_ok()
         })
         .cloned();
 
