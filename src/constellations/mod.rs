@@ -135,6 +135,16 @@ pub struct Constellations {
     pub(crate) is_search_active: bool,
     pub(crate) public_search_results: Vec<matrix::PublicRoom>,
     pub(crate) is_searching_public: bool,
+    /// Server-side message search results (full room history, not just the
+    /// loaded timeline window). Populated by `MessageSearchResults`.
+    pub(crate) message_search_results: Vec<matrix::MessageSearchResult>,
+    /// True while a server-side message search is in flight.
+    pub(crate) is_searching_messages: bool,
+    /// Monotonic counter used to discard stale in-flight message searches
+    /// (debounce). Each `SearchQueryChanged` increments it; the async task
+    /// captures the value at spawn time and the result is dropped if it no
+    /// longer matches.
+    pub(crate) search_generation: u64,
     pub(crate) new_room_is_video: bool,
     pub(crate) active_reaction_picker: Option<matrix::TimelineEventItemId>,
     pub(crate) active_thread_root: Option<matrix_sdk::ruma::OwnedEventId>,
@@ -300,8 +310,15 @@ pub enum Message {
     ToggleSearch,
     SearchQueryChanged(String),
     PublicSearchResults(Result<Vec<matrix::PublicRoom>, String>),
+    /// Server-side message search results for the in-room search. Carries the
+    /// generation captured at task spawn so stale results can be discarded.
+    MessageSearchResults(u64, Result<Vec<matrix::MessageSearchResult>, String>),
     NewRoomIsVideoChanged(bool),
     JumpToMessage(matrix_sdk::ruma::OwnedEventId),
+    /// Jump to a message from a search hit, choosing the right path depending
+    /// on whether it is already in the live timeline window: scroll if loaded,
+    /// otherwise build an event-focused timeline via `LoadEventContext`.
+    JumpToMessageOrLoadContext(matrix_sdk::ruma::OwnedEventId),
     /// Build an event-focused (permalink context) timeline around an event not
     /// present in the live window, then scroll to it.
     LoadEventContext(matrix_sdk::ruma::OwnedEventId),

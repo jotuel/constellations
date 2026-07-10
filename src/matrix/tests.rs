@@ -1686,3 +1686,34 @@ fn test_is_recent_enough_to_notify() {
     // This must not panic and must be treated as stale.
     assert!(!is_recent_enough_to_notify(0, 1_700_000_000_000));
 }
+
+/// `search_messages_in_room` should error (not panic) on an invalid room ID
+/// or when the homeserver is unreachable / the client has no session.
+#[tokio::test]
+async fn test_search_messages_in_room_not_found() {
+    let tmp_dir = tempdir().unwrap();
+    let engine = match MatrixEngine::new(tmp_dir.path().to_path_buf()).await {
+        Ok(e) => e,
+        Err(e) => {
+            info!(
+                "Skipping test due to engine initialization failure (likely dbus/keyring): {}",
+                e
+            );
+            return;
+        }
+    };
+
+    // Invalid room ID format — should fail at parse, before any network call.
+    let result = engine
+        .search_messages_in_room("invalid_room_id", "test", 20)
+        .await;
+    assert!(result.is_err());
+
+    // Well-formed room ID but the engine has no authenticated session, so the
+    // server-side /search request can't be sent. Any error is acceptable; we
+    // mainly assert it doesn't panic or hang.
+    let result = engine
+        .search_messages_in_room("!nonexistent:localhost", "test", 20)
+        .await;
+    assert!(result.is_err());
+}

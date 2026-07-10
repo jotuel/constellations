@@ -70,6 +70,8 @@ search = Search
 close-search = Close Search
 search-placeholder = Search...
 search-results-found = Search Results: Found { $count } matches for "{ $query }"
+searching-messages = Searching…
+search-server-failed = Failed to search messages: { $error }
 call-join = Join a call
 call-leave = Leave call
 

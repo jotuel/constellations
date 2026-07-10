@@ -3017,19 +3017,92 @@ impl MatrixEngine {
         }
     }
 
-    pub async fn search_in_room(
+    /// Searches the room's full message history via the homeserver's
+    /// server-side `/search` endpoint (`POST /_matrix/client/v3/search`),
+    /// returning the first batch of results enriched with sender/body/
+    /// timestamp so the UI can render them without a second round-trip.
+    ///
+    /// Unlike the local `experimental-search` seshat index (which only covers
+    /// events synced *after* the index was created), the server endpoint
+    /// searches the entire room history — but requires the homeserver to
+    /// implement it, which not all do.
+    ///
+    /// Only the first batch (`max_results` events) is fetched; pagination via
+    /// the `next_batch` token is not yet wired into the UI.
+    pub async fn search_messages_in_room(
         &self,
-        room_id: &RoomId,
+        room_id: &str,
         query: &str,
         max_results: usize,
-    ) -> Result<Vec<matrix_sdk::ruma::OwnedEventId>> {
-        let inner = self.inner.read().await;
-        let room = inner.client.get_room(room_id).context("Room not found")?;
+    ) -> Result<Vec<MessageSearchResult>> {
+        let room_id_parsed = RoomId::parse(room_id)?;
+        let client = self.client().await;
 
-        let results = room
-            .search(query, max_results, None)
-            .await
-            .map_err(|e| anyhow::anyhow!(e))?;
+        use matrix_sdk::ruma::api::client::search::search_events::v3;
+
+        let mut filter = matrix_sdk::ruma::api::client::filter::RoomEventFilter::default();
+        filter.rooms = Some(vec![room_id_parsed.clone()]);
+        filter.limit = Some(
+            matrix_sdk::ruma::UInt::try_from(max_results).unwrap_or(matrix_sdk::ruma::UInt::MAX),
+        );
+
+        let mut criteria = v3::Criteria::new(query.to_owned());
+        criteria.filter = filter;
+        criteria.keys = Some(vec![v3::SearchKeys::ContentBody]);
+
+        let mut categories = v3::Categories::new();
+        categories.room_events = Some(criteria);
+        let request = v3::Request::new(categories);
+
+        let response = client.send(request).await?;
+        let room_results = response.search_categories.room_events;
+
+        let mut results = Vec::with_capacity(room_results.results.len());
+        for result in room_results.results {
+            let Some(raw_event) = result.result else {
+                continue;
+            };
+            // The server returns decrypted plain-text events (it has the keys
+            // for rooms we're joined to), so a single deserialize suffices.
+            let event: matrix_sdk::ruma::events::AnyTimelineEvent = raw_event.deserialize()?;
+
+            let event_id = event.event_id().to_owned();
+            let sender_id = event.sender().to_owned();
+
+            let body = match &event {
+                matrix_sdk::ruma::events::AnyTimelineEvent::MessageLike(msg) => match msg {
+                    matrix_sdk::ruma::events::AnyMessageLikeEvent::RoomMessage(
+                        matrix_sdk::ruma::events::MessageLikeEvent::Original(
+                            matrix_sdk::ruma::events::OriginalMessageLikeEvent { content, .. },
+                        ),
+                    ) => content.body().to_string(),
+                    _ => "Unsupported message event type".to_string(),
+                },
+                _ => "Unsupported state event type".to_string(),
+            };
+
+            let timestamp = {
+                let ts_millis = u64::from(event.origin_server_ts().0);
+                chrono::DateTime::from_timestamp_millis(ts_millis as i64)
+                    .unwrap_or_default()
+                    .with_timezone(&chrono::Local)
+                    .format("%Y-%m-%d %H:%M:%S")
+                    .to_string()
+            };
+
+            let plain_text = crate::preview::parse_plain_text(&body);
+            let links = crate::preview::extract_links(&plain_text);
+
+            results.push(MessageSearchResult {
+                event_id,
+                sender_id,
+                body,
+                timestamp,
+                plain_text,
+                links,
+            });
+        }
+
         Ok(results)
     }
 
@@ -3362,6 +3435,18 @@ pub fn markdown_to_html(markdown: &str) -> String {
     pulldown_cmark::html::push_html(&mut html_output, parser);
 
     html_output
+}
+
+#[derive(Clone, Debug)]
+pub struct MessageSearchResult {
+    pub event_id: matrix_sdk::ruma::OwnedEventId,
+    pub sender_id: matrix_sdk::ruma::OwnedUserId,
+    pub body: String,
+    pub timestamp: String,
+    // Pre-parsed body, so the render loop doesn't re-parse on every frame.
+    // Mirrors the pre-compute optimization in `ConstellationsItem::new`.
+    pub plain_text: Vec<crate::PreviewEvent>,
+    pub links: Vec<(String, String)>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
