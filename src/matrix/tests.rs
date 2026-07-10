@@ -1686,7 +1686,3 @@ fn test_is_recent_enough_to_notify() {
     // This must not panic and must be treated as stale.
     assert!(!is_recent_enough_to_notify(0, 1_700_000_000_000));
 }
-
-
-
-
