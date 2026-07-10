@@ -17,9 +17,9 @@ use crate::{
     Constellations, Message, PreviewEvent, matrix,
     view::{
         ADD_REACTION, CLOSE_THREAD, DOWNLOAD_FILE, DOWNLOAD_IMAGE, DOWNLOADED, IGNORE, OPEN_THREAD,
-        REPLIES, REPLY, TOOLTIP_ATTACH, TOOLTIP_DELETE, TOOLTIP_EDIT, TOOLTIP_EMOJIS, TOOLTIP_FIND,
-        TOOLTIP_LOCATION, TOOLTIP_REPLY, TOOLTIP_THREAD, UNIGNORE_USER,
-        switcher::view_room_name_menu,
+        REPLIES, REPLY, TOOLTIP_ATTACH, TOOLTIP_COPY_LINK, TOOLTIP_COPY_ROOM_LINK, TOOLTIP_DELETE,
+        TOOLTIP_EDIT, TOOLTIP_EMOJIS, TOOLTIP_FIND, TOOLTIP_LOCATION, TOOLTIP_REPLY,
+        TOOLTIP_THREAD, UNIGNORE_USER, switcher::view_room_name_menu,
     },
 };
 
@@ -735,6 +735,17 @@ impl<'chat> Constellations {
                 action_row = action_row.push(action_tooltip);
             }
 
+            if matches!(item_id, TimelineEventItemId::EventId(_)) {
+                let copy_btn = button::icon(cosmic::widget::icon::from_name("edit-copy-symbolic"))
+                    .on_press(Message::CopyMessageLink(item_id.clone()));
+                let copy_tooltip = tooltip(
+                    copy_btn,
+                    text::body(TOOLTIP_COPY_LINK.as_str()),
+                    Position::Bottom,
+                );
+                action_row = action_row.push(copy_tooltip);
+            }
+
             if is_me {
                 let edit_btn = button::icon(cosmic::widget::icon::from_name("edit-symbolic"))
                     .on_press(Message::StartEdit(item_id.clone()));
@@ -1143,6 +1154,11 @@ impl<'chat> Constellations {
                             self.current_settings_panel == Some(crate::SettingsPanel::Members),
                         )
                         .on_press(Message::ToggleMembersPanel),
+                )
+                .push(
+                    button::icon(Named::new("link-symbolic"))
+                        .tooltip(TOOLTIP_COPY_ROOM_LINK.as_str())
+                        .on_press(Message::CopyRoomLink(room_id.clone())),
                 );
 
             if self.active_thread_root.is_some() {

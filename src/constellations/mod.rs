@@ -248,6 +248,9 @@ pub enum Message {
     StartEdit(matrix::TimelineEventItemId),
     CancelEdit,
     RedactMessage(matrix::TimelineEventItemId),
+    CopyMessageLink(matrix::TimelineEventItemId),
+    CopyRoomLink(std::sync::Arc<str>),
+    CopyToClipboard(Result<String, String>),
     MatrixThreadDiff(
         matrix_sdk::ruma::OwnedEventId,
         eyeball_im::VectorDiff<std::sync::Arc<matrix::TimelineItem>>,

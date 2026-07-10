@@ -1868,6 +1868,26 @@ impl MatrixEngine {
         Ok(())
     }
 
+    pub async fn get_room_permalink(&self, room_id: &str) -> Result<String> {
+        let room_id_parsed = RoomId::parse(room_id)?;
+        let client = self.client().await;
+        let room = client.get_room(&room_id_parsed).context("Room not found")?;
+        let permalink = room.matrix_to_permalink().await?;
+        Ok(permalink.to_string())
+    }
+
+    pub async fn get_room_event_permalink(
+        &self,
+        room_id: &str,
+        event_id: &matrix_sdk::ruma::EventId,
+    ) -> Result<String> {
+        let room_id_parsed = RoomId::parse(room_id)?;
+        let client = self.client().await;
+        let room = client.get_room(&room_id_parsed).context("Room not found")?;
+        let permalink = room.matrix_to_event_permalink(event_id.to_owned()).await?;
+        Ok(permalink.to_string())
+    }
+
     pub async fn forget_room(&self, room_id: &str) -> Result<()> {
         let room_id_parsed = RoomId::parse(room_id)?;
         let client = self.client().await;
