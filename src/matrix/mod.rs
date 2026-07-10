@@ -64,7 +64,13 @@ struct LiveKitAuthResponse {
     token: String,
 }
 
-const OIDC_CALLBACK_URL: &str = "fi.joonastuomi.Constellations://callback";
+/// OAuth 2.0 redirect URI sent to the homeserver during dynamic client
+/// registration. MAS (Matrix Authentication Service) requires the scheme to be
+/// lowercase and native custom-scheme redirect URIs to use a single slash
+/// (`:/path`, not `://host/path`). The desktop handler registers
+/// `x-scheme-handler/fi.joonastuomi.constellations` and catches this regardless
+/// of the slash form.
+const OIDC_CALLBACK_URL: &str = "fi.joonastuomi.constellations:/callback";
 /// Static client ID used as a fallback for sessions saved before the client
 /// began using dynamic client registration. Modern logins register with the
 /// homeserver and persist the server-assigned client ID in [`SessionData`].

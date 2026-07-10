@@ -452,7 +452,7 @@ async fn test_complete_oidc_login_no_client() {
 #[tokio::test]
 #[serial_test::serial]
 async fn test_ipc_callback_trigger_failure() {
-    let test_uri = "fi.joonastuomi.Constellations://callback?code=test_code".to_string();
+    let test_uri = "fi.joonastuomi.constellations:/callback?code=test_code".to_string();
     let result = crate::ipc::call_handle_callback(test_uri).await;
 
     // If no instance is running, it should fail to find the proxy.
@@ -1686,3 +1686,7 @@ fn test_is_recent_enough_to_notify() {
     // This must not panic and must be treated as stale.
     assert!(!is_recent_enough_to_notify(0, 1_700_000_000_000));
 }
+
+
+
+

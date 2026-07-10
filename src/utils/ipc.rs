@@ -63,8 +63,8 @@ mod tests {
         // Start the server which claims the DBus name
         let _server_conn = start_server(tx).await.expect("Failed to start DBus server");
 
-        // The valid callback URI must start with fi.joonastuomi.Constellations://callback
-        let valid_uri = "fi.joonastuomi.Constellations://callback/?code=12345".to_string();
+        // The valid callback URI must start with fi.joonastuomi.constellations:/callback
+        let valid_uri = "fi.joonastuomi.constellations:/callback?code=12345".to_string();
         call_handle_callback(valid_uri.clone())
             .await
             .expect("Failed to call proxy");

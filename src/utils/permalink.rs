@@ -1,7 +1,7 @@
 //! Matrix permalink parsing.
 //!
 //! Pure parser for Matrix room/event/user permalinks, used by the "open link"
-//! flow (CLI argument intake, the `fi.joonastuomi.Constellations://` URI scheme,
+//! flow (CLI argument intake, the `fi.joonastuomi.constellations://` URI scheme,
 //! and in-app paste). Produces a [`PermalinkTarget`] with any `via` routing
 //! servers and an optional `action`; resolution into actual rooms/timelines
 //! happens in the app layer, not here.
@@ -10,7 +10,7 @@
 //! - `https://matrix.to/#/{id}` / `https://matrix.to/#/{id}?via=...`
 //! - `matrix:/{id}` / `matrix:/{id}?via=...&action=join`
 //! - The app's own wrapper scheme:
-//!   `fi.joonastuomi.Constellations://open?url={any of the above, encoded}` —
+//!   `fi.joonastuomi.constellations://open?url={any of the above, encoded}` —
 //!   any Matrix link the desktop launcher hands us can be wrapped in our scheme
 //!   and unwrapped here before parsing.
 //!
@@ -25,8 +25,8 @@ use matrix_sdk::ruma::{
 };
 use url::Url;
 
-/// The `fi.joonastuomi.Constellations://` scheme prefix consumed by `main.rs`.
-const APP_SCHEME: &str = "fi.joonastuomi.Constellations://";
+/// The `fi.joonastuomi.constellations://` scheme prefix consumed by `main.rs`.
+const APP_SCHEME: &str = "fi.joonastuomi.constellations://";
 
 /// What a Matrix permalink points at, plus any routing servers and intent.
 ///
@@ -80,7 +80,7 @@ pub enum PermalinkError {
 /// Parse a Matrix permalink into a [`PermalinkTarget`].
 ///
 /// Accepts `matrix.to` URLs, `matrix:` URIs, and the app's own
-/// `fi.joonastuomi.Constellations://open?url=...` wrapper (recursing on the
+/// `fi.joonastuomi.constellations://open?url=...` wrapper (recursing on the
 /// wrapped URL). Returns [`PermalinkError::NotAPermalink`] for anything that is
 /// not a Matrix link — callers can then fall back to opening it externally.
 pub fn parse(input: &str) -> Result<PermalinkTarget, PermalinkError> {
@@ -108,7 +108,7 @@ pub fn parse(input: &str) -> Result<PermalinkTarget, PermalinkError> {
     Err(PermalinkError::NotAPermalink)
 }
 
-/// Pull the `url` query parameter out of a `fi.joonastuomi.Constellations://`
+/// Pull the `url` query parameter out of a `fi.joonastuomi.constellations://`
 /// wrapper. The wrapper may itself be a well-formed `Url` (preferred) or a bare
 /// `scheme:path`-style string that `url` can still parse.
 fn extract_app_scheme_url(raw: &str) -> Result<String, PermalinkError> {
@@ -347,7 +347,7 @@ mod tests {
     fn app_scheme_wraps_matrix_to() {
         // ?url=<percent-encoded inner matrix.to link>
         // "https://matrix.to/#/!abc:example.org/$def:example.org"
-        let wrapped = "fi.joonastuomi.Constellations://open?url=https%3A%2F%2Fmatrix.to%2F%23%2F%21abc%3Aexample.org%2F%24def%3Aexample.org";
+        let wrapped = "fi.joonastuomi.constellations://open?url=https%3A%2F%2Fmatrix.to%2F%23%2F%21abc%3Aexample.org%2F%24def%3Aexample.org";
         let t = ok(wrapped);
         match t {
             PermalinkTarget::Event { room, event, .. } => {
@@ -364,7 +364,7 @@ mod tests {
     #[test]
     fn app_scheme_wraps_matrix_uri() {
         // "matrix:u/alice:example.org"
-        let wrapped = "fi.joonastuomi.Constellations://open?url=matrix%3Au%2Falice%3Aexample.org";
+        let wrapped = "fi.joonastuomi.constellations://open?url=matrix%3Au%2Falice%3Aexample.org";
         let t = ok(wrapped);
         assert_eq!(
             t,
@@ -374,13 +374,13 @@ mod tests {
 
     #[test]
     fn app_scheme_missing_url_param() {
-        let err = parse("fi.joonastuomi.Constellations://open").unwrap_err();
+        let err = parse("fi.joonastuomi.constellations://open").unwrap_err();
         assert_eq!(err, PermalinkError::MissingUrlParam);
     }
 
     #[test]
     fn app_scheme_empty_url_param() {
-        let err = parse("fi.joonastuomi.Constellations://open?url=").unwrap_err();
+        let err = parse("fi.joonastuomi.constellations://open?url=").unwrap_err();
         assert_eq!(err, PermalinkError::MissingUrlParam);
     }
 

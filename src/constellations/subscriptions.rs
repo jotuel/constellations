@@ -457,12 +457,17 @@ pub(in crate::constellations) async fn get_room_data(
 
 /// Classify an IPC URI into the right `Message`.
 ///
-/// OIDC login completions (`fi.joonastuomi.Constellations://callback…`) keep
+/// OIDC login completions (`fi.joonastuomi.constellations:/callback…`) keep
 /// their existing `OidcCallback` path; everything else routes through the
 /// open-link flow as a raw string for `permalink::parse` to handle.
+///
+/// MAS uses the single-slash `:/callback` form (see `OIDC_CALLBACK_URL`), but
+/// we also accept the legacy `://callback` form so old browser tabs / bookmarks
+/// still complete a login.
 pub(in crate::constellations) fn classify_ipc_uri(uri: &str) -> Message {
-    const OIDC_CALLBACK_PREFIX: &str = "fi.joonastuomi.Constellations://callback";
-    if uri.starts_with(OIDC_CALLBACK_PREFIX)
+    const OIDC_CALLBACK_PREFIX: &str = "fi.joonastuomi.constellations:/callback";
+    const OIDC_CALLBACK_PREFIX_LEGACY: &str = "fi.joonastuomi.constellations://callback";
+    if (uri.starts_with(OIDC_CALLBACK_PREFIX) || uri.starts_with(OIDC_CALLBACK_PREFIX_LEGACY))
         && let Ok(url) = Url::parse(uri)
     {
         Message::OidcCallback(url)
@@ -478,7 +483,15 @@ mod tests {
 
     #[test]
     fn classify_oidc_callback() {
-        let uri = "fi.joonastuomi.Constellations://callback?code=abc&state=def";
+        let uri = "fi.joonastuomi.constellations:/callback?code=abc&state=def";
+        assert!(matches!(classify_ipc_uri(uri), Message::OidcCallback(_)));
+    }
+
+    #[test]
+    fn classify_oidc_callback_legacy_double_slash() {
+        // The legacy `://callback` form (used before MAS required single-slash)
+        // must still be recognized so old browser tabs complete a login.
+        let uri = "fi.joonastuomi.constellations://callback?code=abc&state=def";
         assert!(matches!(classify_ipc_uri(uri), Message::OidcCallback(_)));
     }
 
@@ -495,7 +508,7 @@ mod tests {
     fn classify_app_scheme_non_callback() {
         // Our own scheme but NOT a callback (e.g. app-wrapped permalink) must
         // route through OpenMatrixLink, not OidcCallback.
-        let uri = "fi.joonastuomi.Constellations://open?url=https%3A%2F%2Fmatrix.to";
+        let uri = "fi.joonastuomi.constellations://open?url=https%3A%2F%2Fmatrix.to";
         assert!(matches!(
             classify_ipc_uri(uri),
             Message::OpenMatrixLink(s) if s == uri
@@ -505,8 +518,11 @@ mod tests {
     #[test]
     fn classify_malformed_oidc_prefix() {
         // Starts with the callback prefix but isn't a valid URL — fall back to
-        // OpenMatrixLink rather than dropping it.
-        let uri = "fi.joonastuomi.Constellations://callback [not a url]";
+        // OpenMatrixLink rather than dropping it. The legacy `://` form is used
+        // here because the single-slash `:/` form is extremely lenient (spaces
+        // in the path are percent-encoded); with `://` the space is an invalid
+        // host character, so `Url::parse` rejects it.
+        let uri = "fi.joonastuomi.constellations://callback [not a url]";
         assert!(matches!(classify_ipc_uri(uri), Message::OpenMatrixLink(_)));
     }
 }
