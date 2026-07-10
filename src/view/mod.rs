@@ -36,6 +36,8 @@ static DOWNLOAD_FILE: LazyLock<String> = LazyLock::new(|| crate::fl!("download-f
 static DOWNLOADED: LazyLock<String> = LazyLock::new(|| crate::fl!("downloaded"));
 static OPEN_THREAD: LazyLock<String> = LazyLock::new(|| crate::fl!("thread"));
 static CLOSE_THREAD: LazyLock<String> = LazyLock::new(|| crate::fl!("close-thread"));
+static TOOLTIP_COPY_LINK: LazyLock<String> = LazyLock::new(|| crate::fl!("copy-link"));
+static TOOLTIP_COPY_ROOM_LINK: LazyLock<String> = LazyLock::new(|| crate::fl!("copy-room-link"));
 // switcher.rs
 static ALL_ROOMS: LazyLock<String> = LazyLock::new(|| crate::fl!("all-rooms"));
 static ROOM_NAME: LazyLock<String> = LazyLock::new(|| crate::fl!("room-name"));

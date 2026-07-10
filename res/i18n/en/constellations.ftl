@@ -396,6 +396,8 @@ jump-to-newest = Jump to newest
 open-link = Open Link
 open-link-placeholder = Paste a Matrix link
 open-link-dialog-title = Open Link
+copy-link = Copy Link
+copy-room-link = Copy Room Link
 
 # Desktop notifications
 notification-new-message = New message

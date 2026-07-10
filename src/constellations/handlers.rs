@@ -2480,6 +2480,48 @@ impl Constellations {
                 Task::none()
             }
             Message::RedactMessage(item_id) => self.handle_redact_message(item_id),
+            Message::CopyMessageLink(item_id) => {
+                if let Some(room_id) = &self.selected_room
+                    && let Some(matrix) = &self.matrix
+                    && let matrix::TimelineEventItemId::EventId(event_id) = item_id
+                {
+                    let matrix = matrix.clone();
+                    let room_id = room_id.clone();
+                    return Task::perform(
+                        async move {
+                            matrix
+                                .get_room_event_permalink(&room_id, &event_id)
+                                .await
+                                .map_err(|e| e.to_string())
+                        },
+                        |res| Action::from(Message::CopyToClipboard(res)),
+                    );
+                }
+                Task::none()
+            }
+            Message::CopyRoomLink(room_id) => {
+                if let Some(matrix) = &self.matrix {
+                    let matrix = matrix.clone();
+                    let room_id = room_id.clone();
+                    return Task::perform(
+                        async move {
+                            matrix
+                                .get_room_permalink(&room_id)
+                                .await
+                                .map_err(|e| e.to_string())
+                        },
+                        |res| Action::from(Message::CopyToClipboard(res)),
+                    );
+                }
+                Task::none()
+            }
+            Message::CopyToClipboard(res) => match res {
+                Ok(text) => cosmic::iced::clipboard::write(text),
+                Err(e) => {
+                    self.set_error(e);
+                    Task::none()
+                }
+            },
             Message::AddAttachment => self.handle_add_attachment(),
             Message::AttachmentsSelected(paths) => {
                 for path in paths {
@@ -4181,5 +4223,40 @@ mod tests {
         // Empty/whitespace input must not surface an error (it's a cancel-like
         // no-op, not a parse failure).
         assert!(app.error.is_none(), "empty submit must not error");
+    }
+
+    #[test]
+    fn test_copy_to_clipboard_success() {
+        let mut app = create_dummy_constellations();
+        let _task = app.update(Message::CopyToClipboard(Ok(
+            "https://matrix.to/#/!room:example.com".to_string(),
+        )));
+        assert!(app.error.is_none());
+    }
+
+    #[test]
+    fn test_copy_to_clipboard_error() {
+        let mut app = create_dummy_constellations();
+        let _task = app.update(Message::CopyToClipboard(Err(
+            "Failed to build link".to_string()
+        )));
+        assert_eq!(app.error.as_deref(), Some("Failed to build link"));
+    }
+
+    #[test]
+    fn test_copy_room_link_no_matrix() {
+        let mut app = create_dummy_constellations();
+        let _task = app.update(Message::CopyRoomLink("!room:example.com".into()));
+        assert!(app.error.is_none());
+    }
+
+    #[test]
+    fn test_copy_message_link_no_matrix() {
+        let mut app = create_dummy_constellations();
+        let item_id = matrix::TimelineEventItemId::EventId(
+            matrix_sdk::ruma::event_id!("$event:localhost").to_owned(),
+        );
+        let _task = app.update(Message::CopyMessageLink(item_id));
+        assert!(app.error.is_none());
     }
 }
