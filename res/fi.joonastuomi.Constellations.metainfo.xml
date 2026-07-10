@@ -25,6 +25,10 @@
 
   <launchable type="desktop-id">fi.joonastuomi.Constellations.desktop</launchable>
 
+  <provides>
+    <url_scheme>matrix</url_scheme>
+  </provides>
+
   <screenshots>
     <screenshot type="default">
       <caption>Constellations main chat view</caption>

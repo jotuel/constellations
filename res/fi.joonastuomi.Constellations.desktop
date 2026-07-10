@@ -9,6 +9,6 @@ Icon=fi.joonastuomi.Constellations
 Terminal=false
 Categories=Network;InstantMessaging;Chat;
 Keywords=Matrix;Chat;IM;Messaging;COSMIC;
-MimeType=x-scheme-handler/fi.joonastuomi.constellations;
+MimeType=x-scheme-handler/fi.joonastuomi.constellations;x-scheme-handler/matrix;
 StartupNotify=true
 SingleMainWindow=true
