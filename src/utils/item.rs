@@ -1,5 +1,5 @@
 use crate::matrix;
-use crate::preview::{PreviewEvent, parse_markdown, parse_plain_text};
+use crate::preview::{PreviewEvent, extract_links, parse_markdown, parse_plain_text};
 use std::sync::Arc;
 
 #[derive(Clone, Debug)]
@@ -12,6 +12,8 @@ pub struct ConstellationsItem {
     pub is_me: bool,
     pub markdown: Vec<PreviewEvent>,
     pub plain_text: Vec<PreviewEvent>,
+    pub markdown_links: Vec<(String, String)>,
+    pub plain_links: Vec<(String, String)>,
     pub thread_root_id: Option<matrix_sdk::ruma::OwnedEventId>,
     pub item_id: Option<matrix::TimelineEventItemId>,
 }
@@ -25,6 +27,8 @@ impl ConstellationsItem {
         let mut is_me = false;
         let mut markdown = Vec::new();
         let mut plain_text = Vec::new();
+        let mut markdown_links = Vec::new();
+        let mut plain_links = Vec::new();
         let mut thread_root_id = None;
         let mut item_id = None;
         // ⚡ Bolt Optimization: Pre-compute plain_text representation here
@@ -37,6 +41,8 @@ impl ConstellationsItem {
                 let is_reply = event.content().in_reply_to().is_some();
                 markdown = parse_markdown(msg.body(), is_reply);
                 plain_text = parse_plain_text(msg.body());
+                markdown_links = extract_links(&markdown);
+                plain_links = extract_links(&plain_text);
             }
             let (name, url) = match event.sender_profile() {
                 matrix_sdk_ui::timeline::TimelineDetails::Ready(profile) => (
@@ -73,6 +79,8 @@ impl ConstellationsItem {
             is_me,
             markdown,
             plain_text,
+            markdown_links,
+            plain_links,
             thread_root_id,
             item_id,
         }
@@ -106,6 +114,8 @@ impl ConstellationsItem {
         let sender_id = matrix_sdk::ruma::user_id!("@unknown:example.com").to_owned();
         let markdown = parse_markdown(text, false);
         let plain_text = parse_plain_text(text);
+        let markdown_links = extract_links(&markdown);
+        let plain_links = extract_links(&plain_text);
         Self {
             item: None,
             sender_id,
@@ -115,8 +125,50 @@ impl ConstellationsItem {
             is_me,
             markdown,
             plain_text,
+            markdown_links,
+            plain_links,
             thread_root_id: None,
             item_id: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_constellations_item_links_precomputation() {
+        let item = ConstellationsItem::mock(
+            "Alice",
+            "Check out [Google](https://google.com) and https://rust-lang.org!",
+            "2026-07-10 12:00:00",
+            false,
+        );
+
+        assert_eq!(
+            item.markdown_links,
+            vec![
+                ("Google".to_string(), "https://google.com".to_string()),
+                (
+                    "https://rust-lang.org".to_string(),
+                    "https://rust-lang.org".to_string()
+                ),
+            ]
+        );
+
+        assert_eq!(
+            item.plain_links,
+            vec![
+                (
+                    "https://google.com".to_string(),
+                    "https://google.com".to_string()
+                ),
+                (
+                    "https://rust-lang.org".to_string(),
+                    "https://rust-lang.org".to_string()
+                ),
+            ]
+        );
     }
 }
