@@ -34,6 +34,7 @@ pub struct State {
     pub editor: Editor<'static>,
     pub links: Vec<(Range<usize>, String)>,
     pub is_dragging: bool,
+    pub hovered_link: Option<usize>,
     pub content: Vec<crate::PreviewEvent>,
 }
 
@@ -53,6 +54,7 @@ impl State {
             editor: Editor::new(buffer),
             links,
             is_dragging: false,
+            hovered_link: None,
             content: content.to_vec(),
         }
     }
@@ -105,9 +107,7 @@ impl State {
                     if is_heading {
                         attrs = attrs.weight(Weight::BOLD);
                     }
-                    if current_link.is_some() {
-                        attrs = attrs.color(cosmic_text::Color::rgb(0, 0, 255));
-                    }
+                    // Link accent color is applied in `draw` from the theme.
                     let start = byte_pos;
                     byte_pos += t.len();
 
@@ -252,6 +252,28 @@ where
                 shell.capture_event();
                 shell.request_redraw();
             }
+            Event::Mouse(mouse::Event::CursorMoved { .. }) if !state.is_dragging => {
+                let new_hovered = if let Some(cursor_pos) = cursor.position_in(bounds) {
+                    let buf_x = cursor_pos.x;
+                    let buf_y = cursor_pos.y - y_offset;
+                    state
+                        .editor
+                        .with_buffer(|b| b.hit(buf_x, buf_y))
+                        .and_then(|hit| {
+                            state
+                                .links
+                                .iter()
+                                .position(|(range, _)| range.contains(&hit.index))
+                        })
+                } else {
+                    None
+                };
+
+                if state.hovered_link != new_hovered {
+                    state.hovered_link = new_hovered;
+                    shell.request_redraw();
+                }
+            }
             _ => {}
         }
     }
@@ -349,6 +371,9 @@ where
             });
         }
 
+        // Get accent color for link styling (matches cosmic Link widget)
+        let accent_color: Color = theme.cosmic().accent.base.into();
+
         // Draw text
         state.editor.with_buffer(|buffer| {
             for run in buffer.layout_runs() {
@@ -358,10 +383,10 @@ where
                         None => text_color,
                     };
 
-                    // Color links
+                    // Color links with accent color
                     for (range, _) in &state.links {
                         if range.contains(&glyph.start) {
-                            color = Color::from_rgba8(0, 0, 255, 1.0);
+                            color = accent_color;
                         }
                     }
 
@@ -388,6 +413,34 @@ where
                 }
             }
         });
+
+        // Draw underline for hovered link
+        if let Some(hovered_idx) = state.hovered_link
+            && let Some((range, _)) = state.links.get(hovered_idx)
+        {
+            state.editor.with_buffer(|buffer| {
+                for run in buffer.layout_runs() {
+                    for glyph in run.glyphs {
+                        if range.contains(&glyph.start) {
+                            let underline_y =
+                                bounds.y + y_offset + run.line_top + run.line_height - 2.0;
+                            renderer.fill_quad(
+                                renderer::Quad {
+                                    bounds: Rectangle::new(
+                                        Point::new(bounds.x + glyph.x, underline_y),
+                                        Size::new(glyph.w, 1.0),
+                                    ),
+                                    border: Border::default(),
+                                    shadow: Shadow::default(),
+                                    snap: false,
+                                },
+                                accent_color,
+                            );
+                        }
+                    }
+                }
+            });
+        }
 
         // Draw cursor
         if state.is_dragging {
