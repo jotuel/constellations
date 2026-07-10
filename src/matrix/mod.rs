@@ -3017,12 +3017,18 @@ impl MatrixEngine {
         }
     }
 
-    /// Searches the room's full message history via the `experimental-search`
-    /// index, returning the first batch of results enriched with sender/body/
+    /// Searches the room's full message history via the homeserver's
+    /// server-side `/search` endpoint (`POST /_matrix/client/v3/search`),
+    /// returning the first batch of results enriched with sender/body/
     /// timestamp so the UI can render them without a second round-trip.
     ///
-    /// Only the first batch (`max_results` events) is fetched; pagination is
-    /// not yet wired into the UI.
+    /// Unlike the local `experimental-search` seshat index (which only covers
+    /// events synced *after* the index was created), the server endpoint
+    /// searches the entire room history — but requires the homeserver to
+    /// implement it, which not all do.
+    ///
+    /// Only the first batch (`max_results` events) is fetched; pagination via
+    /// the `next_batch` token is not yet wired into the UI.
     pub async fn search_messages_in_room(
         &self,
         room_id: &str,
@@ -3030,61 +3036,59 @@ impl MatrixEngine {
         max_results: usize,
     ) -> Result<Vec<MessageSearchResult>> {
         let room_id_parsed = RoomId::parse(room_id)?;
-        let room = {
-            let inner = self.inner.read().await;
-            inner
-                .client
-                .get_room(&room_id_parsed)
-                .context("Room not found")?
-        };
+        let client = self.client().await;
 
-        let mut search_iter = room.search_messages(query.to_owned(), max_results);
-        let Some(events) = search_iter.next_events().await? else {
-            return Ok(Vec::new());
-        };
+        use matrix_sdk::ruma::api::client::search::search_events::v3;
 
-        let mut results = Vec::with_capacity(events.len());
-        for event in events {
-            // The event_id/sender are read from the (decrypted) kind without a
-            // second deserialization; the body requires deserializing the raw
-            // payload, reusing the same pattern as `fetch_pinned_event_info`.
-            let event_id = match event.event_id() {
-                Some(id) => id,
-                None => continue,
+        let mut filter = matrix_sdk::ruma::api::client::filter::RoomEventFilter::default();
+        filter.rooms = Some(vec![room_id_parsed.clone()]);
+        filter.limit = Some(
+            matrix_sdk::ruma::UInt::try_from(max_results).unwrap_or(matrix_sdk::ruma::UInt::MAX),
+        );
+
+        let mut criteria = v3::Criteria::new(query.to_owned());
+        criteria.filter = filter;
+        criteria.keys = Some(vec![v3::SearchKeys::ContentBody]);
+
+        let mut categories = v3::Categories::new();
+        categories.room_events = Some(criteria);
+        let request = v3::Request::new(categories);
+
+        let response = client.send(request).await?;
+        let room_results = response.search_categories.room_events;
+
+        let mut results = Vec::with_capacity(room_results.results.len());
+        for result in room_results.results {
+            let Some(raw_event) = result.result else {
+                continue;
             };
-            let sender_id = event
-                .sender()
-                .unwrap_or_else(|| matrix_sdk::ruma::user_id!("@unknown:example.com").to_owned());
+            // The server returns decrypted plain-text events (it has the keys
+            // for rooms we're joined to), so a single deserialize suffices.
+            let event: matrix_sdk::ruma::events::AnyTimelineEvent = raw_event.deserialize()?;
 
-            let body = match &event.kind {
-                matrix_sdk::deserialized_responses::TimelineEventKind::Decrypted(decrypted) => {
-                    // Decrypted events deserialize to `AnyTimelineEvent` (they
-                    // carry a `room_id`); cast down to the sync form the body
-                    // extractor expects.
-                    let ev: matrix_sdk::ruma::events::AnySyncTimelineEvent =
-                        decrypted.event.deserialize()?.into();
-                    message_body_from_sync_event(&ev)
-                }
-                matrix_sdk::deserialized_responses::TimelineEventKind::UnableToDecrypt {
-                    event,
-                    ..
-                }
-                | matrix_sdk::deserialized_responses::TimelineEventKind::PlainText {
-                    event, ..
-                } => message_body_from_sync_event(&event.deserialize()?),
+            let event_id = event.event_id().to_owned();
+            let sender_id = event.sender().to_owned();
+
+            let body = match &event {
+                matrix_sdk::ruma::events::AnyTimelineEvent::MessageLike(msg) => match msg {
+                    matrix_sdk::ruma::events::AnyMessageLikeEvent::RoomMessage(
+                        matrix_sdk::ruma::events::MessageLikeEvent::Original(
+                            matrix_sdk::ruma::events::OriginalMessageLikeEvent { content, .. },
+                        ),
+                    ) => content.body().to_string(),
+                    _ => "Unsupported message event type".to_string(),
+                },
+                _ => "Unsupported state event type".to_string(),
             };
 
-            let timestamp = event
-                .timestamp()
-                .map(|ts| {
-                    let ts_millis = u64::from(ts.0);
-                    chrono::DateTime::from_timestamp_millis(ts_millis as i64)
-                        .unwrap_or_default()
-                        .with_timezone(&chrono::Local)
-                        .format("%Y-%m-%d %H:%M:%S")
-                        .to_string()
-                })
-                .unwrap_or_default();
+            let timestamp = {
+                let ts_millis = u64::from(event.origin_server_ts().0);
+                chrono::DateTime::from_timestamp_millis(ts_millis as i64)
+                    .unwrap_or_default()
+                    .with_timezone(&chrono::Local)
+                    .format("%Y-%m-%d %H:%M:%S")
+                    .to_string()
+            };
 
             let plain_text = crate::preview::parse_plain_text(&body);
             let links = crate::preview::extract_links(&plain_text);
@@ -3431,23 +3435,6 @@ pub fn markdown_to_html(markdown: &str) -> String {
     pulldown_cmark::html::push_html(&mut html_output, parser);
 
     html_output
-}
-
-/// Extracts the display body from a deserialized sync timeline event,
-/// returning a placeholder for non-message events. Reused by both the
-/// pinned-event and message-search paths.
-fn message_body_from_sync_event(ev: &matrix_sdk::ruma::events::AnySyncTimelineEvent) -> String {
-    match ev {
-        matrix_sdk::ruma::events::AnySyncTimelineEvent::MessageLike(msg) => match msg {
-            matrix_sdk::ruma::events::AnySyncMessageLikeEvent::RoomMessage(
-                matrix_sdk::ruma::events::SyncMessageLikeEvent::Original(
-                    matrix_sdk::ruma::events::OriginalSyncMessageLikeEvent { content, .. },
-                ),
-            ) => content.body().to_string(),
-            _ => "Unsupported message event type".to_string(),
-        },
-        _ => "Unsupported state event type".to_string(),
-    }
 }
 
 #[derive(Clone, Debug)]

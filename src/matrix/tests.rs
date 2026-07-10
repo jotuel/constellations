@@ -1687,41 +1687,8 @@ fn test_is_recent_enough_to_notify() {
     assert!(!is_recent_enough_to_notify(0, 1_700_000_000_000));
 }
 
-/// `message_body_from_sync_event` should extract the body from a text
-/// RoomMessage event and return a placeholder for non-message events.
-#[test]
-fn test_message_body_from_sync_event() {
-    use matrix_sdk::ruma::events::AnySyncTimelineEvent;
-
-    // A text message event.
-    let json = r#"{
-        "type": "m.room.message",
-        "content": {"msgtype": "m.text", "body": "hello world"},
-        "event_id": "$1:localhost",
-        "sender": "@user:localhost",
-        "origin_server_ts": 1000
-    }"#;
-    let ev: AnySyncTimelineEvent = serde_json::from_str(json).unwrap();
-    assert_eq!(message_body_from_sync_event(&ev), "hello world");
-
-    // A state event (not a message) → placeholder.
-    let json = r#"{
-        "type": "m.room.member",
-        "content": {"membership": "join"},
-        "event_id": "$2:localhost",
-        "sender": "@user:localhost",
-        "origin_server_ts": 2000,
-        "state_key": "@user:localhost"
-    }"#;
-    let ev: AnySyncTimelineEvent = serde_json::from_str(json).unwrap();
-    assert_eq!(
-        message_body_from_sync_event(&ev),
-        "Unsupported state event type"
-    );
-}
-
-/// `search_messages_in_room` should error when the room ID is invalid or the
-/// room doesn't exist, not panic.
+/// `search_messages_in_room` should error (not panic) on an invalid room ID
+/// or when the homeserver is unreachable / the client has no session.
 #[tokio::test]
 async fn test_search_messages_in_room_not_found() {
     let tmp_dir = tempdir().unwrap();
@@ -1736,16 +1703,17 @@ async fn test_search_messages_in_room_not_found() {
         }
     };
 
-    // Invalid room ID format.
+    // Invalid room ID format — should fail at parse, before any network call.
     let result = engine
         .search_messages_in_room("invalid_room_id", "test", 20)
         .await;
     assert!(result.is_err());
 
-    // Well-formed room ID but room not joined/known.
+    // Well-formed room ID but the engine has no authenticated session, so the
+    // server-side /search request can't be sent. Any error is acceptable; we
+    // mainly assert it doesn't panic or hang.
     let result = engine
         .search_messages_in_room("!nonexistent:localhost", "test", 20)
         .await;
     assert!(result.is_err());
-    assert_eq!(result.unwrap_err().to_string(), "Room not found");
 }
