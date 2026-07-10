@@ -135,7 +135,42 @@ pub fn parse_markdown(text: &str, skip_first_blockquote: bool) -> Vec<PreviewEve
 
 pub fn parse_plain_text(text: &str) -> Vec<PreviewEvent> {
     let mut events = Vec::new();
-    split_text_by_urls(text, &mut events);
+    let mut options = pulldown_cmark::Options::empty();
+    options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
+    options.insert(pulldown_cmark::Options::ENABLE_TASKLISTS);
+
+    let parser = pulldown_cmark::Parser::new_ext(text, options);
+    let mut in_link = 0;
+
+    for event in parser {
+        match event {
+            pulldown_cmark::Event::Start(pulldown_cmark::Tag::Link { dest_url, .. }) => {
+                in_link += 1;
+                events.push(PreviewEvent::StartLink(dest_url.to_string()));
+            }
+            pulldown_cmark::Event::End(pulldown_cmark::TagEnd::Link) => {
+                if in_link > 0 {
+                    in_link -= 1;
+                }
+                events.push(PreviewEvent::EndLink);
+            }
+            pulldown_cmark::Event::End(
+                pulldown_cmark::TagEnd::Paragraph | pulldown_cmark::TagEnd::Heading(_),
+            ) => events.push(PreviewEvent::EndBlock),
+            pulldown_cmark::Event::Text(t) => {
+                if in_link > 0 {
+                    events.push(PreviewEvent::Text(t.to_string()));
+                } else {
+                    split_text_by_urls(&t, &mut events);
+                }
+            }
+            pulldown_cmark::Event::Code(c) => events.push(PreviewEvent::Code(c.to_string())),
+            pulldown_cmark::Event::SoftBreak | pulldown_cmark::Event::HardBreak => {
+                events.push(PreviewEvent::Break)
+            }
+            _ => {}
+        }
+    }
     events
 }
 
@@ -325,6 +360,24 @@ mod tests {
                 PreviewEvent::Text("https://google.com/search?q=test".to_string()),
                 PreviewEvent::EndLink,
                 PreviewEvent::Text(", it is awesome!".to_string()),
+                PreviewEvent::EndBlock,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_plain_text_markdown_link() {
+        let text = "See [this is text](https://example.org) for details";
+        let events = parse_plain_text(text);
+        assert_eq!(
+            events,
+            vec![
+                PreviewEvent::Text("See ".to_string()),
+                PreviewEvent::StartLink("https://example.org".to_string()),
+                PreviewEvent::Text("this is text".to_string()),
+                PreviewEvent::EndLink,
+                PreviewEvent::Text(" for details".to_string()),
+                PreviewEvent::EndBlock,
             ]
         );
     }
