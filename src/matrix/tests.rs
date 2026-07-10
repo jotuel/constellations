@@ -376,6 +376,7 @@ fn test_session_data_serialization() {
         id_token: Some("id_token".to_string()),
         device_id: "DEVICEID".to_string(),
         is_oidc: false,
+        client_id: None,
     };
     let serialized = serde_json::to_string(&session_data).unwrap();
     let deserialized: SessionData = serde_json::from_str(&serialized).unwrap();
@@ -385,6 +386,26 @@ fn test_session_data_serialization() {
     assert_eq!(session_data.refresh_token, deserialized.refresh_token);
     assert_eq!(session_data.id_token, deserialized.id_token);
     assert_eq!(session_data.device_id, deserialized.device_id);
+    assert_eq!(session_data.client_id, deserialized.client_id);
+}
+
+/// Sessions saved before `client_id` was added to [`SessionData`] (and before
+/// it became an OIDC field) must still deserialize thanks to `#[serde(default)]`.
+#[test]
+fn test_session_data_backward_compat_without_client_id() {
+    // Legacy JSON: no `client_id` field at all.
+    let legacy = r#"{
+        "homeserver": "https://matrix.org",
+        "user_id": "@alice:matrix.org",
+        "access_token": "tok",
+        "refresh_token": null,
+        "id_token": null,
+        "device_id": "DEV",
+        "is_oidc": true
+    }"#;
+    let deserialized: SessionData = serde_json::from_str(legacy).unwrap();
+    assert!(deserialized.is_oidc);
+    assert_eq!(deserialized.client_id, None);
 }
 
 #[tokio::test]

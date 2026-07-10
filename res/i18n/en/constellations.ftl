@@ -367,6 +367,7 @@ error-failed-fetch-media = Failed to fetch media: { $error }
 error-failed-registration = Registration failed: { $error }
 error-failed-login = Login failed: { $error }
 error-failed-oidc-login = OIDC login failed to start: { $error }
+error-oidc-not-supported = This homeserver does not support OAuth 2.0 / OIDC login. Try signing in with a password instead.
 error-failed-qr-login = QR login failed: { $error }
 error-failed-load-more = Failed to load more messages: { $error }
 error-failed-send-message = Failed to send message: { $error }
