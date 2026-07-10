@@ -2630,6 +2630,19 @@ impl MatrixEngine {
         Ok(room.room_id().to_owned())
     }
 
+    pub async fn get_or_create_dm(
+        &self,
+        user_id: &matrix_sdk::ruma::UserId,
+    ) -> Result<OwnedRoomId> {
+        let client = self.client().await;
+        if let Some(room) = client.get_dm_room(user_id) {
+            Ok(room.room_id().to_owned())
+        } else {
+            let room = client.create_dm(user_id).await?;
+            Ok(room.room_id().to_owned())
+        }
+    }
+
     pub async fn is_in_space(&self, room_id: &RoomId, space_id: &RoomId) -> bool {
         let inner = self.inner.read().await;
         inner.space_hierarchy.is_in_space(room_id, space_id)

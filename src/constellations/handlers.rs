@@ -1547,10 +1547,17 @@ impl Constellations {
                 self.pending_alias_op = Some(PendingAliasOp::OpenRoom);
                 self.kick_off_alias_resolution(alias)
             }
-            PermalinkTarget::User(_) => {
-                // DM-start flow doesn't exist yet; surface a clear message.
-                self.set_error(crate::fl!("open-user-link-unsupported").to_string());
-                Task::none()
+            PermalinkTarget::User(user_id) => {
+                let matrix = self.matrix.as_ref().unwrap().clone();
+                Task::perform(
+                    async move {
+                        matrix
+                            .get_or_create_dm(&user_id)
+                            .await
+                            .map_err(|e| e.to_string())
+                    },
+                    |res| Action::from(Message::DmRoomResolved(res)),
+                )
             }
             PermalinkTarget::Event { room, event, .. } => {
                 // If the room half is an alias, resolve it first and remember
@@ -2519,6 +2526,16 @@ impl Constellations {
                 Ok(text) => cosmic::iced::clipboard::write(text),
                 Err(e) => {
                     self.set_error(e);
+                    Task::none()
+                }
+            },
+            Message::DmRoomResolved(res) => match res {
+                Ok(room_id) => {
+                    let room_id_arc: std::sync::Arc<str> = room_id.as_str().into();
+                    self.handle_update(Message::RoomSelected(room_id_arc))
+                }
+                Err(e) => {
+                    self.set_error(crate::fl!("error-failed-start-dm", error = e));
                     Task::none()
                 }
             },
@@ -4258,5 +4275,25 @@ mod tests {
         );
         let _task = app.update(Message::CopyMessageLink(item_id));
         assert!(app.error.is_none());
+    }
+
+    #[test]
+    fn test_dm_room_resolved_success() {
+        let mut app = create_dummy_constellations();
+        let target_room = matrix_sdk::ruma::room_id!("!room:example.com").to_owned();
+        let _task = app.update(Message::DmRoomResolved(Ok(target_room)));
+        assert_eq!(app.selected_room.as_deref(), Some("!room:example.com"));
+        assert!(app.error.is_none());
+    }
+
+    #[test]
+    fn test_dm_room_resolved_error() {
+        let mut app = create_dummy_constellations();
+        let _task = app.update(Message::DmRoomResolved(
+            Err("Failed to join DM".to_string()),
+        ));
+        let err = app.error.expect("Expected error to be set");
+        assert!(err.contains("Failed to start direct message"));
+        assert!(err.contains("Failed to join DM"));
     }
 }
