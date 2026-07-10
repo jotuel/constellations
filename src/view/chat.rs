@@ -447,26 +447,16 @@ impl<'chat> Constellations {
     fn view_message_text<'message>(
         &'message self,
         events: &'message [PreviewEvent],
-        links: &'message [(String, String)],
+        _links: &'message [(String, String)],
     ) -> Column<'message, Message, Theme> {
         let mut bubble_col: Column<'message, Message, Theme> = Column::new();
-        // ⚡ Bolt Optimization: `RichSelectableText` now borrows `[PreviewEvent]` slices
-        // avoiding a `.to_vec()` or `.to_string()` allocation bottleneck on every single frame.
+        // `RichSelectableText` borrows `[PreviewEvent]` slices to avoid allocations
+        // on every frame. Links are styled with the theme accent color and get an
+        // underline on hover — matching the cosmic Link widget appearance.
         bubble_col = bubble_col.push(
             crate::rich_text::RichSelectableText::new(events, Message::OpenMatrixLink)
                 .into_element(),
         );
-
-        if !links.is_empty() {
-            let mut links_col = Column::new().spacing(4);
-            for (label, url) in links {
-                let link_btn =
-                    button::link(label.clone()).on_press(Message::OpenMatrixLink(url.clone()));
-                links_col = links_col.push(link_btn);
-            }
-            bubble_col = bubble_col.push(links_col);
-        }
-
         bubble_col
     }
 
