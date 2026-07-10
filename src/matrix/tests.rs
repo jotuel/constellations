@@ -1686,3 +1686,66 @@ fn test_is_recent_enough_to_notify() {
     // This must not panic and must be treated as stale.
     assert!(!is_recent_enough_to_notify(0, 1_700_000_000_000));
 }
+
+/// `message_body_from_sync_event` should extract the body from a text
+/// RoomMessage event and return a placeholder for non-message events.
+#[test]
+fn test_message_body_from_sync_event() {
+    use matrix_sdk::ruma::events::AnySyncTimelineEvent;
+
+    // A text message event.
+    let json = r#"{
+        "type": "m.room.message",
+        "content": {"msgtype": "m.text", "body": "hello world"},
+        "event_id": "$1:localhost",
+        "sender": "@user:localhost",
+        "origin_server_ts": 1000
+    }"#;
+    let ev: AnySyncTimelineEvent = serde_json::from_str(json).unwrap();
+    assert_eq!(message_body_from_sync_event(&ev), "hello world");
+
+    // A state event (not a message) → placeholder.
+    let json = r#"{
+        "type": "m.room.member",
+        "content": {"membership": "join"},
+        "event_id": "$2:localhost",
+        "sender": "@user:localhost",
+        "origin_server_ts": 2000,
+        "state_key": "@user:localhost"
+    }"#;
+    let ev: AnySyncTimelineEvent = serde_json::from_str(json).unwrap();
+    assert_eq!(
+        message_body_from_sync_event(&ev),
+        "Unsupported state event type"
+    );
+}
+
+/// `search_messages_in_room` should error when the room ID is invalid or the
+/// room doesn't exist, not panic.
+#[tokio::test]
+async fn test_search_messages_in_room_not_found() {
+    let tmp_dir = tempdir().unwrap();
+    let engine = match MatrixEngine::new(tmp_dir.path().to_path_buf()).await {
+        Ok(e) => e,
+        Err(e) => {
+            info!(
+                "Skipping test due to engine initialization failure (likely dbus/keyring): {}",
+                e
+            );
+            return;
+        }
+    };
+
+    // Invalid room ID format.
+    let result = engine
+        .search_messages_in_room("invalid_room_id", "test", 20)
+        .await;
+    assert!(result.is_err());
+
+    // Well-formed room ID but room not joined/known.
+    let result = engine
+        .search_messages_in_room("!nonexistent:localhost", "test", 20)
+        .await;
+    assert!(result.is_err());
+    assert_eq!(result.unwrap_err().to_string(), "Room not found");
+}

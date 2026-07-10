@@ -2324,6 +2324,10 @@ impl Constellations {
                 self.room_members.clear();
                 self.pinned_events.clear();
                 self.pinned_events_details.clear();
+                // Message search results are scoped to the previous room;
+                // clear them so stale hits don't bleed into the new room.
+                self.message_search_results.clear();
+                self.is_searching_messages = false;
                 self.inviting_to_room = false;
                 self.invite_to_room_id.clear();
                 // A room switch always leaves the event-focused (permalink
@@ -3019,6 +3023,8 @@ impl Constellations {
                     self.space_settings.child_filter.clear();
                     self.public_search_results.clear();
                     self.is_searching_public = false;
+                    self.message_search_results.clear();
+                    self.is_searching_messages = false;
                 } else if let Some(panel) = &self.current_settings_panel {
                     match panel {
                         SettingsPanel::Room => {
@@ -3049,25 +3055,66 @@ impl Constellations {
                 self.update_filtered_rooms();
 
                 if self.current_settings_panel.is_none() && !self.search_query.trim().is_empty() {
+                    let mut tasks = Vec::new();
+
+                    // Public rooms / spaces directory search (existing).
                     if let Some(matrix) = &self.matrix {
                         let query_str = self.search_query.trim().to_string();
                         let matrix = matrix.clone();
                         self.is_searching_public = true;
 
-                        Task::perform(
+                        tasks.push(Task::perform(
                             async move { matrix.search_public_rooms(query_str, Some(20)).await },
                             |res| {
                                 Action::from(Message::PublicSearchResults(
                                     res.map_err(|e| e.to_string()),
                                 ))
                             },
-                        )
-                    } else {
+                        ));
+                    }
+
+                    // Server-side message search (new). Only runs when a room is
+                    // selected; debounced so a fast-typed query doesn't hammer
+                    // the search index. The generation lets the result handler
+                    // discard results from a now-stale query.
+                    if let Some(matrix) = &self.matrix
+                        && let Some(room_id) = &self.selected_room
+                    {
+                        self.is_searching_messages = true;
+                        self.search_generation = self.search_generation.wrapping_add(1);
+                        let generation = self.search_generation;
+
+                        let query_str = self.search_query.trim().to_string();
+                        let room_id = room_id.clone();
+                        let matrix = matrix.clone();
+
+                        tasks.push(Task::perform(
+                            async move {
+                                // Debounce: wait for typing to settle before
+                                // querying the homeserver search index.
+                                tokio::time::sleep(std::time::Duration::from_millis(350)).await;
+                                matrix
+                                    .search_messages_in_room(&room_id, &query_str, 20)
+                                    .await
+                                    .map_err(|e| e.to_string())
+                            },
+                            move |res| Action::from(Message::MessageSearchResults(generation, res)),
+                        ));
+                    }
+
+                    if tasks.is_empty() {
                         Task::none()
+                    } else {
+                        Task::batch(tasks)
                     }
                 } else {
                     self.public_search_results.clear();
                     self.is_searching_public = false;
+                    self.message_search_results.clear();
+                    self.is_searching_messages = false;
+                    // Invalidate any in-flight message search so a late result
+                    // doesn't repopulate stale hits for the cleared query.
+                    self.search_generation = self.search_generation.wrapping_add(1);
                     Task::none()
                 }
             }
@@ -3102,6 +3149,24 @@ impl Constellations {
                             crate::fl!("error-failed-search-public-rooms", error = e.to_string())
                                 .to_string(),
                         );
+                    }
+                }
+                Task::none()
+            }
+            Message::MessageSearchResults(generation, res) => {
+                // Discard stale results from a query the user has since edited.
+                if generation != self.search_generation {
+                    return Task::none();
+                }
+                self.is_searching_messages = false;
+                match res {
+                    Ok(results) => {
+                        self.message_search_results = results;
+                    }
+                    Err(e) => {
+                        self.message_search_results.clear();
+                        self.error =
+                            Some(crate::fl!("search-server-failed", error = e).to_string());
                     }
                 }
                 Task::none()
@@ -3142,6 +3207,24 @@ impl Constellations {
                     )
                 } else {
                     Task::none()
+                }
+            }
+            Message::JumpToMessageOrLoadContext(event_id) => {
+                // If the hit is in the live window, scroll to it; otherwise
+                // build an event-focused timeline around it (the same path
+                // permalinks use) and scroll once it loads.
+                let loaded = self.timeline_items.iter().any(|item| {
+                    item.item_id.as_ref().is_some_and(|id| {
+                        matches!(
+                            id,
+                            matrix::TimelineEventItemId::EventId(eid) if eid == &event_id
+                        )
+                    })
+                });
+                if loaded {
+                    Task::done(Action::from(Message::JumpToMessage(event_id)))
+                } else {
+                    Task::done(Action::from(Message::LoadEventContext(event_id)))
                 }
             }
             Message::LoadEventContext(event_id) => self.handle_load_event_context(event_id),
@@ -3440,6 +3523,9 @@ mod tests {
             is_search_active: false,
             public_search_results: Vec::new(),
             is_searching_public: false,
+            message_search_results: Vec::new(),
+            is_searching_messages: false,
+            search_generation: 0,
             new_room_is_video: false,
             joined_room_ids: HashSet::new(),
             visited_room_ids: HashSet::new(),

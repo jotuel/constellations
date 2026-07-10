@@ -1425,81 +1425,82 @@ impl<'chat> Constellations {
     pub fn view_search_results(&self) -> Element<'_, Message> {
         let mut results_col = Column::new().spacing(15).width(cosmic::iced::Length::Fill);
 
-        // 1. Message matches
-        let mut matches = Vec::new();
-        for item in &self.timeline_items {
-            let body_matches = if let Some(timeline_item) = &item.item
-                && let Some(event) = timeline_item.as_event()
-                && let Some(message) = event.content().as_message()
-            {
-                crate::fuzzy_match_ignore_case(message.body(), &self.search_query)
-            } else {
-                item.plain_text.iter().any(|p| {
-                    if let crate::preview::PreviewEvent::Text(txt) = p {
-                        crate::fuzzy_match_ignore_case(txt.as_str(), &self.search_query)
-                    } else {
-                        false
-                    }
-                })
-            };
-
-            if body_matches {
-                matches.push(item);
-            }
-        }
-
-        // Section: Messages in this Room
-        if !matches.is_empty() {
+        // Section: Messages in this Room (server-side full-text search).
+        // Only shown when a room is selected — without one there is no room to
+        // search and `message_search_results` stays empty.
+        if self.selected_room.is_some() {
             results_col =
                 results_col.push(text::title3(crate::fl!("search-messages-in-room")).size(14));
-            let mut message_list = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
-            let thread_counts = std::collections::HashMap::new();
-            for item in matches {
-                let item_id_for_jump = item.item_id.clone();
-                let mut card_content = Column::new()
-                    .spacing(5)
-                    .push(self.view_item(item, &thread_counts));
 
-                if let Some(matrix::TimelineEventItemId::EventId(event_id)) = &item_id_for_jump {
-                    let event_id_clone = event_id.clone();
+            if self.is_searching_messages {
+                results_col = results_col.push(
+                    container(cosmic::widget::progress_bar::indeterminate_circular().size(24.0))
+                        .width(cosmic::iced::Length::Fill)
+                        .align_x(Alignment::Center)
+                        .padding(20),
+                );
+            } else if !self.message_search_results.is_empty() {
+                let mut message_list = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
+                for result in &self.message_search_results {
+                    let event_id = result.event_id.clone();
+
+                    let mut card_content = Column::new().spacing(5);
                     card_content = card_content.push(
                         Row::new()
-                            .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
+                            .spacing(8)
+                            .align_y(Alignment::Center)
                             .push(
-                                button::text(crate::fl!("jump-to-message"))
-                                    .on_press(Message::JumpToMessage(event_id_clone)),
-                            ),
+                                text::body(result.sender_id.as_str())
+                                    .font(cosmic::iced::Font {
+                                        weight: cosmic::iced::font::Weight::Bold,
+                                        ..Default::default()
+                                    })
+                                    .size(13),
+                            )
+                            .push(text::body(result.timestamp.as_str()).size(10)),
+                    );
+                    card_content = card_content
+                        .push(self.view_message_text(&result.plain_text, &result.links));
+
+                    let event_id_for_jump = event_id.clone();
+                    card_content =
+                        card_content.push(
+                            Row::new()
+                                .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
+                                .push(button::text(crate::fl!("jump-to-message")).on_press(
+                                    Message::JumpToMessageOrLoadContext(event_id_for_jump),
+                                )),
+                        );
+
+                    message_list = message_list.push(
+                        container(card_content)
+                            .style(|theme: &cosmic::Theme| {
+                                use cosmic::iced::widget::container::Catalog;
+                                let cosmic = theme.cosmic();
+                                let mut style = theme.style(&cosmic::theme::Container::Card);
+                                style.border.color = cosmic.accent.base.into();
+                                style.border.width = 1.0;
+                                style
+                            })
+                            .padding(10)
+                            .width(cosmic::iced::Length::Fill),
                     );
                 }
-
-                message_list = message_list.push(
-                    container(card_content)
-                        .style(|theme: &cosmic::Theme| {
-                            use cosmic::iced::widget::container::Catalog;
-                            let cosmic = theme.cosmic();
-                            let mut style = theme.style(&cosmic::theme::Container::Card);
-                            style.border.color = cosmic.accent.base.into();
-                            style.border.width = 1.0;
-                            style
-                        })
-                        .padding(10)
-                        .width(cosmic::iced::Length::Fill),
+                results_col = results_col.push(message_list);
+            } else {
+                results_col = results_col.push(
+                    container(
+                        Column::new()
+                            .spacing(10)
+                            .align_x(Alignment::Center)
+                            .push(cosmic::widget::icon::from_name("edit-find-symbolic").size(32))
+                            .push(text::body(crate::fl!("search-no-room-matches")).size(14)),
+                    )
+                    .width(cosmic::iced::Length::Fill)
+                    .align_x(Alignment::Center)
+                    .padding(20),
                 );
             }
-            results_col = results_col.push(message_list);
-        } else {
-            results_col = results_col.push(
-                container(
-                    Column::new()
-                        .spacing(10)
-                        .align_x(Alignment::Center)
-                        .push(cosmic::widget::icon::from_name("edit-find-symbolic").size(32))
-                        .push(text::body(crate::fl!("search-no-room-matches")).size(14)),
-                )
-                .width(cosmic::iced::Length::Fill)
-                .align_x(Alignment::Center)
-                .padding(20),
-            );
         }
 
         results_col = results_col.push(divider::horizontal::default());
