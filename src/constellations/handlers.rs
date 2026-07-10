@@ -965,6 +965,7 @@ impl Constellations {
                 // because MessageSent clears it but might not run for empty body
                 self.composer_content = cosmic::widget::text_editor::Content::new();
                 self.composer_preview_events.clear();
+                self.composer_preview_links.clear();
                 self.composer_is_preview = false;
                 self.replying_to = None;
                 self.editing_item = None;
@@ -2359,6 +2360,8 @@ impl Constellations {
             }
             Message::ComposerChanged(text) => {
                 self.composer_preview_events = parse_markdown(&text, false);
+                self.composer_preview_links =
+                    crate::preview::extract_links(&self.composer_preview_events);
                 self.composer_content = cosmic::widget::text_editor::Content::with_text(&text);
 
                 if self.app_settings.send_typing_notifications
@@ -2382,6 +2385,8 @@ impl Constellations {
                 self.composer_content.perform(action);
                 let text = self.composer_content.text();
                 self.composer_preview_events = parse_markdown(&text, false);
+                self.composer_preview_links =
+                    crate::preview::extract_links(&self.composer_preview_events);
 
                 if self.app_settings.send_typing_notifications
                     && let Some(matrix) = &self.matrix
@@ -2412,6 +2417,7 @@ impl Constellations {
                     Ok(_) => {
                         self.composer_content = cosmic::widget::text_editor::Content::new();
                         self.composer_preview_events.clear();
+                        self.composer_preview_links.clear();
                         self.composer_is_preview = false;
                         self.replying_to = None;
                         self.editing_item = None;
@@ -2430,6 +2436,7 @@ impl Constellations {
                     Ok(_) => {
                         self.composer_content = cosmic::widget::text_editor::Content::new();
                         self.composer_preview_events.clear();
+                        self.composer_preview_links.clear();
                         self.composer_is_preview = false;
                         self.editing_item = None;
                     }
@@ -2475,6 +2482,8 @@ impl Constellations {
                         cosmic::widget::text_editor::Content::with_text(msg.body());
                     self.composer_preview_events =
                         parse_markdown(&self.composer_content.text(), false);
+                    self.composer_preview_links =
+                        crate::preview::extract_links(&self.composer_preview_events);
                     self.editing_item = Some(item);
                     self.replying_to = None;
                 }
@@ -2484,6 +2493,7 @@ impl Constellations {
                 self.editing_item = None;
                 self.composer_content = cosmic::widget::text_editor::Content::new();
                 self.composer_preview_events.clear();
+                self.composer_preview_links.clear();
                 Task::none()
             }
             Message::RedactMessage(item_id) => self.handle_redact_message(item_id),
@@ -2610,6 +2620,8 @@ impl Constellations {
                 text.push_str(&emoji);
                 self.composer_content = cosmic::widget::text_editor::Content::with_text(&text);
                 self.composer_preview_events = parse_markdown(&text, false);
+                self.composer_preview_links =
+                    crate::preview::extract_links(&self.composer_preview_events);
 
                 if self.app_settings.send_typing_notifications
                     && let Some(matrix) = &self.matrix
@@ -3409,6 +3421,7 @@ mod tests {
             timeline_items: eyeball_im::Vector::new(),
             composer_content: cosmic::widget::text_editor::Content::new(),
             composer_preview_events: Vec::new(),
+            composer_preview_links: Vec::new(),
             composer_is_preview: false,
             user_id: None,
             media_cache: HashMap::new(),

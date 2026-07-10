@@ -446,23 +446,27 @@ impl<'chat> Constellations {
 
     fn view_message_text<'message>(
         &'message self,
-        markdown: &'message [PreviewEvent],
-        plain_text: &'message [PreviewEvent],
+        events: &'message [PreviewEvent],
+        links: &'message [(String, String)],
     ) -> Column<'message, Message, Theme> {
         let mut bubble_col: Column<'message, Message, Theme> = Column::new();
         // ⚡ Bolt Optimization: `RichSelectableText` now borrows `[PreviewEvent]` slices
         // avoiding a `.to_vec()` or `.to_string()` allocation bottleneck on every single frame.
-        if self.app_settings.render_markdown {
-            bubble_col = bubble_col.push(
-                crate::rich_text::RichSelectableText::new(markdown, Message::OpenUrl)
-                    .into_element(),
-            );
-        } else {
-            bubble_col = bubble_col.push(
-                crate::rich_text::RichSelectableText::new(plain_text, Message::OpenUrl)
-                    .into_element(),
-            );
+        bubble_col = bubble_col.push(
+            crate::rich_text::RichSelectableText::new(events, Message::OpenMatrixLink)
+                .into_element(),
+        );
+
+        if !links.is_empty() {
+            let mut links_col = Column::new().spacing(4);
+            for (label, url) in links {
+                let link_btn =
+                    button::link(label.clone()).on_press(Message::OpenMatrixLink(url.clone()));
+                links_col = links_col.push(link_btn);
+            }
+            bubble_col = bubble_col.push(links_col);
         }
+
         bubble_col
     }
 
@@ -544,11 +548,7 @@ impl<'chat> Constellations {
     pub fn view_preview(&self) -> Element<'_, Message> {
         container(
             scrollable(
-                crate::rich_text::RichSelectableText::new(
-                    &self.composer_preview_events,
-                    Message::OpenUrl,
-                )
-                .into_element(),
+                self.view_message_text(&self.composer_preview_events, &self.composer_preview_links),
             )
             .height(100),
         )
@@ -670,8 +670,12 @@ impl<'chat> Constellations {
                     bubble_col = bubble_col.push(self.view_message_file(file));
                 }
                 _ => {
-                    bubble_col =
-                        bubble_col.push(self.view_message_text(&item.markdown, &item.plain_text));
+                    let (events, links) = if self.app_settings.render_markdown {
+                        (&item.markdown, &item.markdown_links)
+                    } else {
+                        (&item.plain_text, &item.plain_links)
+                    };
+                    bubble_col = bubble_col.push(self.view_message_text(events, links));
                 }
             }
 
@@ -865,7 +869,12 @@ impl<'chat> Constellations {
                 .spacing(if self.app_settings.compact_mode { 0 } else { 2 })
                 .push(sender_info_wrap);
 
-            bubble_col = bubble_col.push(self.view_message_text(&item.markdown, &item.plain_text));
+            let (events, links) = if self.app_settings.render_markdown {
+                (&item.markdown, &item.markdown_links)
+            } else {
+                (&item.plain_text, &item.plain_links)
+            };
+            bubble_col = bubble_col.push(self.view_message_text(events, links));
 
             let bubble = container(bubble_col)
                 .style(move |theme: &cosmic::Theme| {

@@ -275,6 +275,7 @@ fn app(core: Core, config: settings::config::Config) -> Constellations {
         timeline_items: Vector::new(),
         composer_content: cosmic::widget::text_editor::Content::new(),
         composer_preview_events: Vec::new(),
+        composer_preview_links: Vec::new(),
         composer_is_preview: false,
         composer_attachments: Vec::new(),
         user_id: None,

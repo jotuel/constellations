@@ -139,6 +139,39 @@ pub fn parse_plain_text(text: &str) -> Vec<PreviewEvent> {
     events
 }
 
+pub fn extract_links(events: &[PreviewEvent]) -> Vec<(String, String)> {
+    let mut links = Vec::new();
+    let mut current_link = None;
+    let mut current_text = String::new();
+
+    for event in events {
+        match event {
+            PreviewEvent::StartLink(url) => {
+                current_link = Some(url.clone());
+                current_text.clear();
+            }
+            PreviewEvent::Text(text) => {
+                if current_link.is_some() {
+                    current_text.push_str(text);
+                }
+            }
+            PreviewEvent::EndLink => {
+                if let Some(url) = current_link.take() {
+                    let label = if current_text.trim().is_empty() {
+                        url.clone()
+                    } else {
+                        current_text.clone()
+                    };
+                    links.push((label, url));
+                }
+            }
+            _ => {}
+        }
+    }
+
+    links
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -292,6 +325,27 @@ mod tests {
                 PreviewEvent::Text("https://google.com/search?q=test".to_string()),
                 PreviewEvent::EndLink,
                 PreviewEvent::Text(", it is awesome!".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_extract_links() {
+        let text = "Check out [Google](https://google.com) and [](https://github.com) or just https://rust-lang.org!";
+        let events = parse_markdown(text, false);
+        let links = extract_links(&events);
+        assert_eq!(
+            links,
+            vec![
+                ("Google".to_string(), "https://google.com".to_string()),
+                (
+                    "https://github.com".to_string(),
+                    "https://github.com".to_string()
+                ),
+                (
+                    "https://rust-lang.org".to_string(),
+                    "https://rust-lang.org".to_string()
+                ),
             ]
         );
     }
