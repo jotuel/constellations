@@ -379,6 +379,7 @@ error-failed-invite = Failed to invite: { $error }
 error-failed-create-room = Failed to create room: { $error }
 error-failed-create-space = Failed to create space: { $error }
 error-failed-join-room = Failed to join room: { $error }
+error-failed-start-dm = Failed to start direct message: { $error }
 error-failed-search-public-rooms = Failed to search public rooms: { $error }
 error-failed-join-call = Failed to join call: { $error }
 error-failed-leave-call = Failed to leave call: { $error }

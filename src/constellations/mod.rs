@@ -251,6 +251,7 @@ pub enum Message {
     CopyMessageLink(matrix::TimelineEventItemId),
     CopyRoomLink(std::sync::Arc<str>),
     CopyToClipboard(Result<String, String>),
+    DmRoomResolved(Result<matrix_sdk::ruma::OwnedRoomId, String>),
     MatrixThreadDiff(
         matrix_sdk::ruma::OwnedEventId,
         eyeball_im::VectorDiff<std::sync::Arc<matrix::TimelineItem>>,
