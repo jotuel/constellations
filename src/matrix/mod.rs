@@ -435,6 +435,11 @@ struct MatrixEngineInner {
     qr_login_handle: Option<tokio::task::JoinHandle<()>>,
     call_participants: HashMap<OwnedRoomId, HashSet<matrix_sdk::ruma::OwnedUserId>>,
     active_call: Option<Arc<livekit::Room>>,
+    /// Whether the homeserver supports the server-side `/search` endpoint.
+    /// `None` = not yet probed, `Some(true)` = supported, `Some(false)` =
+    /// unsupported (404/405) → fall back to local seshat index backfill.
+    /// Reset on login/register/restore (new client → new homeserver).
+    server_search_supported: Option<bool>,
 }
 
 impl std::fmt::Debug for MatrixEngineInner {
@@ -513,6 +518,7 @@ impl MatrixEngine {
             qr_login_handle: None,
             call_participants: HashMap::new(),
             active_call: None,
+            server_search_supported: None,
         };
 
         let engine = Self {
@@ -914,6 +920,9 @@ impl MatrixEngine {
 
         let mut inner = self.inner.write().await;
         inner.client = client.clone();
+        // New client → possibly new homeserver → reset the cached search
+        // support decision so it's probed again on the next search.
+        inner.server_search_supported = None;
         inner.sync_service = Some(sync_service);
         inner.room_list_service = Some(room_list_service);
 
@@ -984,6 +993,9 @@ impl MatrixEngine {
 
         let mut inner = self.inner.write().await;
         inner.client = client.clone();
+        // New client → possibly new homeserver → reset the cached search
+        // support decision so it's probed again on the next search.
+        inner.server_search_supported = None;
         inner.sync_service = Some(sync_service);
         inner.room_list_service = Some(room_list_service);
 
@@ -1101,6 +1113,9 @@ impl MatrixEngine {
 
         let mut inner = self.inner.write().await;
         inner.client = client.clone();
+        // New client → possibly new homeserver → reset the cached search
+        // support decision so it's probed again on the next search.
+        inner.server_search_supported = None;
         inner.sync_service = Some(sync_service);
         inner.room_list_service = Some(room_list_service);
 
@@ -2758,6 +2773,9 @@ impl MatrixEngine {
 
         let mut inner = self.inner.write().await;
         inner.client = client.clone();
+        // New client → possibly new homeserver → reset the cached search
+        // support decision so it's probed again on the next search.
+        inner.server_search_supported = None;
         inner.sync_service = Some(sync_service);
         inner.room_list_service = Some(room_list_service);
 
@@ -2931,25 +2949,58 @@ impl MatrixEngine {
         }
     }
 
-    /// Searches the room's full message history via the homeserver's
-    /// server-side `/search` endpoint (`POST /_matrix/client/v3/search`),
-    /// returning the first batch of results enriched with sender/body/
-    /// timestamp so the UI can render them without a second round-trip.
+    /// Searches the room's message history, trying the homeserver's server-side
+    /// `/search` endpoint first and falling back to the local seshat index
+    /// (with a one-time backwards-pagination backfill) when the server doesn't
+    /// implement search.
     ///
-    /// Unlike the local `experimental-search` seshat index (which only covers
-    /// events synced *after* the index was created), the server endpoint
-    /// searches the entire room history — but requires the homeserver to
-    /// implement it, which not all do.
-    ///
-    /// Only the first batch (`max_results` events) is fetched; pagination via
-    /// the `next_batch` token is not yet wired into the UI.
+    /// The server-search decision is cached on the engine so the probe happens
+    /// at most once per client lifetime; once a 404/405 is seen, all subsequent
+    /// searches go straight to the local index.
     pub async fn search_messages_in_room(
         &self,
         room_id: &str,
         query: &str,
         max_results: usize,
     ) -> Result<Vec<MessageSearchResult>> {
-        let room_id_parsed = RoomId::parse(room_id)?;
+        // Check the cached decision.
+        let use_server = {
+            let inner = self.inner.read().await;
+            inner.server_search_supported.unwrap_or(true)
+        };
+
+        if use_server {
+            match self.server_search(room_id, query, max_results).await {
+                Ok(results) => {
+                    // Cache support on first success.
+                    let mut inner = self.inner.write().await;
+                    inner.server_search_supported = Some(true);
+                    return Ok(results);
+                }
+                Err(SearchError::Unsupported) => {
+                    // 404/405 — cache and fall through to local backfill.
+                    let mut inner = self.inner.write().await;
+                    inner.server_search_supported = Some(false);
+                }
+                Err(SearchError::Other(e)) => return Err(e),
+            }
+        }
+
+        self.local_search_with_backfill(room_id, query, max_results)
+            .await
+    }
+
+    /// Server-side `/search` via `POST /_matrix/client/v3/search`, scoped to a
+    /// single room. Returns a typed error so the caller can distinguish
+    /// "endpoint not supported" from real failures.
+    async fn server_search(
+        &self,
+        room_id: &str,
+        query: &str,
+        max_results: usize,
+    ) -> std::result::Result<Vec<MessageSearchResult>, SearchError> {
+        let room_id_parsed =
+            RoomId::parse(room_id).map_err(|e| SearchError::Other(anyhow::anyhow!(e)))?;
         let client = self.client().await;
 
         use matrix_sdk::ruma::api::client::search::search_events::v3;
@@ -2968,14 +3019,23 @@ impl MatrixEngine {
         categories.room_events = Some(criteria);
         let request = v3::Request::new(categories);
 
-        let response = client.send(request).await?;
+        let response = client.send(request).await.map_err(|e| {
+            let sdk_err = matrix_sdk::Error::from(e);
+            if is_search_unsupported(&sdk_err) {
+                SearchError::Unsupported
+            } else {
+                SearchError::Other(anyhow::anyhow!(sdk_err))
+            }
+        })?;
         let room_results = response.search_categories.room_events;
 
         let mut results = Vec::with_capacity(room_results.results.len());
         for raw_event in room_results.results.into_iter().filter_map(|r| r.result) {
             // The server returns decrypted plain-text events (it has the keys
             // for rooms we're joined to), so a single deserialize suffices.
-            let event: matrix_sdk::ruma::events::AnyTimelineEvent = raw_event.deserialize()?;
+            let event: matrix_sdk::ruma::events::AnyTimelineEvent = raw_event
+                .deserialize()
+                .map_err(|e| SearchError::Other(anyhow::anyhow!(e)))?;
 
             let event_id = event.event_id().to_owned();
             let sender_id = event.sender().to_owned();
@@ -3000,6 +3060,101 @@ impl MatrixEngine {
                     .format("%Y-%m-%d %H:%M:%S")
                     .to_string()
             };
+
+            let plain_text = crate::preview::parse_plain_text(&body);
+            let links = crate::preview::extract_links(&plain_text);
+
+            results.push(MessageSearchResult {
+                event_id,
+                sender_id,
+                body,
+                timestamp,
+                plain_text,
+                links,
+            });
+        }
+
+        Ok(results)
+    }
+
+    /// Local fallback: paginate the room's full history backwards through the
+    /// event cache (which auto-indexes events into the seshat store), then
+    /// query the local search index.
+    ///
+    /// The backfill only does significant network work the first time a room is
+    /// searched (the index is empty); on subsequent searches the seshat index
+    /// already has the history, so `paginate_backwards` hits the on-disk event
+    /// cache (fast, no network) and the local query returns instantly.
+    async fn local_search_with_backfill(
+        &self,
+        room_id: &str,
+        query: &str,
+        max_results: usize,
+    ) -> Result<Vec<MessageSearchResult>> {
+        let room_id_parsed = RoomId::parse(room_id)?;
+        let room = {
+            let inner = self.inner.read().await;
+            inner
+                .client
+                .get_room(&room_id_parsed)
+                .context("Room not found")?
+        };
+        let timeline = self.timeline(room_id).await?;
+
+        // 1. Backfill: paginate backwards until the timeline start is reached.
+        //    The network path feeds events into the seshat index automatically.
+        //    Cap iterations as a safety valve against infinite loops on very
+        //    large rooms (500 × 50 = 25 000 events).
+        for _ in 0..500 {
+            let reached_start = timeline.paginate_backwards(50).await?;
+            if reached_start {
+                break;
+            }
+        }
+
+        // 2. Query the now-populated local seshat index.
+        let mut search_iter = room.search_messages(query.to_owned(), max_results);
+        let Some(events) = search_iter.next_events().await? else {
+            return Ok(Vec::new());
+        };
+
+        // 3. Map TimelineEvents → MessageSearchResult.
+        let mut results = Vec::with_capacity(events.len());
+        for event in events {
+            let event_id = match event.event_id() {
+                Some(id) => id,
+                None => continue,
+            };
+            let sender_id = event
+                .sender()
+                .unwrap_or_else(|| matrix_sdk::ruma::user_id!("@unknown:example.com").to_owned());
+
+            let body = match &event.kind {
+                matrix_sdk::deserialized_responses::TimelineEventKind::Decrypted(decrypted) => {
+                    let ev: matrix_sdk::ruma::events::AnySyncTimelineEvent =
+                        decrypted.event.deserialize()?.into();
+                    message_body_from_sync_event(&ev)
+                }
+                matrix_sdk::deserialized_responses::TimelineEventKind::UnableToDecrypt {
+                    event,
+                    ..
+                }
+                | matrix_sdk::deserialized_responses::TimelineEventKind::PlainText {
+                    event, ..
+                } => message_body_from_sync_event(&event.deserialize()?),
+            };
+
+            let timestamp = event
+                .timestamp()
+                .map(|ts| {
+                    let ts_millis = u64::from(ts.0);
+                    chrono::DateTime::from_timestamp_millis(ts_millis as i64)
+                        .unwrap_or_default()
+                        .with_timezone(&chrono::Local)
+                        .format("%Y-%m-%d %H:%M:%S")
+                        .to_string()
+                })
+                .unwrap_or_default();
 
             let plain_text = crate::preview::parse_plain_text(&body);
             let links = crate::preview::extract_links(&plain_text);
@@ -3365,6 +3520,51 @@ pub struct MessageSearchResult {
     // Mirrors the pre-compute optimization in `ConstellationsItem::new`.
     pub plain_text: Vec<crate::PreviewEvent>,
     pub links: Vec<(String, String)>,
+}
+
+/// Error from the server-side search probe, distinguishing "endpoint not
+/// supported" (→ fall back to local index) from real failures.
+enum SearchError {
+    /// The homeserver returned 404 / 405 for `/search`.
+    Unsupported,
+    /// Any other error (network, auth, deserialization).
+    Other(anyhow::Error),
+}
+
+/// Returns true if the error indicates the homeserver doesn't implement the
+/// `/search` endpoint. Checks the structured status code first (works for
+/// Synapse-style JSON error responses), then falls back to string matching
+/// for servers that return a raw 404 without a Matrix error body (Dendrite,
+/// Conduit).
+fn is_search_unsupported(e: &matrix_sdk::Error) -> bool {
+    // Structured path: a Matrix error response with a 404/405 status.
+    if let Some(api_err) = e.as_client_api_error()
+        && (api_err.status_code == matrix_sdk::ruma::exports::http::StatusCode::NOT_FOUND
+            || api_err.status_code
+                == matrix_sdk::ruma::exports::http::StatusCode::METHOD_NOT_ALLOWED)
+    {
+        return true;
+    }
+
+    // Fallback: string match for raw HTTP errors without a Matrix body.
+    let msg = e.to_string();
+    msg.contains("404 Not Found") || msg.contains("405 Method Not Allowed")
+}
+
+/// Extracts the display body from a deserialized sync timeline event,
+/// returning a placeholder for non-message events.
+fn message_body_from_sync_event(ev: &matrix_sdk::ruma::events::AnySyncTimelineEvent) -> String {
+    match ev {
+        matrix_sdk::ruma::events::AnySyncTimelineEvent::MessageLike(msg) => match msg {
+            matrix_sdk::ruma::events::AnySyncMessageLikeEvent::RoomMessage(
+                matrix_sdk::ruma::events::SyncMessageLikeEvent::Original(
+                    matrix_sdk::ruma::events::OriginalSyncMessageLikeEvent { content, .. },
+                ),
+            ) => content.body().to_string(),
+            _ => "Unsupported message event type".to_string(),
+        },
+        _ => "Unsupported state event type".to_string(),
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
