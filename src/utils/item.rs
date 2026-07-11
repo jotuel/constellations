@@ -160,10 +160,7 @@ mod tests {
         assert_eq!(
             item.plain_links,
             vec![
-                (
-                    "https://google.com".to_string(),
-                    "https://google.com".to_string()
-                ),
+                ("Google".to_string(), "https://google.com".to_string()),
                 (
                     "https://rust-lang.org".to_string(),
                     "https://rust-lang.org".to_string()
