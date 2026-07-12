@@ -389,8 +389,8 @@ impl MenuAction for MenuAct {
 impl Constellations {
     pub fn mock() -> Self {
         use cosmic::Core;
-        use std::collections::HashMap;
         use eyeball_im::Vector;
+        use std::collections::HashMap;
 
         Constellations {
             core: Core::default(),
