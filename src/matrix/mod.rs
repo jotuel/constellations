@@ -2346,7 +2346,9 @@ impl MatrixEngine {
         }
 
         let mut content = SpaceChildEventContent::new(via);
-        content.order = order.map(|o| matrix_sdk::ruma::OwnedSpaceChildOrder::try_from(o).unwrap());
+        content.order = order
+            .map(matrix_sdk::ruma::OwnedSpaceChildOrder::try_from)
+            .transpose()?;
         content.suggested = suggested;
         space
             .send_state_event_for_key(&child_id_parsed, content)
@@ -3342,28 +3344,34 @@ impl MatrixEngine {
         let store_path = data_dir.join("matrix-store");
         let search_index_path = data_dir.join("search-index");
 
-        if !data_dir.exists() {
-            std::fs::create_dir_all(&data_dir)?;
+        if !tokio::fs::try_exists(&data_dir).await.unwrap_or(false) {
+            tokio::fs::create_dir_all(&data_dir).await?;
         }
 
-        if !store_path.exists() && search_index_path.exists() {
+        if !tokio::fs::try_exists(&store_path).await.unwrap_or(false)
+            && tokio::fs::try_exists(&search_index_path)
+                .await
+                .unwrap_or(false)
+        {
             tracing::info!(
                 "Fresh SQLite store, clearing existing search index path to prevent mismatched keys."
             );
-            let _ = std::fs::remove_dir_all(&search_index_path);
+            let _ = tokio::fs::remove_dir_all(&search_index_path).await;
         }
 
         let passphrase = Self::get_or_create_store_passphrase().await?;
 
         let mut key_mismatch = false;
-        if search_index_path.exists()
-            && let Ok(entries) = std::fs::read_dir(&search_index_path)
+        if tokio::fs::try_exists(&search_index_path)
+            .await
+            .unwrap_or(false)
+            && let Ok(mut entries) = tokio::fs::read_dir(&search_index_path).await
         {
-            for entry in entries.flatten() {
-                if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            while let Ok(Some(entry)) = entries.next_entry().await {
+                if entry.file_type().await.map(|t| t.is_dir()).unwrap_or(false) {
                     let key_path = entry.path().join("seshat-index.key");
-                    if key_path.exists()
-                        && let Ok(bytes) = std::fs::read(&key_path)
+                    if tokio::fs::try_exists(&key_path).await.unwrap_or(false)
+                        && let Ok(bytes) = tokio::fs::read(&key_path).await
                         && matrix_sdk_store_encryption::StoreCipher::import(&passphrase, &bytes)
                             .is_err()
                     {
@@ -3379,7 +3387,7 @@ impl MatrixEngine {
         }
 
         if key_mismatch {
-            let _ = std::fs::remove_dir_all(&search_index_path);
+            let _ = tokio::fs::remove_dir_all(&search_index_path).await;
         }
 
         let build_client = |path: PathBuf, search_path: PathBuf, pass: String| {
