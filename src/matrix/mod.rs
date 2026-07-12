@@ -2346,7 +2346,9 @@ impl MatrixEngine {
         }
 
         let mut content = SpaceChildEventContent::new(via);
-        content.order = order.map(|o| matrix_sdk::ruma::OwnedSpaceChildOrder::try_from(o)).transpose()?;
+        content.order = order
+            .map(matrix_sdk::ruma::OwnedSpaceChildOrder::try_from)
+            .transpose()?;
         content.suggested = suggested;
         space
             .send_state_event_for_key(&child_id_parsed, content)
