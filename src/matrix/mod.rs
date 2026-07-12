@@ -338,9 +338,7 @@ impl SpaceHierarchy {
             if descendants.insert(current.as_str())
                 && let Some(children) = self.children.get(current)
             {
-                for child in children.keys() {
-                    queue.push(child);
-                }
+                queue.extend(children.keys().map(|k| &**k));
             }
         }
         descendants
