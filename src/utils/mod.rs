@@ -269,6 +269,34 @@ mod tests {
     }
 
     #[test]
+    fn test_fuzzy_match_ignore_case() {
+        // Empty query
+        assert!(fuzzy_match_ignore_case("anything", ""));
+        assert!(fuzzy_match_ignore_case("", ""));
+
+        // Exact match
+        assert!(fuzzy_match_ignore_case("HelloWorld", "HelloWorld"));
+        assert!(fuzzy_match_ignore_case("HelloWorld", "helloworld"));
+        assert!(fuzzy_match_ignore_case("helloworld", "HelloWorld"));
+
+        // Fuzzy match
+        assert!(fuzzy_match_ignore_case("Hello World", "hwd"));
+        assert!(fuzzy_match_ignore_case("matrix-rust-sdk", "mrs"));
+        assert!(fuzzy_match_ignore_case("matrix-rust-sdk", "matrsdk"));
+
+        // Non-match
+        assert!(!fuzzy_match_ignore_case("Hello World", "foo"));
+        assert!(!fuzzy_match_ignore_case("Hello World", "hdw")); // out of order
+        assert!(!fuzzy_match_ignore_case("matrix", "xmatrix")); // missing x at start
+
+        // Non-ASCII and emojis
+        assert!(fuzzy_match_ignore_case("héllo wörld", "hlwr"));
+        assert!(fuzzy_match_ignore_case("Emoji 🚀 Test", "mojitst"));
+        assert!(fuzzy_match_ignore_case("Emoji 🚀 Test", "🚀t"));
+        assert!(!fuzzy_match_ignore_case("Emoji 🚀 Test", "🚀x"));
+    }
+
+    #[test]
     fn test_redact_url() {
         // query params `code` and `state` redacted to "[REDACTED]", while a normal param (e.g. `room`) is preserved
         let url =
