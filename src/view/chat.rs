@@ -1869,3 +1869,50 @@ fn view_reply_bar<'a>(
             Position::Top,
         ))
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::constellations::Constellations;
+
+    #[test]
+    fn test_view_timeline_renders_without_panicking() {
+        let constellations = Constellations::mock();
+        let _element = constellations.view_timeline();
+    }
+
+    #[test]
+    fn test_view_threaded_timeline_renders_without_panicking() {
+        let constellations = Constellations::mock();
+        let _element = constellations.view_threaded_timeline();
+    }
+
+    #[test]
+    fn test_view_main_content_renders_without_panicking() {
+        let constellations = Constellations::mock();
+        let _element = constellations.view_main_content();
+    }
+
+    #[test]
+    fn test_view_composer_renders_without_panicking() {
+        let constellations = Constellations::mock();
+        let _element = constellations.view_composer();
+    }
+
+    #[test]
+    fn test_view_search_results_renders_without_panicking() {
+        let constellations = Constellations::mock();
+        let _element = constellations.view_search_results();
+    }
+
+    #[test]
+    fn test_view_members_panel_renders_without_panicking() {
+        let constellations = Constellations::mock();
+        let _element = constellations.view_members_panel();
+    }
+
+    #[test]
+    fn test_view_pinned_panel_renders_without_panicking() {
+        let constellations = Constellations::mock();
+        let _element = constellations.view_pinned_panel();
+    }
+}
