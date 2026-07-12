@@ -357,7 +357,10 @@ mod tests {
         assert_eq!(vec, vec![1, 5, 2, 3]);
 
         // Insert out of bounds (should push back according to apply_diff logic)
-        vec.apply_diff(eyeball_im::VectorDiff::Insert { index: 10, value: 6 });
+        vec.apply_diff(eyeball_im::VectorDiff::Insert {
+            index: 10,
+            value: 6,
+        });
         assert_eq!(vec, vec![1, 5, 2, 3, 6]);
 
         // Remove
@@ -373,7 +376,10 @@ mod tests {
         assert_eq!(vec, vec![1, 7, 3, 6]);
 
         // Set out of bounds (should do nothing)
-        vec.apply_diff(eyeball_im::VectorDiff::Set { index: 10, value: 8 });
+        vec.apply_diff(eyeball_im::VectorDiff::Set {
+            index: 10,
+            value: 8,
+        });
         assert_eq!(vec, vec![1, 7, 3, 6]);
 
         // Clear
