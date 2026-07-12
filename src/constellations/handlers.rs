@@ -19,7 +19,7 @@ type PinnedOutput =
     std::pin::Pin<Box<dyn Future<Output = (String, Result<Vec<u8>, String>)> + Send + 'static>>;
 
 impl Constellations {
-    pub fn restore_scroll_task(&self) -> Task<Action<Message>> {
+    pub fn restore_scroll_task(&self) -> Task<Message> {
         if self.active_thread_root.is_some() {
             if self.is_threaded_timeline_at_bottom {
                 scrollable::snap_to(
@@ -111,7 +111,7 @@ impl Constellations {
         &mut self,
         user_id: Option<String>,
         sync_res: Result<(), matrix::SyncError>,
-    ) -> Task<Action<Message>> {
+    ) -> Task<Message> {
         self.user_id = user_id;
         self.is_initializing = false;
         let title_task = self.update_title();
@@ -184,7 +184,7 @@ impl Constellations {
         Task::batch(tasks)
     }
 
-    pub fn fetch_missing_media(&mut self) -> Task<Action<Message>> {
+    pub fn fetch_missing_media(&mut self) -> Task<Message> {
         let mut media_fetches: Vec<PinnedOutput> = Vec::new();
 
         let matrix = match &self.matrix {
@@ -691,7 +691,7 @@ impl Constellations {
         }
     }
 
-    pub fn handle_join_call(&mut self) -> Task<Action<Message>> {
+    pub fn handle_join_call(&mut self) -> Task<Message> {
         if let (Some(matrix), Some(room_id)) = (&self.matrix, &self.selected_room) {
             let matrix = matrix.clone();
             let room_id = room_id.clone();
@@ -704,7 +704,7 @@ impl Constellations {
         }
     }
 
-    pub fn handle_leave_call(&mut self) -> Task<Action<Message>> {
+    pub fn handle_leave_call(&mut self) -> Task<Message> {
         if let (Some(matrix), Some(room_id)) = (&self.matrix, &self.selected_room) {
             let matrix = matrix.clone();
             let room_id = room_id.to_string();
@@ -1995,7 +1995,7 @@ impl Constellations {
         }
     }
 
-    pub fn handle_update(&mut self, message: Message) -> Task<Action<Message>> {
+    pub fn handle_update(&mut self, message: Message) -> Task<Message> {
         match message {
             Message::EngineReady(res) => self.handle_engine_ready(res),
             Message::UserReady(user_id, sync_res) => self.handle_user_ready(user_id, sync_res),
@@ -2109,210 +2109,7 @@ impl Constellations {
                     Task::none()
                 }
             }
-            Message::TimelineScrolled(viewport, is_thread) => {
-                let current_offset = viewport.absolute_offset().y;
-                let current_height = viewport.content_bounds().height;
-
-                if is_thread {
-                    if !self.is_threaded_timeline_initialized {
-                        return Task::none();
-                    }
-
-                    tracing::info!(
-                        "TimelineScrolled (thread): offset={}, content_height={}, viewport_w={}, viewport_h={}, last_h={}, last_w={}, last_vh={}",
-                        current_offset,
-                        current_height,
-                        viewport.bounds().width,
-                        viewport.bounds().height,
-                        self.last_threaded_content_height,
-                        self.last_threaded_viewport_width,
-                        self.last_threaded_viewport_height
-                    );
-
-                    let mut is_layout_resize = false;
-                    if (self.needs_threaded_layout_scroll_restoration
-                        || (self.last_threaded_content_height > 0.0
-                            && current_height != self.last_threaded_content_height)
-                        || (self.last_threaded_viewport_width > 0.0
-                            && viewport.bounds().width != self.last_threaded_viewport_width)
-                        || (self.last_threaded_viewport_height > 0.0
-                            && viewport.bounds().height != self.last_threaded_viewport_height))
-                        && !self.needs_threaded_scroll_adjustment
-                    {
-                        is_layout_resize = true;
-                    }
-                    self.needs_threaded_layout_scroll_restoration = false;
-
-                    let mut task = Task::none();
-                    let mut actual_offset = current_offset;
-
-                    if self.needs_threaded_scroll_adjustment
-                        && self.last_threaded_content_height > 0.0
-                        && current_height > self.last_threaded_content_height
-                    {
-                        self.needs_threaded_scroll_adjustment = false;
-                        let diff_height = current_height - self.last_threaded_content_height;
-                        actual_offset = current_offset + diff_height;
-                        task = scrollable::scroll_to(
-                            THREADED_TIMELINE_ID.clone(),
-                            scrollable::AbsoluteOffset {
-                                x: Some(0.0),
-                                y: Some(actual_offset),
-                            },
-                        );
-                    } else if is_layout_resize {
-                        if self.is_threaded_timeline_at_bottom {
-                            task = scrollable::snap_to(
-                                THREADED_TIMELINE_ID.clone(),
-                                scrollable::RelativeOffset::END.into(),
-                            );
-                        } else {
-                            let target_offset = self
-                                .last_threaded_timeline_offset
-                                .min(current_height - viewport.bounds().height)
-                                .max(0.0);
-                            task = scrollable::scroll_to(
-                                THREADED_TIMELINE_ID.clone(),
-                                scrollable::AbsoluteOffset {
-                                    x: Some(0.0),
-                                    y: Some(target_offset),
-                                },
-                            );
-                            actual_offset = target_offset;
-                        }
-                    }
-
-                    if is_layout_resize {
-                        tracing::info!(
-                            "TimelineScrolled (thread) layout resize: target_offset={}",
-                            actual_offset
-                        );
-                    }
-
-                    let last_offset = self.last_threaded_timeline_offset;
-                    let should_load =
-                        !is_layout_resize && actual_offset < 100.0 && actual_offset < last_offset;
-                    let is_at_bottom =
-                        actual_offset + viewport.bounds().height >= current_height - 20.0;
-
-                    if !is_layout_resize {
-                        self.last_threaded_timeline_offset = actual_offset;
-                        self.last_threaded_content_height = current_height;
-                        self.last_threaded_viewport_width = viewport.bounds().width;
-                        self.last_threaded_viewport_height = viewport.bounds().height;
-                        self.is_threaded_timeline_at_bottom = is_at_bottom;
-                    } else {
-                        self.last_threaded_content_height = current_height;
-                        self.last_threaded_viewport_width = viewport.bounds().width;
-                        self.last_threaded_viewport_height = viewport.bounds().height;
-                    }
-
-                    if should_load {
-                        Task::batch(vec![task, self.handle_load_more(true)])
-                    } else {
-                        task
-                    }
-                } else {
-                    if !self.is_timeline_initialized {
-                        return Task::none();
-                    }
-
-                    tracing::info!(
-                        "TimelineScrolled: offset={}, content_height={}, viewport_w={}, viewport_h={}, last_h={}, last_w={}, last_vh={}",
-                        current_offset,
-                        current_height,
-                        viewport.bounds().width,
-                        viewport.bounds().height,
-                        self.last_content_height,
-                        self.last_viewport_width,
-                        self.last_viewport_height
-                    );
-
-                    let mut is_layout_resize = false;
-                    if (self.needs_layout_scroll_restoration
-                        || (self.last_content_height > 0.0
-                            && current_height != self.last_content_height)
-                        || (self.last_viewport_width > 0.0
-                            && viewport.bounds().width != self.last_viewport_width)
-                        || (self.last_viewport_height > 0.0
-                            && viewport.bounds().height != self.last_viewport_height))
-                        && !self.needs_scroll_adjustment
-                    {
-                        is_layout_resize = true;
-                    }
-                    self.needs_layout_scroll_restoration = false;
-
-                    let mut task = Task::none();
-                    let mut actual_offset = current_offset;
-
-                    if self.needs_scroll_adjustment
-                        && self.last_content_height > 0.0
-                        && current_height > self.last_content_height
-                    {
-                        self.needs_scroll_adjustment = false;
-                        let diff_height = current_height - self.last_content_height;
-                        actual_offset = current_offset + diff_height;
-                        task = scrollable::scroll_to(
-                            TIMELINE_ID.clone(),
-                            scrollable::AbsoluteOffset {
-                                x: Some(0.0),
-                                y: Some(actual_offset),
-                            },
-                        );
-                    } else if is_layout_resize {
-                        if self.is_timeline_at_bottom {
-                            task = scrollable::snap_to(
-                                TIMELINE_ID.clone(),
-                                scrollable::RelativeOffset::END.into(),
-                            );
-                        } else {
-                            let target_offset = self
-                                .last_timeline_offset
-                                .min(current_height - viewport.bounds().height)
-                                .max(0.0);
-                            task = scrollable::scroll_to(
-                                TIMELINE_ID.clone(),
-                                scrollable::AbsoluteOffset {
-                                    x: Some(0.0),
-                                    y: Some(target_offset),
-                                },
-                            );
-                            actual_offset = target_offset;
-                        }
-                    }
-
-                    if is_layout_resize {
-                        tracing::info!(
-                            "TimelineScrolled layout resize: target_offset={}",
-                            actual_offset
-                        );
-                    }
-
-                    let last_offset = self.last_timeline_offset;
-                    let should_load =
-                        !is_layout_resize && actual_offset < 100.0 && actual_offset < last_offset;
-                    let is_at_bottom =
-                        actual_offset + viewport.bounds().height >= current_height - 20.0;
-
-                    if !is_layout_resize {
-                        self.last_timeline_offset = actual_offset;
-                        self.last_content_height = current_height;
-                        self.last_viewport_width = viewport.bounds().width;
-                        self.last_viewport_height = viewport.bounds().height;
-                        self.is_timeline_at_bottom = is_at_bottom;
-                    } else {
-                        self.last_content_height = current_height;
-                        self.last_viewport_width = viewport.bounds().width;
-                        self.last_viewport_height = viewport.bounds().height;
-                    }
-
-                    if should_load {
-                        Task::batch(vec![task, self.handle_load_more(false)])
-                    } else {
-                        task
-                    }
-                }
-            }
+            Message::TimelineScrolled(viewport, is_thread) => self.handle_timeline_scrolled(viewport, is_thread),
             Message::RoomSelected(room_id) => {
                 if let Some(room) = self.room_list.iter().find(|r| r.id == room_id)
                     && let Some(name) = &room.name
@@ -3339,7 +3136,142 @@ impl Constellations {
         }
     }
 
-    fn fetch_members_task(&self) -> Task<Action<Message>> {
+    fn handle_timeline_scrolled(
+        &mut self,
+        viewport: cosmic::iced::widget::scrollable::Viewport,
+        is_thread: bool,
+    ) -> Task<Message> {
+        let current_offset = viewport.absolute_offset().y;
+        let current_height = viewport.content_bounds().height;
+
+        let is_initialized = if is_thread {
+            self.is_threaded_timeline_initialized
+        } else {
+            self.is_timeline_initialized
+        };
+
+        if !is_initialized {
+            return Task::none();
+        }
+
+        let prefix = if is_thread { "TimelineScrolled (thread)" } else { "TimelineScrolled" };
+        let last_content_height = if is_thread { self.last_threaded_content_height } else { self.last_content_height };
+        let last_viewport_width = if is_thread { self.last_threaded_viewport_width } else { self.last_viewport_width };
+        let last_viewport_height = if is_thread { self.last_threaded_viewport_height } else { self.last_viewport_height };
+        let needs_layout_scroll_restoration = if is_thread { self.needs_threaded_layout_scroll_restoration } else { self.needs_layout_scroll_restoration };
+        let needs_scroll_adjustment = if is_thread { self.needs_threaded_scroll_adjustment } else { self.needs_scroll_adjustment };
+
+        tracing::info!(
+            "{}: offset={}, content_height={}, viewport_w={}, viewport_h={}, last_h={}, last_w={}, last_vh={}",
+            prefix, current_offset, current_height, viewport.bounds().width, viewport.bounds().height,
+            last_content_height, last_viewport_width, last_viewport_height
+        );
+
+        let mut is_layout_resize = false;
+        if (needs_layout_scroll_restoration
+            || (last_content_height > 0.0 && current_height != last_content_height)
+            || (last_viewport_width > 0.0 && viewport.bounds().width != last_viewport_width)
+            || (last_viewport_height > 0.0 && viewport.bounds().height != last_viewport_height))
+            && !needs_scroll_adjustment
+        {
+            is_layout_resize = true;
+        }
+
+        if is_thread {
+            self.needs_threaded_layout_scroll_restoration = false;
+        } else {
+            self.needs_layout_scroll_restoration = false;
+        }
+
+        let mut task = Task::none();
+        let mut actual_offset = current_offset;
+        let timeline_id = if is_thread { THREADED_TIMELINE_ID.clone() } else { TIMELINE_ID.clone() };
+
+        let needs_adjustment = if is_thread { self.needs_threaded_scroll_adjustment } else { self.needs_scroll_adjustment };
+
+        if needs_adjustment && last_content_height > 0.0 && current_height > last_content_height {
+            if is_thread {
+                self.needs_threaded_scroll_adjustment = false;
+            } else {
+                self.needs_scroll_adjustment = false;
+            }
+            let diff_height = current_height - last_content_height;
+            actual_offset = current_offset + diff_height;
+            task = scrollable::scroll_to(
+                timeline_id,
+                scrollable::AbsoluteOffset {
+                    x: Some(0.0),
+                    y: Some(actual_offset),
+                },
+            );
+        } else if is_layout_resize {
+            let is_at_bottom = if is_thread { self.is_threaded_timeline_at_bottom } else { self.is_timeline_at_bottom };
+            if is_at_bottom {
+                task = scrollable::snap_to(
+                    timeline_id,
+                    scrollable::RelativeOffset::END.into(),
+                );
+            } else {
+                let last_offset = if is_thread { self.last_threaded_timeline_offset } else { self.last_timeline_offset };
+                let target_offset = last_offset
+                    .min(current_height - viewport.bounds().height)
+                    .max(0.0);
+                task = scrollable::scroll_to(
+                    timeline_id,
+                    scrollable::AbsoluteOffset {
+                        x: Some(0.0),
+                        y: Some(target_offset),
+                    },
+                );
+                actual_offset = target_offset;
+            }
+        }
+
+        if is_layout_resize {
+            tracing::info!(
+                "{} layout resize: target_offset={}",
+                prefix, actual_offset
+            );
+        }
+
+        let last_offset = if is_thread { self.last_threaded_timeline_offset } else { self.last_timeline_offset };
+        let should_load = !is_layout_resize && actual_offset < 100.0 && actual_offset < last_offset;
+        let is_at_bottom = actual_offset + viewport.bounds().height >= current_height - 20.0;
+
+        if !is_layout_resize {
+            if is_thread {
+                self.last_threaded_timeline_offset = actual_offset;
+                self.last_threaded_content_height = current_height;
+                self.last_threaded_viewport_width = viewport.bounds().width;
+                self.last_threaded_viewport_height = viewport.bounds().height;
+                self.is_threaded_timeline_at_bottom = is_at_bottom;
+            } else {
+                self.last_timeline_offset = actual_offset;
+                self.last_content_height = current_height;
+                self.last_viewport_width = viewport.bounds().width;
+                self.last_viewport_height = viewport.bounds().height;
+                self.is_timeline_at_bottom = is_at_bottom;
+            }
+        } else {
+            if is_thread {
+                self.last_threaded_content_height = current_height;
+                self.last_threaded_viewport_width = viewport.bounds().width;
+                self.last_threaded_viewport_height = viewport.bounds().height;
+            } else {
+                self.last_content_height = current_height;
+                self.last_viewport_width = viewport.bounds().width;
+                self.last_viewport_height = viewport.bounds().height;
+            }
+        }
+
+        if should_load {
+            Task::batch(vec![task, self.handle_load_more(is_thread)])
+        } else {
+            task
+        }
+    }
+
+    fn fetch_members_task(&self) -> Task<Message> {
         let Some(room_id) = self.selected_room.clone() else {
             return Task::none();
         };
@@ -3357,7 +3289,7 @@ impl Constellations {
         )
     }
 
-    fn fetch_pinned_events_task(&self) -> Task<Action<Message>> {
+    fn fetch_pinned_events_task(&self) -> Task<Message> {
         let Some(room_id) = self.selected_room.clone() else {
             return Task::none();
         };
@@ -3417,7 +3349,7 @@ impl Constellations {
     fn unpin_message_task(
         &self,
         event_id: matrix_sdk::ruma::OwnedEventId,
-    ) -> Task<Action<Message>> {
+    ) -> Task<Message> {
         let Some(room_id) = self.selected_room.clone() else {
             return Task::none();
         };
