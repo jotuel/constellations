@@ -4028,7 +4028,8 @@ mod tests {
         });
 
         // 1. Just joined the room
-        let owned_room_id = matrix_sdk::ruma::RoomId::parse(room_id.as_ref()).unwrap();
+        let owned_room_id = matrix_sdk::ruma::RoomId::parse(room_id.as_ref())
+            .expect("Failed to parse valid test room ID");
         let _ = app.update(Message::RoomJoined(Ok(owned_room_id)));
         assert!(app.visited_room_ids.contains(&room_id));
         assert!(app.is_first_time_joining);
