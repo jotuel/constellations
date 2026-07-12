@@ -2238,7 +2238,7 @@ impl MatrixEngine {
         let mut request = matrix_sdk::ruma::api::client::space::get_hierarchy::v1::Request::new(
             space_id_parsed.clone(),
         );
-        request.limit = Some(matrix_sdk::ruma::UInt::new(100).unwrap());
+        request.limit = Some(matrix_sdk::ruma::uint!(100));
 
         if let Ok(response) = client.send(request).await {
             let mut inner = self.inner.write().await;
