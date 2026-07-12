@@ -1549,16 +1549,20 @@ impl Constellations {
                 self.kick_off_alias_resolution(alias)
             }
             PermalinkTarget::User(user_id) => {
-                let matrix = self.matrix.as_ref().unwrap().clone();
-                Task::perform(
-                    async move {
-                        matrix
-                            .get_or_create_dm(&user_id)
-                            .await
-                            .map_err(|e| e.to_string())
-                    },
-                    |res| Action::from(Message::DmRoomResolved(res)),
-                )
+                if let Some(matrix) = self.matrix.as_ref() {
+                    let matrix = matrix.clone();
+                    Task::perform(
+                        async move {
+                            matrix
+                                .get_or_create_dm(&user_id)
+                                .await
+                                .map_err(|e| e.to_string())
+                        },
+                        |res| Action::from(Message::DmRoomResolved(res)),
+                    )
+                } else {
+                    Task::none()
+                }
             }
             PermalinkTarget::Event { room, event, .. } => {
                 // If the room half is an alias, resolve it first and remember
