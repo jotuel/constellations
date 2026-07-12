@@ -42,7 +42,9 @@ type RichText = (Vec<(Range<usize>, String)>, Vec<(String, Attrs<'static>)>);
 
 impl State {
     pub fn new(content: &[crate::PreviewEvent]) -> Self {
-        let mut font_system = FONT_SYSTEM.lock().unwrap();
+        let mut font_system = FONT_SYSTEM
+            .lock()
+            .expect("FONT_SYSTEM mutex should not be poisoned");
         let mut buffer = Buffer::new(&mut font_system, Metrics::new(14.0, 20.0));
         let (links, spans) = Self::parse_content(content);
 
@@ -64,7 +66,9 @@ impl State {
             return;
         }
 
-        let mut font_system = FONT_SYSTEM.lock().unwrap();
+        let mut font_system = FONT_SYSTEM
+            .lock()
+            .expect("FONT_SYSTEM mutex should not be poisoned");
         let (links, spans) = Self::parse_content(content);
 
         self.editor.with_buffer_mut(|buffer| {
@@ -164,7 +168,9 @@ where
         let state = tree.state.downcast_mut::<State>();
         state.update(self.content);
 
-        let mut font_system = FONT_SYSTEM.lock().unwrap();
+        let mut font_system = FONT_SYSTEM
+            .lock()
+            .expect("FONT_SYSTEM mutex should not be poisoned");
 
         let width = limits.max().width;
         state.editor.with_buffer_mut(|b| {
@@ -192,7 +198,9 @@ where
     ) {
         let state = tree.state.downcast_mut::<State>();
         let bounds = layout.bounds();
-        let mut font_system = FONT_SYSTEM.lock().unwrap();
+        let mut font_system = FONT_SYSTEM
+            .lock()
+            .expect("FONT_SYSTEM mutex should not be poisoned");
 
         // Ensure buffer is shaped for current width before calculating y_offset
         state.editor.with_buffer_mut(|b| {
