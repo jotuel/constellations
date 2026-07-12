@@ -207,13 +207,11 @@ pub fn start_unified_push_listener(engine: crate::matrix::MatrixEngine) {
     });
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use matrix_sdk::test_utils::logged_in_client;
-    use wiremock::{MockServer};
+    use wiremock::MockServer;
 
     #[tokio::test]
     async fn test_handle_push_event() {
