@@ -1,4 +1,0 @@
-🎯 **What:** Replaced the `.unwrap()` call with `.expect("Failed to parse valid test room ID")` when parsing `room_id` inside `test_room_scroll_behavior` in `src/constellations/handlers.rs`.
-💡 **Why:** `unwrap()` is generally discouraged as it can lead to uninformative panics. Replacing it with `expect()` improves code health and maintainability by explicitly documenting the reason for a potential panic, making future debugging easier if the test setup ever changes.
-✅ **Verification:** Verified by running `cargo test --bin constellations test_room_scroll_behavior` and `cargo clippy --bin constellations -- -D warnings` locally.
-✨ **Result:** Improved test readability and robustness without altering existing functionality.
