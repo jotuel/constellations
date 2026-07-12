@@ -1252,7 +1252,6 @@ async fn test_get_or_create_store_passphrase_dbus_failure() {
         "DBUS_SESSION_BUS_ADDRESS",
         "unix:path=/nonexistent/dbus/socket",
     );
-    let _fallback_guard = EnvVarGuard::new("CONSTELLATIONS_DISABLE_FALLBACK", "1");
     let _keyring_guard = EnvVarGuard::new("CONSTELLATIONS_TEST_KEYRING", "1");
 
     let result = MatrixEngine::get_or_create_store_passphrase().await;

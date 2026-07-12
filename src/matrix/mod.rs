@@ -525,30 +525,6 @@ impl MatrixEngine {
         Ok(engine)
     }
 
-    fn get_fallback_path(secret_type: &str) -> PathBuf {
-        let data_dir = dirs::data_dir()
-            .unwrap_or_else(|| PathBuf::from("."))
-            .join("constellations");
-        if !data_dir.exists() {
-            let _ = std::fs::create_dir_all(&data_dir);
-        }
-        data_dir.join(format!("{}.fallback", secret_type))
-    }
-
-    fn write_secret_file(path: &std::path::Path, data: &[u8]) -> std::io::Result<()> {
-        use std::fs::OpenOptions;
-        use std::io::Write;
-        let mut options = OpenOptions::new();
-        options.write(true).create(true).truncate(true);
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::OpenOptionsExt;
-            options.mode(0o600);
-        }
-        let mut file = options.open(path)?;
-        file.write_all(data)
-    }
-
     fn should_bypass_keyring() -> bool {
         cfg!(test) && std::env::var("CONSTELLATIONS_TEST_KEYRING").is_err()
     }
@@ -564,12 +540,10 @@ impl MatrixEngine {
             Ok(k) => k,
             Err(e) => {
                 tracing::warn!(
-                    "Failed to initialize Keyring: {}. Falling back to file-based session storage.",
+                    "Failed to initialize Keyring: {}. Session storage disabled.",
                     e
                 );
-                let path = Self::get_fallback_path("matrix-session");
-                Self::write_secret_file(&path, &secret)?;
-                return Ok(());
+                return Err(e);
             }
         };
 
@@ -584,12 +558,10 @@ impl MatrixEngine {
             Ok(_) => Ok(()),
             Err(e) => {
                 tracing::warn!(
-                    "Failed to create session item in Keyring: {}. Falling back to file-based session storage.",
+                    "Failed to create session item in Keyring: {}. Session storage disabled.",
                     e
                 );
-                let path = Self::get_fallback_path("matrix-session");
-                Self::write_secret_file(&path, &secret)?;
-                Ok(())
+                Err(e.into())
             }
         }
     }
@@ -1014,15 +986,6 @@ impl MatrixEngine {
     }
 
     pub async fn restore_session(&self) -> Result<bool> {
-        let use_fallback = || -> Result<Option<Vec<u8>>> {
-            let path = Self::get_fallback_path("matrix-session");
-            if path.exists() {
-                let data = std::fs::read(&path)?;
-                return Ok(Some(data));
-            }
-            Ok(None)
-        };
-
         let secret_data = 'find_secret: {
             let keyring = match if Self::should_bypass_keyring() {
                 Err(anyhow::anyhow!("Bypassing keyring in test"))
@@ -1032,12 +995,9 @@ impl MatrixEngine {
                 Ok(k) => k,
                 Err(e) => {
                     tracing::warn!(
-                        "Failed to initialize Keyring for restore: {}. Attempting file-based fallback.",
+                        "Failed to initialize Keyring for restore: {}. File-based fallback disabled.",
                         e
                     );
-                    if let Some(data) = use_fallback()? {
-                        break 'find_secret Some(data);
-                    }
                     return Ok(false);
                 }
             };
@@ -1056,13 +1016,13 @@ impl MatrixEngine {
                 }
                 Err(e) => {
                     tracing::warn!(
-                        "Failed to search Keyring items for restore: {}. Attempting file-based fallback.",
+                        "Failed to search Keyring items for restore: {}. File-based fallback disabled.",
                         e
                     );
                 }
             }
 
-            use_fallback()?
+            None
         };
 
         let Some(secret) = secret_data else {
@@ -1142,18 +1102,6 @@ impl MatrixEngine {
     }
 
     pub async fn logout(&self) -> Result<()> {
-        // Delete fallback session file
-        let session_path = Self::get_fallback_path("matrix-session");
-        if session_path.exists() {
-            let _ = std::fs::remove_file(session_path);
-        }
-
-        // Delete fallback passphrase file
-        let pass_path = Self::get_fallback_path("store-passphrase");
-        if pass_path.exists() {
-            let _ = std::fs::remove_file(pass_path);
-        }
-
         let keyring = match if Self::should_bypass_keyring() {
             Err(anyhow::anyhow!("Bypassing keyring in test"))
         } else {
@@ -1161,10 +1109,7 @@ impl MatrixEngine {
         } {
             Ok(k) => k,
             Err(e) => {
-                tracing::warn!(
-                    "Failed to initialize Keyring for logout: {}. Local fallback files have been deleted.",
-                    e
-                );
+                tracing::warn!("Failed to initialize Keyring for logout: {}.", e);
                 return Ok(());
             }
         };
@@ -2911,22 +2856,6 @@ impl MatrixEngine {
     }
 
     pub(crate) async fn get_or_create_store_passphrase() -> Result<String> {
-        let use_fallback = || {
-            let path = Self::get_fallback_path("store-passphrase");
-            if path.exists()
-                && let Ok(passphrase) = std::fs::read_to_string(&path)
-            {
-                return Ok(passphrase);
-            }
-            let mut buf = [0u8; 32];
-            SysRng
-                .try_fill_bytes(&mut buf)
-                .context("Failed to generate secure random bytes for store passphrase")?;
-            let passphrase: String = buf.iter().map(|b| format!("{:02x}", b)).collect();
-            let _ = Self::write_secret_file(&path, passphrase.as_bytes());
-            Ok(passphrase)
-        };
-
         let keyring = match if Self::should_bypass_keyring() {
             Err(anyhow::anyhow!("Bypassing keyring in test"))
         } else {
@@ -2934,14 +2863,11 @@ impl MatrixEngine {
         } {
             Ok(k) => k,
             Err(e) => {
-                if std::env::var("CONSTELLATIONS_DISABLE_FALLBACK").is_ok() {
-                    return Err(e);
-                }
                 tracing::warn!(
-                    "Failed to initialize Keyring: {}. Falling back to file-based passphrase storage.",
+                    "Failed to initialize Keyring: {}. Passphrase storage disabled.",
                     e
                 );
-                return use_fallback();
+                return Err(e);
             }
         };
 
@@ -2959,33 +2885,12 @@ impl MatrixEngine {
                 }
             }
             Err(e) => {
-                if std::env::var("CONSTELLATIONS_DISABLE_FALLBACK").is_ok() {
-                    return Err(e.into());
-                }
                 tracing::warn!(
-                    "Failed to search items in Keyring: {}. Falling back to file-based passphrase storage.",
+                    "Failed to search items in Keyring: {}. Passphrase storage disabled.",
                     e
                 );
-                return use_fallback();
+                return Err(e.into());
             }
-        }
-
-        // Before generating a new passphrase, check if a fallback file already exists
-        // to keep it stable across calls in environments where keyring is broken/partially functional.
-        let path = Self::get_fallback_path("store-passphrase");
-        if path.exists()
-            && let Ok(passphrase) = std::fs::read_to_string(&path)
-        {
-            // Try to write it to keyring in case it is now writable
-            let _ = keyring
-                .create_item(
-                    "Constellations Store Passphrase",
-                    &attributes,
-                    passphrase.as_bytes(),
-                    true,
-                )
-                .await;
-            return Ok(passphrase);
         }
 
         let mut buf = [0u8; 32];
@@ -3006,15 +2911,11 @@ impl MatrixEngine {
         {
             Ok(_) => Ok(passphrase),
             Err(e) => {
-                if std::env::var("CONSTELLATIONS_DISABLE_FALLBACK").is_ok() {
-                    return Err(e.into());
-                }
                 tracing::warn!(
-                    "Failed to create item in Keyring: {}. Falling back to file-based passphrase storage.",
+                    "Failed to create item in Keyring: {}. Passphrase storage disabled.",
                     e
                 );
-                let _ = Self::write_secret_file(&path, passphrase.as_bytes());
-                Ok(passphrase)
+                Err(e.into())
             }
         }
     }
