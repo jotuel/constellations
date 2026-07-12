@@ -114,19 +114,17 @@ async fn register_endpoint_if_logged_in(endpoint: &str) -> Result<(), Box<dyn st
     let engine = crate::matrix::MatrixEngine::new(data_dir).await?;
     let did_restore = engine.restore_session().await.unwrap_or(false);
     if did_restore {
-        register_pusher_internal(&engine, endpoint).await?;
+        register_pusher_internal(&engine.client().await, endpoint).await?;
     }
     Ok(())
 }
 
 pub async fn register_pusher_internal(
-    engine: &crate::matrix::MatrixEngine,
+    client: &matrix_sdk::Client,
     endpoint: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
     use matrix_sdk::ruma::api::client::push::{Pusher, PusherIds, PusherInit, PusherKind};
     use matrix_sdk::ruma::push::HttpPusherData;
-
-    let client = engine.client().await;
 
     let ids = PusherIds::new(
         endpoint.to_string(),
@@ -146,6 +144,26 @@ pub async fn register_pusher_internal(
     client.pusher().set(pusher, false).await?;
     info!("Registered pusher on homeserver for endpoint: {}", endpoint);
     Ok(())
+}
+
+pub async fn handle_push_event(client: &matrix_sdk::Client, event: PushEvent) {
+    match event {
+        PushEvent::NewEndpoint { endpoint, .. } => {
+            info!("UnifiedPush received new endpoint: {}", endpoint.endpoint);
+            if let Err(e) = register_pusher_internal(client, &endpoint.endpoint).await {
+                error!("Failed to register pusher on Matrix homeserver: {:?}", e);
+            }
+        }
+        PushEvent::Message { .. } => {
+            // When the GUI is active, it handles live sync and messages directly,
+            // so we do not need to perform a background sync when push message arrives.
+            info!("UnifiedPush message received while GUI is running (ignored).");
+        }
+        PushEvent::Unregistered { .. } => {
+            info!("UnifiedPush unregistered.");
+        }
+        _ => {}
+    }
 }
 
 pub fn start_unified_push_listener(engine: crate::matrix::MatrixEngine) {
@@ -183,25 +201,38 @@ pub fn start_unified_push_listener(engine: crate::matrix::MatrixEngine) {
                 .await;
 
             while let Ok(event) = rx.recv() {
-                match event {
-                    PushEvent::NewEndpoint { endpoint, .. } => {
-                        info!("UnifiedPush received new endpoint: {}", endpoint.endpoint);
-                        if let Err(e) = register_pusher_internal(&engine, &endpoint.endpoint).await
-                        {
-                            error!("Failed to register pusher on Matrix homeserver: {:?}", e);
-                        }
-                    }
-                    PushEvent::Message { .. } => {
-                        // When the GUI is active, it handles live sync and messages directly,
-                        // so we do not need to perform a background sync when push message arrives.
-                        info!("UnifiedPush message received while GUI is running (ignored).");
-                    }
-                    PushEvent::Unregistered { .. } => {
-                        info!("UnifiedPush unregistered.");
-                    }
-                    _ => {}
-                }
+                handle_push_event(&engine.client().await, event).await;
             }
         });
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use matrix_sdk::test_utils::logged_in_client;
+    use wiremock::MockServer;
+
+    #[tokio::test]
+    async fn test_handle_push_event() {
+        // We use a real (mocked) matrix client to verify that our handler accepts it
+        // and can gracefully process events without panicking.
+        let mock_server = MockServer::start().await;
+        let client = logged_in_client(Some(mock_server.uri())).await;
+
+        let event = PushEvent::Message {
+            message: unifiedpush::PushMessage::Raw { content: vec![] },
+            instance: "default".to_string(),
+        };
+        handle_push_event(&client, event).await;
+
+        let event2 = PushEvent::Unregistered {
+            instance: "default".to_string(),
+        };
+        handle_push_event(&client, event2).await;
+
+        // Note: NewEndpoint is difficult to construct purely in this test module
+        // due to external dependencies on `web_push_native` cryptographic types
+        // that are not exported in our Cargo workspace.
+    }
 }
