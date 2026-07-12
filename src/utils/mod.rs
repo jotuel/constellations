@@ -331,4 +331,73 @@ mod tests {
         let redacted_str = redact_url(&url);
         assert_eq!(redacted_str, "https://example.com/search?q=rust&sort=desc");
     }
+
+    #[test]
+    fn test_apply_diff() {
+        let mut vec = vec![1, 2, 3];
+
+        // PushBack
+        vec.apply_diff(eyeball_im::VectorDiff::PushBack { value: 4 });
+        assert_eq!(vec, vec![1, 2, 3, 4]);
+
+        // PushFront
+        vec.apply_diff(eyeball_im::VectorDiff::PushFront { value: 0 });
+        assert_eq!(vec, vec![0, 1, 2, 3, 4]);
+
+        // PopBack
+        vec.apply_diff(eyeball_im::VectorDiff::PopBack);
+        assert_eq!(vec, vec![0, 1, 2, 3]);
+
+        // PopFront
+        vec.apply_diff(eyeball_im::VectorDiff::PopFront);
+        assert_eq!(vec, vec![1, 2, 3]);
+
+        // Insert
+        vec.apply_diff(eyeball_im::VectorDiff::Insert { index: 1, value: 5 });
+        assert_eq!(vec, vec![1, 5, 2, 3]);
+
+        // Insert out of bounds (should push back according to apply_diff logic)
+        vec.apply_diff(eyeball_im::VectorDiff::Insert {
+            index: 10,
+            value: 6,
+        });
+        assert_eq!(vec, vec![1, 5, 2, 3, 6]);
+
+        // Remove
+        vec.apply_diff(eyeball_im::VectorDiff::Remove { index: 1 });
+        assert_eq!(vec, vec![1, 2, 3, 6]);
+
+        // Remove out of bounds (should do nothing)
+        vec.apply_diff(eyeball_im::VectorDiff::Remove { index: 10 });
+        assert_eq!(vec, vec![1, 2, 3, 6]);
+
+        // Set
+        vec.apply_diff(eyeball_im::VectorDiff::Set { index: 1, value: 7 });
+        assert_eq!(vec, vec![1, 7, 3, 6]);
+
+        // Set out of bounds (should do nothing)
+        vec.apply_diff(eyeball_im::VectorDiff::Set {
+            index: 10,
+            value: 8,
+        });
+        assert_eq!(vec, vec![1, 7, 3, 6]);
+
+        // Clear
+        vec.apply_diff(eyeball_im::VectorDiff::Clear);
+        assert!(vec.is_empty());
+
+        // Append
+        let append_vec: eyeball_im::Vector<i32> = vec![1, 2].into_iter().collect();
+        vec.apply_diff(eyeball_im::VectorDiff::Append { values: append_vec });
+        assert_eq!(vec, vec![1, 2]);
+
+        // Truncate
+        vec.apply_diff(eyeball_im::VectorDiff::Truncate { length: 1 });
+        assert_eq!(vec, vec![1]);
+
+        // Reset
+        let reset_vec: eyeball_im::Vector<i32> = vec![9, 8, 7].into_iter().collect();
+        vec.apply_diff(eyeball_im::VectorDiff::Reset { values: reset_vec });
+        assert_eq!(vec, vec![9, 8, 7]);
+    }
 }
