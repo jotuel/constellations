@@ -1755,73 +1755,7 @@ impl<'chat> Constellations {
 
             for item in &self.pinned_events_details {
                 found_any = true;
-
-                let avatar = if let Some(avatar_url) = &item.avatar_url
-                    && let Some(handle) = self.media_cache.get(avatar_url)
-                {
-                    Element::from(cosmic::widget::image(handle.clone()).width(20).height(20))
-                } else {
-                    container(cosmic::widget::icon::from_name("avatar-default-symbolic").size(12))
-                        .padding(2)
-                        .into()
-                };
-
-                let message_row = Row::new()
-                    .spacing(10)
-                    .align_y(Alignment::Center)
-                    .push(avatar)
-                    .push(
-                        Column::new()
-                            .spacing(2)
-                            .push(
-                                Row::new()
-                                    .spacing(5)
-                                    .align_y(Alignment::Center)
-                                    .push(text::title3(&item.sender_name).size(12))
-                                    .push(text::body(&item.timestamp).size(10)),
-                            )
-                            .push(text::body(&item.body).size(12)),
-                    );
-
-                // Card is a jump-to-message link, with a sibling unpin button
-                // (siblings, not nested, to keep iced happy).
-                let card_row = match matrix_sdk::ruma::EventId::parse(&item.event_id) {
-                    Ok(event_id) => {
-                        let jump_btn = button::custom(
-                            container(message_row)
-                                .padding(5)
-                                .width(cosmic::iced::Length::Fill),
-                        )
-                        .width(cosmic::iced::Length::Fill)
-                        .class(cosmic::theme::Button::ListItem(
-                            self.core.system_theme().cosmic().corner_radii.radius_m,
-                        ))
-                        .on_press(Message::JumpToMessage(event_id.clone()));
-
-                        let unpin_btn = tooltip(
-                            button::icon(cosmic::widget::icon::from_name("pin-symbolic"))
-                                .on_press(Message::UnpinMessage(event_id)),
-                            text::body(crate::fl!("unpin-message")),
-                            Position::Bottom,
-                        );
-
-                        Row::new()
-                            .spacing(8)
-                            .align_y(Alignment::Center)
-                            .push(jump_btn)
-                            .push(unpin_btn)
-                    }
-                    Err(_) => Row::new().push(message_row),
-                };
-
-                let card = container(card_row)
-                    .style(move |theme: &cosmic::Theme| {
-                        use cosmic::iced::widget::container::Catalog;
-                        theme.style(&cosmic::theme::Container::Card)
-                    })
-                    .width(cosmic::iced::Length::Fill);
-
-                pinned_list = pinned_list.push(card);
+                pinned_list = pinned_list.push(self.view_pinned_item(item));
             }
 
             if !found_any {
@@ -1842,6 +1776,74 @@ impl<'chat> Constellations {
                     .into()
             }
         }
+    }
+
+    fn view_pinned_item<'a>(&'a self, item: &'a matrix::PinnedEventInfo) -> Element<'a, Message> {
+        let avatar = if let Some(avatar_url) = &item.avatar_url
+            && let Some(handle) = self.media_cache.get(avatar_url)
+        {
+            Element::from(cosmic::widget::image(handle.clone()).width(20).height(20))
+        } else {
+            container(cosmic::widget::icon::from_name("avatar-default-symbolic").size(12))
+                .padding(2)
+                .into()
+        };
+
+        let message_row = Row::new()
+            .spacing(10)
+            .align_y(Alignment::Center)
+            .push(avatar)
+            .push(
+                Column::new()
+                    .spacing(2)
+                    .push(
+                        Row::new()
+                            .spacing(5)
+                            .align_y(Alignment::Center)
+                            .push(text::title3(&item.sender_name).size(12))
+                            .push(text::body(&item.timestamp).size(10)),
+                    )
+                    .push(text::body(&item.body).size(12)),
+            );
+
+        // Card is a jump-to-message link, with a sibling unpin button
+        // (siblings, not nested, to keep iced happy).
+        let card_row = match matrix_sdk::ruma::EventId::parse(&item.event_id) {
+            Ok(event_id) => {
+                let jump_btn = button::custom(
+                    container(message_row)
+                        .padding(5)
+                        .width(cosmic::iced::Length::Fill),
+                )
+                .width(cosmic::iced::Length::Fill)
+                .class(cosmic::theme::Button::ListItem(
+                    self.core.system_theme().cosmic().corner_radii.radius_m,
+                ))
+                .on_press(Message::JumpToMessage(event_id.clone()));
+
+                let unpin_btn = tooltip(
+                    button::icon(cosmic::widget::icon::from_name("pin-symbolic"))
+                        .on_press(Message::UnpinMessage(event_id)),
+                    text::body(crate::fl!("unpin-message")),
+                    Position::Bottom,
+                );
+
+                Row::new()
+                    .spacing(8)
+                    .align_y(Alignment::Center)
+                    .push(jump_btn)
+                    .push(unpin_btn)
+            }
+            Err(_) => Row::new().push(message_row),
+        };
+
+        container(card_row)
+            .style(move |theme: &cosmic::Theme| {
+                use cosmic::iced::widget::container::Catalog;
+                theme.style(&cosmic::theme::Container::Card)
+            })
+            .width(cosmic::iced::Length::Fill)
+            .into()
     }
 }
 
