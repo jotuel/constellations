@@ -1513,53 +1513,11 @@ async fn test_leave_room_error() {
         .await;
 
     Mock::given(method("POST"))
-        .and(wiremock::matchers::path(
-            "/_matrix/client/r0/rooms/!leave_err_room:example.com/leave",
+        .and(path_regex(
+            r"^/_matrix/client/(r0|v3)/rooms/(!|%21)leave_err_room(:|%3A)example\.com/leave$",
         ))
         .respond_with(|_req: &wiremock::Request| {
-            println!("DIAGNOSTIC: /r0/rooms/!leave_err_room:example.com/leave mock matched!");
-            ResponseTemplate::new(403).set_body_json(serde_json::json!({
-                "errcode": "M_UNKNOWN",
-                "error": "You don't have permission to leave this room"
-            }))
-        })
-        .mount(&mock_server)
-        .await;
-
-    Mock::given(method("POST"))
-        .and(wiremock::matchers::path(
-            "/_matrix/client/v3/rooms/!leave_err_room:example.com/leave",
-        ))
-        .respond_with(|_req: &wiremock::Request| {
-            println!("DIAGNOSTIC: /v3/rooms/!leave_err_room:example.com/leave mock matched!");
-            ResponseTemplate::new(403).set_body_json(serde_json::json!({
-                "errcode": "M_UNKNOWN",
-                "error": "You don't have permission to leave this room"
-            }))
-        })
-        .mount(&mock_server)
-        .await;
-
-    Mock::given(method("POST"))
-        .and(wiremock::matchers::path(
-            "/_matrix/client/r0/rooms/%21leave_err_room%3Aexample.com/leave",
-        ))
-        .respond_with(|_req: &wiremock::Request| {
-            println!("DIAGNOSTIC: /r0/rooms/%21leave_err_room%3Aexample.com/leave mock matched!");
-            ResponseTemplate::new(403).set_body_json(serde_json::json!({
-                "errcode": "M_UNKNOWN",
-                "error": "You don't have permission to leave this room"
-            }))
-        })
-        .mount(&mock_server)
-        .await;
-
-    Mock::given(method("POST"))
-        .and(wiremock::matchers::path(
-            "/_matrix/client/v3/rooms/%21leave_err_room%3Aexample.com/leave",
-        ))
-        .respond_with(|_req: &wiremock::Request| {
-            println!("DIAGNOSTIC: /v3/rooms/%21leave_err_room%3Aexample.com/leave mock matched!");
+            println!("DIAGNOSTIC: leave mock matched!");
             ResponseTemplate::new(403).set_body_json(serde_json::json!({
                 "errcode": "M_UNKNOWN",
                 "error": "You don't have permission to leave this room"
