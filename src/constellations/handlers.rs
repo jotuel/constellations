@@ -3691,6 +3691,115 @@ mod tests {
         assert!(!app.is_initializing);
     }
 
+    #[tokio::test]
+    async fn test_handle_engine_ready_ok() {
+        let mut app = create_dummy_constellations();
+        app.is_initializing = true;
+        assert!(app.matrix.is_none());
+
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let engine = match crate::matrix::MatrixEngine::new(tmp_dir.path().to_path_buf()).await {
+            Ok(e) => e,
+            Err(e) => {
+                println!(
+                    "Skipping test due to engine initialization failure (likely dbus/keyring): {}",
+                    e
+                );
+                return;
+            }
+        };
+
+        let _task = app.handle_engine_ready(Ok(engine.clone()));
+
+        assert!(app.matrix.is_some());
+        assert!(app.is_initializing);
+    }
+
+    #[test]
+    fn test_handle_user_ready_none_user_id() {
+        let mut app = create_dummy_constellations();
+        app.is_initializing = true;
+        app.user_id = Some("stale_user".to_string());
+
+        let _task = app.handle_user_ready(None, Ok(()));
+
+        assert_eq!(app.user_id, None);
+        assert!(!app.is_initializing);
+    }
+
+    #[test]
+    fn test_handle_user_ready_success() {
+        let mut app = create_dummy_constellations();
+        app.is_initializing = true;
+
+        let _task = app.handle_user_ready(Some("alice".to_string()), Ok(()));
+
+        assert_eq!(app.user_id, Some("alice".to_string()));
+        assert!(!app.is_initializing);
+        assert_eq!(app.sync_status, matrix::SyncStatus::Disconnected); // Unchanged
+    }
+
+    #[test]
+    fn test_handle_user_ready_missing_sliding_sync() {
+        let mut app = create_dummy_constellations();
+        app.is_initializing = true;
+
+        let _task = app.handle_user_ready(
+            Some("alice".to_string()),
+            Err(matrix::SyncError::MissingSlidingSyncSupport),
+        );
+
+        assert_eq!(app.user_id, Some("alice".to_string()));
+        assert!(!app.is_initializing);
+        assert_eq!(
+            app.sync_status,
+            matrix::SyncStatus::MissingSlidingSyncSupport
+        );
+    }
+
+    #[test]
+    fn test_handle_user_ready_generic_sync_error() {
+        let mut app = create_dummy_constellations();
+        app.is_initializing = true;
+
+        let _task = app.handle_user_ready(
+            Some("alice".to_string()),
+            Err(matrix::SyncError::Generic("network timeout".to_string())),
+        );
+
+        assert_eq!(app.user_id, Some("alice".to_string()));
+        assert!(!app.is_initializing);
+        assert_eq!(
+            app.sync_status,
+            matrix::SyncStatus::Error("network timeout".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn test_handle_user_ready_replay_pending_link() {
+        let mut app = create_dummy_constellations();
+        app.is_initializing = true;
+        app.pending_link = Some("https://matrix.to/#/!room:example.com".to_string());
+
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let engine = match crate::matrix::MatrixEngine::new(tmp_dir.path().to_path_buf()).await {
+            Ok(e) => e,
+            Err(e) => {
+                println!(
+                    "Skipping test due to engine initialization failure (likely dbus/keyring): {}",
+                    e
+                );
+                return;
+            }
+        };
+        app.matrix = Some(engine);
+
+        let _task = app.handle_user_ready(Some("alice".to_string()), Ok(()));
+
+        assert!(app.pending_link.is_none());
+        assert!(!app.is_initializing);
+    }
+
     #[test]
     fn test_handle_login_finished_ok() {
         let mut app = create_dummy_constellations();
