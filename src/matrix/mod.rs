@@ -3163,7 +3163,8 @@ impl MatrixEngine {
 
         let res = match &mut search {
             ActiveSearch::Local(search_iter) => {
-                let events_opt: Option<Vec<matrix_sdk::deserialized_responses::TimelineEvent>> = search_iter.next_events().await?;
+                let events_opt: Option<Vec<matrix_sdk::deserialized_responses::TimelineEvent>> =
+                    search_iter.next_events().await?;
                 let has_more = events_opt.as_ref().is_some_and(|evs| !evs.is_empty());
                 let events = events_opt.unwrap_or_default();
 
@@ -3174,19 +3175,24 @@ impl MatrixEngine {
 
                 Ok((results, has_more))
             }
-            ActiveSearch::Server { query, room_id, next_batch } => {
+            ActiveSearch::Server {
+                query,
+                room_id,
+                next_batch,
+            } => {
                 if next_batch.is_none() {
                     Ok((Vec::new(), false))
                 } else {
-                    match self.server_search(room_id, query, max_results, next_batch.clone()).await {
+                    match self
+                        .server_search(room_id, query, max_results, next_batch.clone())
+                        .await
+                    {
                         Ok((results, new_next_batch)) => {
                             *next_batch = new_next_batch;
                             let has_more = next_batch.is_some();
                             Ok((results, has_more))
                         }
-                        Err(SearchError::Unsupported) => {
-                            Ok((Vec::new(), false))
-                        }
+                        Err(SearchError::Unsupported) => Ok((Vec::new(), false)),
                         Err(SearchError::Other(e)) => Err(e),
                     }
                 }
@@ -3613,12 +3619,11 @@ fn map_timeline_event(
             message_body_from_sync_event(&ev)
         }
         matrix_sdk::deserialized_responses::TimelineEventKind::UnableToDecrypt {
-            event,
-            ..
-        }
-        | matrix_sdk::deserialized_responses::TimelineEventKind::PlainText {
             event, ..
-        } => message_body_from_sync_event(&event.deserialize()?),
+        }
+        | matrix_sdk::deserialized_responses::TimelineEventKind::PlainText { event, .. } => {
+            message_body_from_sync_event(&event.deserialize()?)
+        }
     };
 
     let timestamp = event

@@ -1512,7 +1512,7 @@ impl<'chat> Constellations {
                 } else {
                     container(
                         button::text(crate::fl!("load-more"))
-                            .on_press(Message::LoadMoreMessageSearch)
+                            .on_press(Message::LoadMoreMessageSearch),
                     )
                     .width(cosmic::iced::Length::Fill)
                     .align_x(Alignment::Center)

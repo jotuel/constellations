@@ -2696,7 +2696,10 @@ impl Constellations {
                     let matrix = matrix.clone();
                     Task::perform(
                         async move {
-                            matrix.search_messages_in_room_next_batch(20).await.map_err(|e| e.to_string())
+                            matrix
+                                .search_messages_in_room_next_batch(20)
+                                .await
+                                .map_err(|e| e.to_string())
                         },
                         |res| Action::from(Message::MessageSearchMoreResults(res)),
                     )
@@ -2712,7 +2715,8 @@ impl Constellations {
                         self.search_has_more = has_more;
                     }
                     Err(e) => {
-                        self.error = Some(crate::fl!("search-server-failed", error = e).to_string());
+                        self.error =
+                            Some(crate::fl!("search-server-failed", error = e).to_string());
                     }
                 }
                 Task::none()

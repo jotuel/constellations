@@ -314,7 +314,10 @@ pub enum Message {
     PublicSearchResults(Result<Vec<matrix::PublicRoom>, String>),
     /// Server-side message search results for the in-room search. Carries the
     /// generation captured at task spawn so stale results can be discarded.
-    MessageSearchResults(u64, Result<(Vec<matrix::MessageSearchResult>, bool), String>),
+    MessageSearchResults(
+        u64,
+        Result<(Vec<matrix::MessageSearchResult>, bool), String>,
+    ),
     LoadMoreMessageSearch,
     MessageSearchMoreResults(Result<(Vec<matrix::MessageSearchResult>, bool), String>),
     NewRoomIsVideoChanged(bool),
