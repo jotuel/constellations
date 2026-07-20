@@ -2065,24 +2065,7 @@ impl Constellations {
                     ),
                 ])
             }
-            Message::StartReply(item_id) => {
-                let mut found_item = None;
-                for item in self
-                    .timeline_items
-                    .iter()
-                    .chain(self.threaded_timeline_items.iter())
-                {
-                    if let Some(timeline_item) = &item.item
-                        && let Some(event) = timeline_item.as_event()
-                        && event.identifier() == item_id
-                    {
-                        found_item = Some(item.clone());
-                        break;
-                    }
-                }
-                self.replying_to = found_item;
-                Task::none()
-            }
+            Message::StartReply(item_id) => self.handle_start_reply(item_id),
             Message::CancelReply => {
                 self.replying_to = None;
                 Task::none()
@@ -2116,102 +2099,9 @@ impl Constellations {
             Message::TimelineScrolled(viewport, is_thread) => {
                 self.handle_timeline_scrolled(viewport, is_thread)
             }
-            Message::RoomSelected(room_id) => {
-                if let Some(room) = self.room_list.iter().find(|r| r.id == room_id)
-                    && let Some(name) = &room.name
-                {
-                    self.room_name_cache.insert(room_id.clone(), name.clone());
-                }
-                self.selected_room = Some(room_id.clone());
-                self.timeline_items.clear();
-                self.room_members.clear();
-                self.pinned_events.clear();
-                self.pinned_events_details.clear();
-                // Message search results are scoped to the previous room;
-                // clear them so stale hits don't bleed into the new room.
-                self.message_search_results.clear();
-                self.is_searching_messages = false;
-                self.inviting_to_room = false;
-                self.invite_to_room_id.clear();
-                // A room switch always leaves the event-focused (permalink
-                // context) view: clear any pending/active event focus so the
-                // new room opens on its live timeline and the banner hides.
-                self.pending_event_focus = None;
-                self.active_event_focus = None;
-                let fetch_members_task = if self.show_members_panel {
-                    self.is_loading_members = true;
-                    self.fetch_members_task()
-                } else {
-                    Task::none()
-                };
-                let fetch_pinned_task = self.fetch_pinned_events_task();
-                self.recompute_thread_counts();
-                self.last_timeline_offset = 0.0;
-                self.last_content_height = 0.0;
-                self.last_viewport_width = 0.0;
-                self.last_viewport_height = 0.0;
-                self.needs_scroll_adjustment = false;
-                self.is_timeline_at_bottom = true;
-                self.is_threaded_timeline_at_bottom = true;
-                self.is_timeline_initialized = false;
-                self.is_first_time_joining = false;
-                self.visited_room_ids.insert(room_id.clone());
-                self.needs_initial_scroll = true;
-
-                Task::batch(vec![
-                    self.update_title(),
-                    self.handle_load_more(false),
-                    fetch_members_task,
-                    fetch_pinned_task,
-                ])
-            }
-            Message::ComposerChanged(text) => {
-                self.composer_preview_events = parse_markdown(&text, false);
-                self.composer_preview_links =
-                    crate::preview::extract_links(&self.composer_preview_events);
-                self.composer_content = cosmic::widget::text_editor::Content::with_text(&text);
-
-                if self.app_settings.send_typing_notifications
-                    && let Some(matrix) = &self.matrix
-                    && let Some(room_id) = &self.selected_room
-                {
-                    let matrix = matrix.clone();
-                    let room_id = room_id.clone();
-                    let typing = !self.composer_content.is_empty();
-                    return Task::perform(
-                        async move {
-                            let _ = matrix.typing_notice(&room_id, typing).await;
-                        },
-                        |_| Action::from(Message::NoOp),
-                    );
-                }
-
-                Task::none()
-            }
-            Message::ComposerAction(action) => {
-                self.composer_content.perform(action);
-                let text = self.composer_content.text();
-                self.composer_preview_events = parse_markdown(&text, false);
-                self.composer_preview_links =
-                    crate::preview::extract_links(&self.composer_preview_events);
-
-                if self.app_settings.send_typing_notifications
-                    && let Some(matrix) = &self.matrix
-                    && let Some(room_id) = &self.selected_room
-                {
-                    let matrix = matrix.clone();
-                    let room_id = room_id.clone();
-                    let typing = !self.composer_content.is_empty();
-                    return Task::perform(
-                        async move {
-                            let _ = matrix.typing_notice(&room_id, typing).await;
-                        },
-                        |_| Action::from(Message::NoOp),
-                    );
-                }
-
-                Task::none()
-            }
+            Message::RoomSelected(room_id) => self.handle_room_selected(room_id),
+            Message::ComposerChanged(text) => self.handle_composer_changed(text),
+            Message::ComposerAction(action) => self.handle_composer_action(action),
             Message::TogglePreview => {
                 self.composer_is_preview = !self.composer_is_preview;
                 Task::none()
@@ -2265,37 +2155,7 @@ impl Constellations {
                 }
                 Task::none()
             }
-            Message::StartEdit(item_id) => {
-                let mut found_item = None;
-                for item in self
-                    .timeline_items
-                    .iter()
-                    .chain(self.threaded_timeline_items.iter())
-                {
-                    if let Some(timeline_item) = &item.item
-                        && let Some(event) = timeline_item.as_event()
-                        && event.identifier() == item_id
-                    {
-                        found_item = Some(item.clone());
-                        break;
-                    }
-                }
-                if let Some(item) = found_item
-                    && let Some(timeline_item) = &item.item
-                    && let Some(event) = timeline_item.as_event()
-                    && let Some(msg) = event.content().as_message()
-                {
-                    self.composer_content =
-                        cosmic::widget::text_editor::Content::with_text(msg.body());
-                    self.composer_preview_events =
-                        parse_markdown(&self.composer_content.text(), false);
-                    self.composer_preview_links =
-                        crate::preview::extract_links(&self.composer_preview_events);
-                    self.editing_item = Some(item);
-                    self.replying_to = None;
-                }
-                Task::none()
-            }
+            Message::StartEdit(item_id) => self.handle_start_edit(item_id),
             Message::CancelEdit => {
                 self.editing_item = None;
                 self.composer_content = cosmic::widget::text_editor::Content::new();
@@ -2732,55 +2592,7 @@ impl Constellations {
             }
             Message::Logout => self.handle_logout(),
             Message::LogoutFinished => self.handle_logout_finished(),
-            Message::OpenSettings(panel) => {
-                self.needs_layout_scroll_restoration = true;
-                self.needs_threaded_layout_scroll_restoration = true;
-                self.show_members_panel = false;
-                self.show_pinned_panel = false;
-                self.creating_room = false;
-                self.creating_space = false;
-                self.current_settings_panel = Some(panel.clone());
-                self.core.set_show_context(true);
-
-                if self.is_search_active {
-                    match panel {
-                        SettingsPanel::Room => {
-                            self.room_settings.member_filter = self.search_query.clone();
-                        }
-                        SettingsPanel::Space => {
-                            self.space_settings.child_filter = self.search_query.clone();
-                        }
-                        _ => {}
-                    }
-                }
-
-                let task = if panel == SettingsPanel::User {
-                    self.user_settings
-                        .update(settings::user::Message::LoadProfile, &self.matrix)
-                } else if matches!(
-                    panel,
-                    SettingsPanel::Room | SettingsPanel::ManageRoomMembers
-                ) {
-                    if let Some(room_id) = &self.selected_room {
-                        self.room_settings.update(
-                            settings::room::Message::LoadRoom(room_id.clone()),
-                            &self.matrix,
-                        )
-                    } else {
-                        Task::none()
-                    }
-                } else if panel == SettingsPanel::Space
-                    && let Some(space_id) = &self.selected_space
-                {
-                    self.space_settings.update(
-                        settings::space::Message::LoadSpace(Arc::from(space_id.as_str())),
-                        &self.matrix,
-                    )
-                } else {
-                    Task::none()
-                };
-                Task::batch(vec![task, self.restore_scroll_task()])
-            }
+            Message::OpenSettings(panel) => self.handle_open_settings(panel),
             Message::CloseSettings => {
                 self.needs_layout_scroll_restoration = true;
                 self.needs_threaded_layout_scroll_restoration = true;
@@ -2818,109 +2630,8 @@ impl Constellations {
                 let fetch_task = self.fetch_missing_media();
                 Task::batch(vec![save_task, fetch_task])
             }
-            Message::ToggleSearch => {
-                self.is_search_active = !self.is_search_active;
-                if !self.is_search_active {
-                    self.search_query.clear();
-                    self.room_settings.member_filter.clear();
-                    self.space_settings.child_filter.clear();
-                    self.public_search_results.clear();
-                    self.is_searching_public = false;
-                    self.message_search_results.clear();
-                    self.is_searching_messages = false;
-                } else if let Some(panel) = &self.current_settings_panel {
-                    match panel {
-                        SettingsPanel::Room => {
-                            self.search_query = self.room_settings.member_filter.clone();
-                        }
-                        SettingsPanel::Space => {
-                            self.search_query = self.space_settings.child_filter.clone();
-                        }
-                        _ => {}
-                    }
-                }
-                self.update_filtered_rooms();
-                Task::none()
-            }
-            Message::SearchQueryChanged(query) => {
-                self.search_query = query.clone();
-                if let Some(panel) = &self.current_settings_panel {
-                    match panel {
-                        SettingsPanel::Room => {
-                            self.room_settings.member_filter = query.clone();
-                        }
-                        SettingsPanel::Space => {
-                            self.space_settings.child_filter = query.clone();
-                        }
-                        _ => {}
-                    }
-                }
-                self.update_filtered_rooms();
-
-                if self.current_settings_panel.is_none() && !self.search_query.trim().is_empty() {
-                    let mut tasks = Vec::new();
-
-                    // Public rooms / spaces directory search (existing).
-                    if let Some(matrix) = &self.matrix {
-                        let query_str = self.search_query.trim().to_string();
-                        let matrix = matrix.clone();
-                        self.is_searching_public = true;
-
-                        tasks.push(Task::perform(
-                            async move { matrix.search_public_rooms(query_str, Some(20)).await },
-                            |res| {
-                                Action::from(Message::PublicSearchResults(
-                                    res.map_err(|e| e.to_string()),
-                                ))
-                            },
-                        ));
-                    }
-
-                    // Server-side message search (new). Only runs when a room is
-                    // selected; debounced so a fast-typed query doesn't hammer
-                    // the search index. The generation lets the result handler
-                    // discard results from a now-stale query.
-                    if let Some(matrix) = &self.matrix
-                        && let Some(room_id) = &self.selected_room
-                    {
-                        self.is_searching_messages = true;
-                        self.search_generation = self.search_generation.wrapping_add(1);
-                        let generation = self.search_generation;
-
-                        let query_str = self.search_query.trim().to_string();
-                        let room_id = room_id.clone();
-                        let matrix = matrix.clone();
-
-                        tasks.push(Task::perform(
-                            async move {
-                                // Debounce: wait for typing to settle before
-                                // querying the homeserver search index.
-                                tokio::time::sleep(std::time::Duration::from_millis(350)).await;
-                                matrix
-                                    .search_messages_in_room(&room_id, &query_str, 20)
-                                    .await
-                                    .map_err(|e| e.to_string())
-                            },
-                            move |res| Action::from(Message::MessageSearchResults(generation, res)),
-                        ));
-                    }
-
-                    if tasks.is_empty() {
-                        Task::none()
-                    } else {
-                        Task::batch(tasks)
-                    }
-                } else {
-                    self.public_search_results.clear();
-                    self.is_searching_public = false;
-                    self.message_search_results.clear();
-                    self.is_searching_messages = false;
-                    // Invalidate any in-flight message search so a late result
-                    // doesn't repopulate stale hits for the cleared query.
-                    self.search_generation = self.search_generation.wrapping_add(1);
-                    Task::none()
-                }
-            }
+            Message::ToggleSearch => self.handle_toggle_search(),
+            Message::SearchQueryChanged(query) => self.handle_search_query_changed(query),
             Message::PublicSearchResults(res) => {
                 self.is_searching_public = false;
                 match res {
@@ -3456,6 +3167,311 @@ impl Constellations {
             },
             |res| Action::from(Message::PinnedEventsFetched(res)),
         )
+    }
+
+    fn handle_room_selected(&mut self, room_id: std::sync::Arc<str>) -> Task<Action<Message>> {
+        if let Some(room) = self.room_list.iter().find(|r| r.id == room_id)
+            && let Some(name) = &room.name
+        {
+            self.room_name_cache.insert(room_id.clone(), name.clone());
+        }
+        self.selected_room = Some(room_id.clone());
+        self.timeline_items.clear();
+        self.room_members.clear();
+        self.pinned_events.clear();
+        self.pinned_events_details.clear();
+        // Message search results are scoped to the previous room;
+        // clear them so stale hits don't bleed into the new room.
+        self.message_search_results.clear();
+        self.is_searching_messages = false;
+        self.inviting_to_room = false;
+        self.invite_to_room_id.clear();
+        // A room switch always leaves the event-focused (permalink
+        // context) view: clear any pending/active event focus so the
+        // new room opens on its live timeline and the banner hides.
+        self.pending_event_focus = None;
+        self.active_event_focus = None;
+        let fetch_members_task = if self.show_members_panel {
+            self.is_loading_members = true;
+            self.fetch_members_task()
+        } else {
+            Task::none()
+        };
+        let fetch_pinned_task = self.fetch_pinned_events_task();
+        self.recompute_thread_counts();
+        self.last_timeline_offset = 0.0;
+        self.last_content_height = 0.0;
+        self.last_viewport_width = 0.0;
+        self.last_viewport_height = 0.0;
+        self.needs_scroll_adjustment = false;
+        self.is_timeline_at_bottom = true;
+        self.is_threaded_timeline_at_bottom = true;
+        self.is_timeline_initialized = false;
+        self.is_first_time_joining = false;
+        self.visited_room_ids.insert(room_id.clone());
+        self.needs_initial_scroll = true;
+
+        Task::batch(vec![
+            self.update_title(),
+            self.handle_load_more(false),
+            fetch_members_task,
+            fetch_pinned_task,
+        ])
+    }
+
+    fn handle_composer_changed(&mut self, text: String) -> Task<Action<Message>> {
+        self.composer_preview_events = parse_markdown(&text, false);
+        self.composer_preview_links = crate::preview::extract_links(&self.composer_preview_events);
+        self.composer_content = cosmic::widget::text_editor::Content::with_text(&text);
+
+        if self.app_settings.send_typing_notifications
+            && let Some(matrix) = &self.matrix
+            && let Some(room_id) = &self.selected_room
+        {
+            let matrix = matrix.clone();
+            let room_id = room_id.clone();
+            let typing = !self.composer_content.is_empty();
+            return Task::perform(
+                async move {
+                    let _ = matrix.typing_notice(&room_id, typing).await;
+                },
+                |_| Action::from(Message::NoOp),
+            );
+        }
+
+        Task::none()
+    }
+
+    fn handle_composer_action(
+        &mut self,
+        action: cosmic::widget::text_editor::Action,
+    ) -> Task<Action<Message>> {
+        self.composer_content.perform(action);
+        let text = self.composer_content.text();
+        self.composer_preview_events = parse_markdown(&text, false);
+        self.composer_preview_links = crate::preview::extract_links(&self.composer_preview_events);
+
+        if self.app_settings.send_typing_notifications
+            && let Some(matrix) = &self.matrix
+            && let Some(room_id) = &self.selected_room
+        {
+            let matrix = matrix.clone();
+            let room_id = room_id.clone();
+            let typing = !self.composer_content.is_empty();
+            return Task::perform(
+                async move {
+                    let _ = matrix.typing_notice(&room_id, typing).await;
+                },
+                |_| Action::from(Message::NoOp),
+            );
+        }
+
+        Task::none()
+    }
+
+    fn handle_start_reply(
+        &mut self,
+        item_id: matrix::TimelineEventItemId,
+    ) -> Task<Action<Message>> {
+        let mut found_item = None;
+        for item in self
+            .timeline_items
+            .iter()
+            .chain(self.threaded_timeline_items.iter())
+        {
+            if let Some(timeline_item) = &item.item
+                && let Some(event) = timeline_item.as_event()
+                && event.identifier() == item_id
+            {
+                found_item = Some(item.clone());
+                break;
+            }
+        }
+        self.replying_to = found_item;
+        Task::none()
+    }
+
+    fn handle_start_edit(&mut self, item_id: matrix::TimelineEventItemId) -> Task<Action<Message>> {
+        let mut found_item = None;
+        for item in self
+            .timeline_items
+            .iter()
+            .chain(self.threaded_timeline_items.iter())
+        {
+            if let Some(timeline_item) = &item.item
+                && let Some(event) = timeline_item.as_event()
+                && event.identifier() == item_id
+            {
+                found_item = Some(item.clone());
+                break;
+            }
+        }
+        if let Some(item) = found_item
+            && let Some(timeline_item) = &item.item
+            && let Some(event) = timeline_item.as_event()
+            && let Some(msg) = event.content().as_message()
+        {
+            self.composer_content = cosmic::widget::text_editor::Content::with_text(msg.body());
+            self.composer_preview_events = parse_markdown(&self.composer_content.text(), false);
+            self.composer_preview_links =
+                crate::preview::extract_links(&self.composer_preview_events);
+            self.editing_item = Some(item);
+            self.replying_to = None;
+        }
+        Task::none()
+    }
+
+    fn handle_toggle_search(&mut self) -> Task<Action<Message>> {
+        self.is_search_active = !self.is_search_active;
+        if !self.is_search_active {
+            self.search_query.clear();
+            self.room_settings.member_filter.clear();
+            self.space_settings.child_filter.clear();
+            self.public_search_results.clear();
+            self.is_searching_public = false;
+            self.message_search_results.clear();
+            self.is_searching_messages = false;
+        } else if let Some(panel) = &self.current_settings_panel {
+            match panel {
+                SettingsPanel::Room => {
+                    self.search_query = self.room_settings.member_filter.clone();
+                }
+                SettingsPanel::Space => {
+                    self.search_query = self.space_settings.child_filter.clone();
+                }
+                _ => {}
+            }
+        }
+        self.update_filtered_rooms();
+        Task::none()
+    }
+
+    fn handle_search_query_changed(&mut self, query: String) -> Task<Action<Message>> {
+        self.search_query = query.clone();
+        if let Some(panel) = &self.current_settings_panel {
+            match panel {
+                SettingsPanel::Room => {
+                    self.room_settings.member_filter = query.clone();
+                }
+                SettingsPanel::Space => {
+                    self.space_settings.child_filter = query.clone();
+                }
+                _ => {}
+            }
+        }
+        self.update_filtered_rooms();
+
+        if self.current_settings_panel.is_none() && !self.search_query.trim().is_empty() {
+            let mut tasks = Vec::new();
+
+            // Public rooms / spaces directory search (existing).
+            if let Some(matrix) = &self.matrix {
+                let query_str = self.search_query.trim().to_string();
+                let matrix = matrix.clone();
+                self.is_searching_public = true;
+
+                tasks.push(Task::perform(
+                    async move { matrix.search_public_rooms(query_str, Some(20)).await },
+                    |res| {
+                        Action::from(Message::PublicSearchResults(res.map_err(|e| e.to_string())))
+                    },
+                ));
+            }
+
+            // Server-side message search (new). Only runs when a room is
+            // selected; debounced so a fast-typed query doesn't hammer
+            // the search index. The generation lets the result handler
+            // discard results from a now-stale query.
+            if let Some(matrix) = &self.matrix
+                && let Some(room_id) = &self.selected_room
+            {
+                self.is_searching_messages = true;
+                self.search_generation = self.search_generation.wrapping_add(1);
+                let generation = self.search_generation;
+
+                let query_str = self.search_query.trim().to_string();
+                let room_id = room_id.clone();
+                let matrix = matrix.clone();
+
+                tasks.push(Task::perform(
+                    async move {
+                        // Debounce: wait for typing to settle before
+                        // querying the homeserver search index.
+                        tokio::time::sleep(std::time::Duration::from_millis(350)).await;
+                        matrix
+                            .search_messages_in_room(&room_id, &query_str, 20)
+                            .await
+                            .map_err(|e| e.to_string())
+                    },
+                    move |res| Action::from(Message::MessageSearchResults(generation, res)),
+                ));
+            }
+
+            if tasks.is_empty() {
+                Task::none()
+            } else {
+                Task::batch(tasks)
+            }
+        } else {
+            self.public_search_results.clear();
+            self.is_searching_public = false;
+            self.message_search_results.clear();
+            self.is_searching_messages = false;
+            // Invalidate any in-flight message search so a late result
+            // doesn't repopulate stale hits for the cleared query.
+            self.search_generation = self.search_generation.wrapping_add(1);
+            Task::none()
+        }
+    }
+
+    fn handle_open_settings(&mut self, panel: SettingsPanel) -> Task<Action<Message>> {
+        self.needs_layout_scroll_restoration = true;
+        self.needs_threaded_layout_scroll_restoration = true;
+        self.show_members_panel = false;
+        self.show_pinned_panel = false;
+        self.creating_room = false;
+        self.creating_space = false;
+        self.current_settings_panel = Some(panel.clone());
+        self.core.set_show_context(true);
+
+        if self.is_search_active {
+            match panel {
+                SettingsPanel::Room => {
+                    self.room_settings.member_filter = self.search_query.clone();
+                }
+                SettingsPanel::Space => {
+                    self.space_settings.child_filter = self.search_query.clone();
+                }
+                _ => {}
+            }
+        }
+
+        let task = if panel == SettingsPanel::User {
+            self.user_settings
+                .update(settings::user::Message::LoadProfile, &self.matrix)
+        } else if matches!(
+            panel,
+            SettingsPanel::Room | SettingsPanel::ManageRoomMembers
+        ) {
+            if let Some(room_id) = &self.selected_room {
+                self.room_settings.update(
+                    settings::room::Message::LoadRoom(room_id.clone()),
+                    &self.matrix,
+                )
+            } else {
+                Task::none()
+            }
+        } else if panel == SettingsPanel::Space
+            && let Some(space_id) = &self.selected_space
+        {
+            self.space_settings.update(
+                settings::space::Message::LoadSpace(Arc::from(space_id.as_str())),
+                &self.matrix,
+            )
+        } else {
+            Task::none()
+        };
+        Task::batch(vec![task, self.restore_scroll_task()])
     }
 }
 
