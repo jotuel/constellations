@@ -1284,7 +1284,6 @@ impl<'chat> Constellations {
         content.push(attachments_view).push(composer_card).into()
     }
 
-
     fn view_editing_bar(body: String) -> Element<'static, Message> {
         let snippet = truncate_snippet(body);
 
@@ -1860,6 +1859,22 @@ fn view_reply_bar<'a>(
         ))
 }
 
+fn truncate_snippet(body: String) -> std::borrow::Cow<'static, str> {
+    let mut char_indices = body.char_indices();
+    if let Some((idx_97, _)) = char_indices.nth(97) {
+        if char_indices.nth(2).is_some() {
+            let mut s = String::with_capacity(100);
+            s.push_str(&body[..idx_97]);
+            s.push_str("...");
+            std::borrow::Cow::Owned(s)
+        } else {
+            std::borrow::Cow::Owned(body)
+        }
+    } else {
+        std::borrow::Cow::Owned(body)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::constellations::Constellations;
@@ -1904,22 +1919,5 @@ mod tests {
     fn test_view_pinned_panel_renders_without_panicking() {
         let constellations = Constellations::mock();
         let _element = constellations.view_pinned_panel();
-    }
-}
-
-
-fn truncate_snippet(body: String) -> std::borrow::Cow<'static, str> {
-    let mut char_indices = body.char_indices();
-    if let Some((idx_97, _)) = char_indices.nth(97) {
-        if char_indices.nth(2).is_some() {
-            let mut s = String::with_capacity(100);
-            s.push_str(&body[..idx_97]);
-            s.push_str("...");
-            std::borrow::Cow::Owned(s)
-        } else {
-            std::borrow::Cow::Owned(body)
-        }
-    } else {
-        std::borrow::Cow::Owned(body)
     }
 }
