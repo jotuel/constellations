@@ -1971,14 +1971,14 @@ impl MatrixEngine {
         let client = self.client().await;
         let room = client.get_room(&room_id_parsed).context("Room not found")?;
         let members = room.members(matrix_sdk::RoomMemberships::ACTIVE).await?;
-        let mut member_infos = Vec::new();
-        for m in members {
-            member_infos.push(RoomMemberInfo {
+        let member_infos = members
+            .into_iter()
+            .map(|m| RoomMemberInfo {
                 user_id: m.user_id().to_string(),
                 display_name: m.display_name().map(|s| s.to_string()),
                 avatar_url: m.avatar_url().map(|u| u.to_string()),
-            });
-        }
+            })
+            .collect();
         Ok(member_infos)
     }
 
