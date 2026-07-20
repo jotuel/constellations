@@ -983,7 +983,6 @@ impl MatrixEngine {
         Ok(())
     }
 
-
     async fn load_session_secret() -> Option<Vec<u8>> {
         let keyring = match if Self::should_bypass_keyring() {
             Err(anyhow::anyhow!("Bypassing keyring in test"))
