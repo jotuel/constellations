@@ -402,4 +402,103 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn test_extract_links_empty() {
+        let events = vec![];
+        let links = extract_links(&events);
+        assert!(links.is_empty());
+    }
+
+    #[test]
+    fn test_extract_links_no_links() {
+        let events = vec![
+            PreviewEvent::Text("Just some text".to_string()),
+            PreviewEvent::Break,
+        ];
+        let links = extract_links(&events);
+        assert!(links.is_empty());
+    }
+
+    #[test]
+    fn test_extract_links_empty_text() {
+        let events = vec![
+            PreviewEvent::StartLink("https://example.com".to_string()),
+            PreviewEvent::EndLink,
+        ];
+        let links = extract_links(&events);
+        assert_eq!(
+            links,
+            vec![(
+                "https://example.com".to_string(),
+                "https://example.com".to_string()
+            )]
+        );
+    }
+
+    #[test]
+    fn test_extract_links_whitespace_text() {
+        let events = vec![
+            PreviewEvent::StartLink("https://example.com".to_string()),
+            PreviewEvent::Text("   ".to_string()),
+            PreviewEvent::EndLink,
+        ];
+        let links = extract_links(&events);
+        assert_eq!(
+            links,
+            vec![(
+                "https://example.com".to_string(),
+                "https://example.com".to_string()
+            )]
+        );
+    }
+
+    #[test]
+    fn test_extract_links_multiple_text_events() {
+        let events = vec![
+            PreviewEvent::StartLink("https://example.com".to_string()),
+            PreviewEvent::Text("Example ".to_string()),
+            PreviewEvent::Text("Site".to_string()),
+            PreviewEvent::EndLink,
+        ];
+        let links = extract_links(&events);
+        assert_eq!(
+            links,
+            vec![(
+                "Example Site".to_string(),
+                "https://example.com".to_string()
+            )]
+        );
+    }
+
+    #[test]
+    fn test_extract_links_unclosed_link() {
+        let events = vec![
+            PreviewEvent::StartLink("https://example.com".to_string()),
+            PreviewEvent::Text("Example".to_string()),
+        ];
+        let links = extract_links(&events);
+        assert!(links.is_empty());
+    }
+
+    #[test]
+    fn test_extract_links_ignored_events() {
+        let events = vec![
+            PreviewEvent::StartLink("https://example.com".to_string()),
+            PreviewEvent::Text("Example ".to_string()),
+            PreviewEvent::Code("code".to_string()), // Should be ignored by extract_links, just like other non-text formatting inside a link would be.
+            PreviewEvent::Text(" Site".to_string()),
+            PreviewEvent::EndLink,
+        ];
+        let links = extract_links(&events);
+        // Note: the current implementation only accumulates Text events.
+        // So Code events are ignored and won't contribute to the label text.
+        assert_eq!(
+            links,
+            vec![(
+                "Example  Site".to_string(),
+                "https://example.com".to_string()
+            )]
+        );
+    }
 }
