@@ -572,8 +572,9 @@ impl State {
                                 .await
                                 .map_err(|e| e.to_string())?;
 
-                            let devices: Vec<_> = user_devices.devices().map(|device| {
-                                DeviceInfo {
+                            let devices: Vec<_> = user_devices
+                                .devices()
+                                .map(|device| DeviceInfo {
                                     device_id: Arc::from(device.device_id().as_str()),
                                     display_name: device.display_name().map(|n| n.to_string()),
                                     is_verified: if device.device_id() == current_device_id {
@@ -585,8 +586,8 @@ impl State {
                                     is_renaming: false,
                                     edit_name: String::new(),
                                     is_deleting: false,
-                                }
-                            }).collect();
+                                })
+                                .collect();
                             Ok(devices)
                         },
                         |res| {
