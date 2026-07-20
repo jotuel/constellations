@@ -429,7 +429,10 @@ mod tests {
         let links = extract_links(&events);
         assert_eq!(
             links,
-            vec![("https://example.com".to_string(), "https://example.com".to_string())]
+            vec![(
+                "https://example.com".to_string(),
+                "https://example.com".to_string()
+            )]
         );
     }
 
@@ -443,7 +446,10 @@ mod tests {
         let links = extract_links(&events);
         assert_eq!(
             links,
-            vec![("https://example.com".to_string(), "https://example.com".to_string())]
+            vec![(
+                "https://example.com".to_string(),
+                "https://example.com".to_string()
+            )]
         );
     }
 
@@ -458,7 +464,10 @@ mod tests {
         let links = extract_links(&events);
         assert_eq!(
             links,
-            vec![("Example Site".to_string(), "https://example.com".to_string())]
+            vec![(
+                "Example Site".to_string(),
+                "https://example.com".to_string()
+            )]
         );
     }
 
@@ -486,7 +495,10 @@ mod tests {
         // So Code events are ignored and won't contribute to the label text.
         assert_eq!(
             links,
-            vec![("Example  Site".to_string(), "https://example.com".to_string())]
+            vec![(
+                "Example  Site".to_string(),
+                "https://example.com".to_string()
+            )]
         );
     }
 }
