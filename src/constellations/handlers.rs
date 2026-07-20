@@ -4112,8 +4112,7 @@ mod tests {
         assert!(app.qr_check_code_input.is_empty());
     }
 
-    #[test]
-    fn test_room_scroll_behavior() {
+    fn setup_scroll_test_app() -> (crate::Constellations, std::sync::Arc<str>) {
         let mut app = create_dummy_constellations();
         app.user_id = Some("@test_user:matrix.org".to_string());
 
@@ -4133,6 +4132,13 @@ mod tests {
             order: None,
             suggested: false,
         });
+
+        (app, room_id)
+    }
+
+    #[test]
+    fn test_room_scroll_behavior_just_joined() {
+        let (mut app, room_id) = setup_scroll_test_app();
 
         // 1. Just joined the room
         let owned_room_id = matrix_sdk::ruma::RoomId::parse(room_id.as_ref())
@@ -4163,6 +4169,11 @@ mod tests {
 
         let _task = app.update(Message::LoadMoreFinished(Ok(())));
         assert!(!app.needs_initial_scroll);
+    }
+
+    #[test]
+    fn test_room_scroll_behavior_normal_selection() {
+        let (mut app, room_id) = setup_scroll_test_app();
 
         // 2. Normal room selection
         app.timeline_items.clear();
@@ -4190,6 +4201,12 @@ mod tests {
 
         let _task2 = app.update(Message::LoadMoreFinished(Ok(())));
         assert!(!app.needs_initial_scroll);
+    }
+
+    #[test]
+    fn test_room_scroll_behavior_check_initial_scroll() {
+        let (mut app, room_id) = setup_scroll_test_app();
+        app.selected_room = Some(room_id);
 
         // 3. Directly test check_and_perform_initial_scroll helper
         app.timeline_items.clear();
@@ -4211,6 +4228,11 @@ mod tests {
             ));
         assert!(app.check_and_perform_initial_scroll().is_some());
         assert!(!app.needs_initial_scroll);
+    }
+
+    #[test]
+    fn test_room_scroll_behavior_timeline_reset_initial() {
+        let (mut app, _) = setup_scroll_test_app();
 
         // 4. Test timeline reset scroll behavior (initial reset)
         app.is_timeline_initialized = false;
@@ -4218,6 +4240,11 @@ mod tests {
         assert!(app.needs_initial_scroll);
         assert!(app.is_timeline_at_bottom);
         assert!(!app.is_timeline_initialized);
+    }
+
+    #[test]
+    fn test_room_scroll_behavior_timeline_reset_background() {
+        let (mut app, _) = setup_scroll_test_app();
 
         // 5. Test background timeline reset scroll behavior (when already initialized)
         app.is_timeline_initialized = true;
