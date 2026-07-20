@@ -1415,11 +1415,7 @@ impl State {
                         async move {
                             let client = matrix.client().await;
                             let ns = client.notification_settings().await;
-                            let mut res = Vec::new();
-                            for k in ns.enabled_keywords().await {
-                                res.push(k);
-                            }
-                            res
+                            ns.enabled_keywords().await.into_iter().collect()
                         },
                         |res| {
                             Action::from(crate::Message::UserSettings(Message::KeywordsLoaded(res)))
