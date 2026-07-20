@@ -22,41 +22,76 @@ impl Constellations {
             .align_x(Alignment::Center)
             .push(text::title1(title));
 
-        let homeserver_input = text_input(crate::fl!("homeserver"), &self.login_homeserver);
-        let username_input = text_input(crate::fl!("username"), &self.login_username);
-        let password_input = text_input(crate::fl!("password"), &self.login_password).password();
-
-        let (homeserver_input, username_input, password_input) =
-            if (self.auth_flow == AuthFlow::Password || self.auth_flow == AuthFlow::Oidc)
-                || self.is_registering
-            {
-                (homeserver_input, username_input, password_input)
-            } else {
-                (
-                    homeserver_input.on_input(Message::LoginHomeserverChanged),
-                    username_input.on_input(Message::LoginUsernameChanged),
-                    password_input
-                        .on_input(Message::LoginPasswordChanged)
-                        .on_submit(|_| {
-                            if self.is_registering_mode {
-                                Message::SubmitRegister
-                            } else {
-                                Message::SubmitLogin
-                            }
-                        }),
-                )
-            };
-
+        let (homeserver_elem, username_elem, password_elem) = self.login_inputs();
         content = content
-            .push(homeserver_input)
-            .push(username_input)
-            .push(password_input);
+            .push(homeserver_elem)
+            .push(username_elem)
+            .push(password_elem);
 
         let is_missing_fields = self.login_homeserver.trim().is_empty()
             || self.login_username.trim().is_empty()
             || self.login_password.is_empty();
 
-        let main_button: Element<'_, Message> = if self.is_registering_mode {
+        content = content.push(self.login_main_button(is_missing_fields));
+
+        if !self.is_registering_mode {
+            content = content.push(self.login_oidc_button());
+            content = content.push(self.login_qr_button());
+        }
+
+        content = content.push(self.login_toggle_button());
+
+        container(content)
+            .width(cosmic::iced::Length::Fill)
+            .height(cosmic::iced::Length::Fill)
+            .align_x(Alignment::Center)
+            .align_y(Alignment::Center)
+            .into()
+    }
+
+    fn login_inputs(
+        &self,
+    ) -> (
+        Element<'_, Message>,
+        Element<'_, Message>,
+        Element<'_, Message>,
+    ) {
+        let homeserver_input = text_input(crate::fl!("homeserver"), &self.login_homeserver);
+        let username_input = text_input(crate::fl!("username"), &self.login_username);
+        let password_input = text_input(crate::fl!("password"), &self.login_password).password();
+
+        if (self.auth_flow == AuthFlow::Password || self.auth_flow == AuthFlow::Oidc)
+            || self.is_registering
+        {
+            (
+                homeserver_input.into(),
+                username_input.into(),
+                password_input.into(),
+            )
+        } else {
+            (
+                homeserver_input
+                    .on_input(Message::LoginHomeserverChanged)
+                    .into(),
+                username_input
+                    .on_input(Message::LoginUsernameChanged)
+                    .into(),
+                password_input
+                    .on_input(Message::LoginPasswordChanged)
+                    .on_submit(|_| {
+                        if self.is_registering_mode {
+                            Message::SubmitRegister
+                        } else {
+                            Message::SubmitLogin
+                        }
+                    })
+                    .into(),
+            )
+        }
+    }
+
+    fn login_main_button(&self, is_missing_fields: bool) -> Element<'_, Message> {
+        if self.is_registering_mode {
             if self.is_registering {
                 button::text(crate::fl!("creating-account")).into()
             } else {
@@ -92,9 +127,11 @@ impl Constellations {
             } else {
                 btn.into()
             }
-        };
+        }
+    }
 
-        let oidc_button: Element<'_, Message> = if self.auth_flow == AuthFlow::Oidc {
+    fn login_oidc_button(&self) -> Element<'_, Message> {
+        if self.auth_flow == AuthFlow::Oidc {
             let oidc_col = Column::new()
                 .spacing(5)
                 .align_x(Alignment::Center)
@@ -110,49 +147,34 @@ impl Constellations {
                 btn = btn.on_press(Message::SubmitOidcLogin);
             }
             btn.into()
-        };
+        }
+    }
 
-        let qr_login_button = {
-            let mut btn = button::text(crate::fl!("login-qr-button"));
-            if self.auth_flow != AuthFlow::Password
-                && !self.is_registering_mode
-                && self.auth_flow != AuthFlow::Oidc
-            {
-                btn = btn.on_press(Message::StartQrLogin);
-            }
-            btn
-        };
+    fn login_qr_button(&self) -> Element<'_, Message> {
+        let mut btn = button::text(crate::fl!("login-qr-button"));
+        if self.auth_flow != AuthFlow::Password
+            && !self.is_registering_mode
+            && self.auth_flow != AuthFlow::Oidc
+        {
+            btn = btn.on_press(Message::StartQrLogin);
+        }
+        btn.into()
+    }
 
+    fn login_toggle_button(&self) -> Element<'_, Message> {
         let toggle_mode_button = if self.is_registering_mode {
             button::text(crate::fl!("already-have-account"))
         } else {
             button::text(crate::fl!("need-account"))
         };
 
-        let toggle_mode_button = if (self.auth_flow == AuthFlow::Password
-            || self.auth_flow == AuthFlow::Oidc)
+        if (self.auth_flow == AuthFlow::Password || self.auth_flow == AuthFlow::Oidc)
             || self.is_registering
         {
-            toggle_mode_button
+            toggle_mode_button.into()
         } else {
-            toggle_mode_button.on_press(Message::ToggleLoginMode)
-        };
-
-        content = content.push(main_button);
-
-        if !self.is_registering_mode {
-            content = content.push(oidc_button);
-            content = content.push(qr_login_button);
+            toggle_mode_button.on_press(Message::ToggleLoginMode).into()
         }
-
-        content = content.push(toggle_mode_button);
-
-        container(content)
-            .width(cosmic::iced::Length::Fill)
-            .height(cosmic::iced::Length::Fill)
-            .align_x(Alignment::Center)
-            .align_y(Alignment::Center)
-            .into()
     }
 
     pub fn view_qr_login(&self) -> Element<'_, Message> {
