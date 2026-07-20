@@ -2149,51 +2149,7 @@ impl MatrixEngine {
             .get_state_events_static::<SpaceChildEventContent>()
             .await?;
 
-        let child_data: HashMap<_, _> = children_events
-            .into_iter()
-            .filter_map(|event| event.deserialize().ok())
-            .filter_map(|event| match event {
-                matrix_sdk_base::deserialized_responses::SyncOrStrippedState::Sync(
-                    matrix_sdk::ruma::events::SyncStateEvent::Original(ev),
-                ) => {
-                    if !ev.content.via.is_empty() {
-                        RoomId::parse(ev.state_key.as_str()).ok().map(|cid| {
-                            (
-                                cid,
-                                ChildData {
-                                    order: ev.content.order.as_ref().map(|o| o.to_string()),
-                                    suggested: ev.content.suggested,
-                                },
-                            )
-                        })
-                    } else {
-                        None
-                    }
-                }
-                matrix_sdk_base::deserialized_responses::SyncOrStrippedState::Stripped(ev) => {
-                    if !ev
-                        .content
-                        .via
-                        .as_ref()
-                        .map(|v| v.is_empty())
-                        .unwrap_or(true)
-                    {
-                        RoomId::parse(ev.state_key.as_str()).ok().map(|cid| {
-                            (
-                                cid,
-                                ChildData {
-                                    order: ev.content.order.as_ref().map(|o| o.to_string()),
-                                    suggested: ev.content.suggested,
-                                },
-                            )
-                        })
-                    } else {
-                        None
-                    }
-                }
-                _ => None,
-            })
-            .collect();
+        let child_data = Self::parse_space_children_events(children_events);
 
         // Use the hierarchy API to get rich metadata for all rooms in the space
         let mut rooms = Vec::new();
@@ -2249,36 +2205,102 @@ impl MatrixEngine {
             }
         } else {
             // Fallback to state events if hierarchy API fails
-            for (child_id_parsed, data) in child_data {
-                {
-                    let mut inner = self.inner.write().await;
-                    inner.space_hierarchy.add_child(
-                        space_id_parsed.clone(),
-                        child_id_parsed.clone(),
-                        data.order.clone(),
-                        data.suggested,
-                    );
-                }
+            rooms = self
+                .fallback_space_children_from_state(space_id, &space_id_parsed, child_data)
+                .await?;
+        }
+        Ok(rooms)
+    }
 
-                if let Some(child_room) = client.get_room(&child_id_parsed) {
-                    rooms.push(self.fetch_room_data(&child_room).await?);
-                } else {
-                    rooms.push(RoomData {
-                        id: child_id_parsed.as_str().into(),
-                        name: None,
-                        last_message: None,
-                        unread_count: 0,
-                        unread_count_str: None,
-                        avatar_url: None,
-                        room_type: None,
-                        is_space: false,
-                        parent_space_id: Some(space_id.to_string()),
-                        join_rule: None,
-                        allowed_spaces: Vec::new(),
-                        order: data.order,
-                        suggested: data.suggested,
-                    });
+    fn parse_space_children_events(
+        children_events: Vec<
+            matrix_sdk_base::deserialized_responses::RawSyncOrStrippedState<SpaceChildEventContent>,
+        >,
+    ) -> HashMap<OwnedRoomId, ChildData> {
+        children_events
+            .into_iter()
+            .filter_map(|event| event.deserialize().ok())
+            .filter_map(|event| match event {
+                matrix_sdk_base::deserialized_responses::SyncOrStrippedState::Sync(
+                    matrix_sdk::ruma::events::SyncStateEvent::Original(ev),
+                ) => {
+                    if !ev.content.via.is_empty() {
+                        RoomId::parse(ev.state_key.as_str()).ok().map(|cid| {
+                            (
+                                cid,
+                                ChildData {
+                                    order: ev.content.order.as_ref().map(|o| o.to_string()),
+                                    suggested: ev.content.suggested,
+                                },
+                            )
+                        })
+                    } else {
+                        None
+                    }
                 }
+                matrix_sdk_base::deserialized_responses::SyncOrStrippedState::Stripped(ev) => {
+                    if !ev
+                        .content
+                        .via
+                        .as_ref()
+                        .map(|v| v.is_empty())
+                        .unwrap_or(true)
+                    {
+                        RoomId::parse(ev.state_key.as_str()).ok().map(|cid| {
+                            (
+                                cid,
+                                ChildData {
+                                    order: ev.content.order.as_ref().map(|o| o.to_string()),
+                                    suggested: ev.content.suggested,
+                                },
+                            )
+                        })
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            })
+            .collect()
+    }
+
+    async fn fallback_space_children_from_state(
+        &self,
+        space_id: &str,
+        space_id_parsed: &RoomId,
+        child_data: HashMap<OwnedRoomId, ChildData>,
+    ) -> Result<Vec<RoomData>> {
+        let client = self.client().await;
+        let mut rooms = Vec::new();
+        for (child_id_parsed, data) in child_data {
+            {
+                let mut inner = self.inner.write().await;
+                inner.space_hierarchy.add_child(
+                    space_id_parsed.to_owned(),
+                    child_id_parsed.clone(),
+                    data.order.clone(),
+                    data.suggested,
+                );
+            }
+
+            if let Some(child_room) = client.get_room(&child_id_parsed) {
+                rooms.push(self.fetch_room_data(&child_room).await?);
+            } else {
+                rooms.push(RoomData {
+                    id: child_id_parsed.as_str().into(),
+                    name: None,
+                    last_message: None,
+                    unread_count: 0,
+                    unread_count_str: None,
+                    avatar_url: None,
+                    room_type: None,
+                    is_space: false,
+                    parent_space_id: Some(space_id.to_string()),
+                    join_rule: None,
+                    allowed_spaces: Vec::new(),
+                    order: data.order,
+                    suggested: data.suggested,
+                });
             }
         }
         Ok(rooms)
