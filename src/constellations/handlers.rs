@@ -2632,7 +2632,11 @@ impl Constellations {
             }
             Message::ToggleSearch => self.handle_toggle_search(),
             Message::SearchQueryChanged(query) => self.handle_search_query_changed(query),
-            Message::PublicSearchResults(res) => {
+            Message::PublicSearchResults(generation, res) => {
+                // Discard stale results from a query the user has since edited.
+                if generation != self.search_generation {
+                    return Task::none();
+                }
                 self.is_searching_public = false;
                 match res {
                     Ok(results) => {
@@ -3363,6 +3367,8 @@ impl Constellations {
 
         if self.current_settings_panel.is_none() && !self.search_query.trim().is_empty() {
             let mut tasks = Vec::new();
+            self.search_generation = self.search_generation.wrapping_add(1);
+            let generation = self.search_generation;
 
             // Public rooms / spaces directory search (existing).
             if let Some(matrix) = &self.matrix {
@@ -3371,9 +3377,17 @@ impl Constellations {
                 self.is_searching_public = true;
 
                 tasks.push(Task::perform(
-                    async move { matrix.search_public_rooms(query_str, Some(20)).await },
-                    |res| {
-                        Action::from(Message::PublicSearchResults(res.map_err(|e| e.to_string())))
+                    async move {
+                        // Debounce: wait for typing to settle before
+                        // querying the homeserver public room directory.
+                        tokio::time::sleep(std::time::Duration::from_millis(350)).await;
+                        matrix.search_public_rooms(query_str, Some(20)).await
+                    },
+                    move |res| {
+                        Action::from(Message::PublicSearchResults(
+                            generation,
+                            res.map_err(|e| e.to_string()),
+                        ))
                     },
                 ));
             }
@@ -3386,9 +3400,6 @@ impl Constellations {
                 && let Some(room_id) = &self.selected_room
             {
                 self.is_searching_messages = true;
-                self.search_generation = self.search_generation.wrapping_add(1);
-                let generation = self.search_generation;
-
                 let query_str = self.search_query.trim().to_string();
                 let room_id = room_id.clone();
                 let matrix = matrix.clone();
