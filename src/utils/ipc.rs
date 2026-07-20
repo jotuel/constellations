@@ -118,4 +118,25 @@ mod tests {
             );
         }
     }
+
+    #[tokio::test]
+    async fn test_ipc_interface_handle_callback() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let interface = IpcInterface { tx };
+
+        let uri = "test_uri".to_string();
+        interface.handle_callback(uri.clone()).await;
+
+        let received = rx.recv().await.expect("Did not receive URI on channel");
+        assert_eq!(received, uri);
+    }
+
+    #[tokio::test]
+    async fn test_ipc_interface_handle_callback_closed_channel() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let interface = IpcInterface { tx };
+        rx.close();
+        let uri = "test_uri".to_string();
+        interface.handle_callback(uri).await;
+    }
 }
