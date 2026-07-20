@@ -865,8 +865,11 @@ impl MatrixEngine {
         {
             homeserver.to_string()
         } else {
-            let stripped = homeserver.strip_prefix("http://").unwrap_or(homeserver);
-            format!("https://{}", stripped)
+            if homeserver.starts_with("http://") {
+                anyhow::bail!("HTTP is not supported for remote homeservers. Please use HTTPS.");
+            } else {
+                format!("https://{}", homeserver)
+            }
         };
 
         let client = {
@@ -940,8 +943,11 @@ impl MatrixEngine {
         {
             homeserver.to_string()
         } else {
-            let stripped = homeserver.strip_prefix("http://").unwrap_or(homeserver);
-            format!("https://{}", stripped)
+            if homeserver.starts_with("http://") {
+                anyhow::bail!("HTTP is not supported for remote homeservers. Please use HTTPS.");
+            } else {
+                format!("https://{}", homeserver)
+            }
         };
 
         let client = {
@@ -2668,8 +2674,11 @@ impl MatrixEngine {
         {
             homeserver.to_string()
         } else {
-            let stripped = homeserver.strip_prefix("http://").unwrap_or(homeserver);
-            format!("https://{}", stripped)
+            if homeserver.starts_with("http://") {
+                anyhow::bail!("HTTP is not supported for remote homeservers. Please use HTTPS.");
+            } else {
+                format!("https://{}", homeserver)
+            }
         };
 
         let client = {
@@ -2795,8 +2804,11 @@ impl MatrixEngine {
         {
             homeserver.to_string()
         } else {
-            let stripped = homeserver.strip_prefix("http://").unwrap_or(homeserver);
-            format!("https://{}", stripped)
+            if homeserver.starts_with("http://") {
+                anyhow::bail!("HTTP is not supported for remote homeservers. Please use HTTPS.");
+            } else {
+                format!("https://{}", homeserver)
+            }
         };
 
         let client = {
