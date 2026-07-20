@@ -501,4 +501,67 @@ mod tests {
             )]
         );
     }
+
+    #[test]
+    fn test_parse_plain_text_simple() {
+        let text = "Just a simple text";
+        let events = parse_plain_text(text);
+        assert_eq!(
+            events,
+            vec![
+                PreviewEvent::Text("Just a simple text".to_string()),
+                PreviewEvent::EndBlock,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_plain_text_heading_ignored() {
+        let text = "# Heading 1
+Some text.";
+        let events = parse_plain_text(text);
+        assert_eq!(
+            events,
+            vec![
+                PreviewEvent::Text("Heading 1".to_string()),
+                PreviewEvent::EndBlock,
+                PreviewEvent::Text("Some text.".to_string()),
+                PreviewEvent::EndBlock,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_plain_text_code() {
+        let text = "Here is `some code` inline.";
+        let events = parse_plain_text(text);
+        assert_eq!(
+            events,
+            vec![
+                PreviewEvent::Text("Here is ".to_string()),
+                PreviewEvent::Code("some code".to_string()),
+                PreviewEvent::Text(" inline.".to_string()),
+                PreviewEvent::EndBlock,
+            ]
+        );
+    }
+
+    #[test]
+    fn test_parse_plain_text_breaks() {
+        let text = "Line 1
+Line 2
+Line 3";
+        let events = parse_plain_text(text);
+        assert_eq!(
+            events,
+            vec![
+                PreviewEvent::Text("Line 1".to_string()),
+                PreviewEvent::Break,
+                PreviewEvent::Text("Line 2".to_string()),
+                PreviewEvent::Break,
+                PreviewEvent::Text("Line 3".to_string()),
+                PreviewEvent::EndBlock,
+            ]
+        );
+    }
 }
