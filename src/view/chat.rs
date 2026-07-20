@@ -51,9 +51,6 @@ impl<'chat> Constellations {
         if is_filtering {
             return self.view_search_results();
         }
-        let filter_is_ascii = self.search_query.is_ascii();
-        let filter_lower_fallback =
-            (is_filtering && !filter_is_ascii).then(|| self.search_query.to_lowercase());
 
         let mut pending_date_divider: Option<matrix_sdk::ruma::MilliSecondsSinceUnixEpoch> = None;
 
@@ -71,21 +68,6 @@ impl<'chat> Constellations {
                 // View-side thread filtering
                 if self.app_settings.hide_threaded_messages && item.thread_root_id.is_some() {
                     continue;
-                }
-
-                if is_filtering {
-                    let body = event
-                        .content()
-                        .as_message()
-                        .map(|m| m.body())
-                        .unwrap_or_default();
-                    if !crate::contains_ignore_ascii_case(
-                        body,
-                        &self.search_query,
-                        filter_lower_fallback.as_deref(),
-                    ) {
-                        continue;
-                    }
                 }
 
                 if let Some(date) = pending_date_divider.take() {
