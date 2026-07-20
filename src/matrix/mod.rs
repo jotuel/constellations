@@ -2132,47 +2132,51 @@ impl MatrixEngine {
             .get_state_events_static::<SpaceChildEventContent>()
             .await?;
 
-        let mut child_data = HashMap::new();
-        for event in children_events {
-            if let Ok(event) = event.deserialize() {
-                match event {
-                    matrix_sdk_base::deserialized_responses::SyncOrStrippedState::Sync(
-                        matrix_sdk::ruma::events::SyncStateEvent::Original(ev),
-                    ) => {
-                        if !ev.content.via.is_empty()
-                            && let Ok(cid) = RoomId::parse(ev.state_key.as_str())
-                        {
-                            child_data.insert(
+        let child_data: HashMap<_, _> = children_events
+            .into_iter()
+            .filter_map(|event| event.deserialize().ok())
+            .filter_map(|event| match event {
+                matrix_sdk_base::deserialized_responses::SyncOrStrippedState::Sync(
+                    matrix_sdk::ruma::events::SyncStateEvent::Original(ev),
+                ) => {
+                    if !ev.content.via.is_empty() {
+                        RoomId::parse(ev.state_key.as_str()).ok().map(|cid| {
+                            (
                                 cid,
                                 ChildData {
                                     order: ev.content.order.as_ref().map(|o| o.to_string()),
                                     suggested: ev.content.suggested,
                                 },
-                            );
-                        }
+                            )
+                        })
+                    } else {
+                        None
                     }
-                    matrix_sdk_base::deserialized_responses::SyncOrStrippedState::Stripped(ev) => {
-                        if !ev
-                            .content
-                            .via
-                            .as_ref()
-                            .map(|v| v.is_empty())
-                            .unwrap_or(true)
-                            && let Ok(cid) = RoomId::parse(ev.state_key.as_str())
-                        {
-                            child_data.insert(
-                                cid,
-                                ChildData {
-                                    order: ev.content.order.as_ref().map(|o| o.to_string()),
-                                    suggested: ev.content.suggested,
-                                },
-                            );
-                        }
-                    }
-                    _ => {}
                 }
-            }
-        }
+                matrix_sdk_base::deserialized_responses::SyncOrStrippedState::Stripped(ev) => {
+                    if !ev
+                        .content
+                        .via
+                        .as_ref()
+                        .map(|v| v.is_empty())
+                        .unwrap_or(true)
+                    {
+                        RoomId::parse(ev.state_key.as_str()).ok().map(|cid| {
+                            (
+                                cid,
+                                ChildData {
+                                    order: ev.content.order.as_ref().map(|o| o.to_string()),
+                                    suggested: ev.content.suggested,
+                                },
+                            )
+                        })
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            })
+            .collect();
 
         // Use the hierarchy API to get rich metadata for all rooms in the space
         let mut rooms = Vec::new();
