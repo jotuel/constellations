@@ -638,6 +638,12 @@ impl MatrixEngine {
     }
 
     fn setup_event_handlers(&self, client: &Client) {
+        self.setup_message_notification_handler(client);
+        self.setup_space_hierarchy_handlers(client);
+        self.setup_call_member_handler(client);
+    }
+
+    fn setup_message_notification_handler(&self, client: &Client) {
         client.add_event_handler(
             |event: matrix_sdk::ruma::events::room::message::SyncRoomMessageEvent,
              room: matrix_sdk::Room| {
@@ -705,7 +711,9 @@ impl MatrixEngine {
                 }
             },
         );
+    }
 
+    fn setup_space_hierarchy_handlers(&self, client: &Client) {
         macro_rules! handle_space_hierarchy {
             (
                 $client:expr,
@@ -806,7 +814,9 @@ impl MatrixEngine {
             "Space hierarchy updated: {} is parent of {}" ;
             "Space hierarchy updated: {} removed as parent of {} (redacted)"
         );
+    }
 
+    fn setup_call_member_handler(&self, client: &Client) {
         let inner_clone = self.inner.clone();
         client.add_event_handler(
             move |event: SyncStateEvent<
