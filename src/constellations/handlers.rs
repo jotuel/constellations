@@ -2674,11 +2674,47 @@ impl Constellations {
                 }
                 self.is_searching_messages = false;
                 match res {
-                    Ok(results) => {
+                    Ok((results, has_more)) => {
                         self.message_search_results = results;
+                        self.search_has_more = has_more;
                     }
                     Err(e) => {
                         self.message_search_results.clear();
+                        self.search_has_more = false;
+                        self.error =
+                            Some(crate::fl!("search-server-failed", error = e).to_string());
+                    }
+                }
+                Task::none()
+            }
+            Message::LoadMoreMessageSearch => {
+                if self.is_searching_more_messages {
+                    return Task::none();
+                }
+                if let Some(matrix) = &self.matrix {
+                    self.is_searching_more_messages = true;
+                    let matrix = matrix.clone();
+                    Task::perform(
+                        async move {
+                            matrix
+                                .search_messages_in_room_next_batch(20)
+                                .await
+                                .map_err(|e| e.to_string())
+                        },
+                        |res| Action::from(Message::MessageSearchMoreResults(res)),
+                    )
+                } else {
+                    Task::none()
+                }
+            }
+            Message::MessageSearchMoreResults(res) => {
+                self.is_searching_more_messages = false;
+                match res {
+                    Ok((results, has_more)) => {
+                        self.message_search_results.extend(results);
+                        self.search_has_more = has_more;
+                    }
+                    Err(e) => {
                         self.error =
                             Some(crate::fl!("search-server-failed", error = e).to_string());
                     }
@@ -3184,6 +3220,8 @@ impl Constellations {
         // clear them so stale hits don't bleed into the new room.
         self.message_search_results.clear();
         self.is_searching_messages = false;
+        self.search_has_more = false;
+        self.is_searching_more_messages = false;
         self.inviting_to_room = false;
         self.invite_to_room_id.clear();
         // A room switch always leaves the event-focused (permalink
@@ -3331,6 +3369,8 @@ impl Constellations {
             self.is_searching_public = false;
             self.message_search_results.clear();
             self.is_searching_messages = false;
+            self.search_has_more = false;
+            self.is_searching_more_messages = false;
         } else if let Some(panel) = &self.current_settings_panel {
             match panel {
                 SettingsPanel::Room => {
@@ -3348,6 +3388,8 @@ impl Constellations {
 
     fn handle_search_query_changed(&mut self, query: String) -> Task<Action<Message>> {
         self.search_query = query.clone();
+        self.search_has_more = false;
+        self.is_searching_more_messages = false;
         if let Some(panel) = &self.current_settings_panel {
             match panel {
                 SettingsPanel::Room => {
@@ -3417,6 +3459,8 @@ impl Constellations {
             self.is_searching_public = false;
             self.message_search_results.clear();
             self.is_searching_messages = false;
+            self.search_has_more = false;
+            self.is_searching_more_messages = false;
             // Invalidate any in-flight message search so a late result
             // doesn't repopulate stale hits for the cleared query.
             self.search_generation = self.search_generation.wrapping_add(1);
@@ -3523,6 +3567,8 @@ mod tests {
             is_searching_public: false,
             message_search_results: Vec::new(),
             is_searching_messages: false,
+            search_has_more: false,
+            is_searching_more_messages: false,
             search_generation: 0,
             new_room_is_video: false,
             joined_room_ids: HashSet::new(),
@@ -4529,5 +4575,64 @@ mod tests {
         let err = app.error.expect("Expected error to be set");
         assert!(err.contains("Failed to start direct message"));
         assert!(err.contains("Failed to join DM"));
+    }
+
+    #[test]
+    fn test_message_search_pagination() {
+        let mut app = create_dummy_constellations();
+
+        assert!(!app.search_has_more);
+        assert!(!app.is_searching_more_messages);
+        assert!(app.message_search_results.is_empty());
+
+        // Simulate incoming search results with has_more = true
+        let mock_result = matrix::MessageSearchResult {
+            event_id: matrix_sdk::ruma::event_id!("$1:example.com").to_owned(),
+            sender_id: matrix_sdk::ruma::user_id!("@alice:example.com").to_owned(),
+            body: "hello world".to_string(),
+            timestamp: "2026-06-08 13:00:00".to_string(),
+            plain_text: Vec::new(),
+            links: Vec::new(),
+        };
+
+        let _ = app.update(Message::MessageSearchResults(
+            app.search_generation,
+            Ok((vec![mock_result.clone()], true)),
+        ));
+
+        assert!(app.search_has_more);
+        assert_eq!(app.message_search_results.len(), 1);
+
+        // Simulate LoadMoreMessageSearch
+        // Note: matrix is None, so it will return Task::none(), but we can still trigger it
+        let _ = app.update(Message::LoadMoreMessageSearch);
+        // Since matrix is None, is_searching_more_messages will remain false or change depending on conditions,
+        // but we can manually trigger the response message to test results appending:
+        app.is_searching_more_messages = true;
+
+        let mock_result_2 = matrix::MessageSearchResult {
+            event_id: matrix_sdk::ruma::event_id!("$2:example.com").to_owned(),
+            sender_id: matrix_sdk::ruma::user_id!("@bob:example.com").to_owned(),
+            body: "hello back".to_string(),
+            timestamp: "2026-06-08 13:05:00".to_string(),
+            plain_text: Vec::new(),
+            links: Vec::new(),
+        };
+
+        let _ = app.update(Message::MessageSearchMoreResults(Ok((
+            vec![mock_result_2],
+            false,
+        ))));
+
+        assert!(!app.is_searching_more_messages);
+        assert!(!app.search_has_more); // exhausted now
+        assert_eq!(app.message_search_results.len(), 2);
+        assert_eq!(app.message_search_results[0].body, "hello world");
+        assert_eq!(app.message_search_results[1].body, "hello back");
+
+        // Changing the search query should reset the pagination states
+        let _ = app.update(Message::SearchQueryChanged("new query".to_string()));
+        assert!(!app.search_has_more);
+        assert!(!app.is_searching_more_messages);
     }
 }
