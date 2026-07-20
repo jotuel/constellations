@@ -257,7 +257,7 @@ impl Constellations {
     }
 }
 
-fn app(core: Core, config: settings::config::Config) -> Constellations {
+pub fn app(core: Core, config: settings::config::Config) -> Constellations {
     Constellations {
         core: core.clone(),
         matrix: None,
