@@ -1485,6 +1485,23 @@ impl<'chat> Constellations {
                         .width(cosmic::iced::Length::Fill),
                 );
             }
+            if self.search_has_more {
+                let load_more_widget = if self.is_searching_more_messages {
+                    container(cosmic::widget::progress_bar::indeterminate_circular().size(20.0))
+                        .width(cosmic::iced::Length::Fill)
+                        .align_x(Alignment::Center)
+                        .padding(10)
+                } else {
+                    container(
+                        button::text(crate::fl!("load-more"))
+                            .on_press(Message::LoadMoreMessageSearch),
+                    )
+                    .width(cosmic::iced::Length::Fill)
+                    .align_x(Alignment::Center)
+                    .padding(10)
+                };
+                message_list = message_list.push(load_more_widget);
+            }
             section = section.push(message_list);
         } else {
             section = section.push(

@@ -309,6 +309,8 @@ pub fn app(core: Core, config: settings::config::Config) -> Constellations {
         is_searching_public: false,
         message_search_results: Vec::new(),
         is_searching_messages: false,
+        search_has_more: false,
+        is_searching_more_messages: false,
         search_generation: 0,
         new_room_is_video: false,
         active_reaction_picker: None,

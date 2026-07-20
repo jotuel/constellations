@@ -448,6 +448,16 @@ pub struct MatrixEngine {
     inner: Arc<RwLock<MatrixEngineInner>>,
 }
 
+#[derive(Debug)]
+pub enum ActiveSearch {
+    Local(matrix_sdk::message_search::RoomSearchIterator),
+    Server {
+        query: String,
+        room_id: String,
+        next_batch: Option<String>,
+    },
+}
+
 struct MatrixEngineInner {
     client: Client,
     sync_service: Option<Arc<SyncService>>,
@@ -474,6 +484,7 @@ struct MatrixEngineInner {
     /// unsupported (404/405) → fall back to local seshat index backfill.
     /// Reset on login/register/restore (new client → new homeserver).
     server_search_supported: Option<bool>,
+    active_search: Option<ActiveSearch>,
 }
 
 impl std::fmt::Debug for MatrixEngineInner {
@@ -553,6 +564,7 @@ impl MatrixEngine {
             call_participants: HashMap::new(),
             active_call: None,
             server_search_supported: None,
+            active_search: None,
         };
 
         let engine = Self {
@@ -2973,7 +2985,7 @@ impl MatrixEngine {
         room_id: &str,
         query: &str,
         max_results: usize,
-    ) -> Result<Vec<MessageSearchResult>> {
+    ) -> Result<(Vec<MessageSearchResult>, bool)> {
         // Check the cached decision.
         let use_server = {
             let inner = self.inner.read().await;
@@ -2981,12 +2993,18 @@ impl MatrixEngine {
         };
 
         if use_server {
-            match self.server_search(room_id, query, max_results).await {
-                Ok(results) => {
+            match self.server_search(room_id, query, max_results, None).await {
+                Ok((results, next_batch)) => {
                     // Cache support on first success.
                     let mut inner = self.inner.write().await;
                     inner.server_search_supported = Some(true);
-                    return Ok(results);
+                    let has_more = next_batch.is_some();
+                    inner.active_search = Some(ActiveSearch::Server {
+                        query: query.to_owned(),
+                        room_id: room_id.to_owned(),
+                        next_batch,
+                    });
+                    return Ok((results, has_more));
                 }
                 Err(SearchError::Unsupported) => {
                     // 404/405 — cache and fall through to local backfill.
@@ -3009,7 +3027,8 @@ impl MatrixEngine {
         room_id: &str,
         query: &str,
         max_results: usize,
-    ) -> std::result::Result<Vec<MessageSearchResult>, SearchError> {
+        next_batch: Option<String>,
+    ) -> std::result::Result<(Vec<MessageSearchResult>, Option<String>), SearchError> {
         let room_id_parsed =
             RoomId::parse(room_id).map_err(|e| SearchError::Other(anyhow::anyhow!(e)))?;
         let client = self.client().await;
@@ -3028,7 +3047,8 @@ impl MatrixEngine {
 
         let mut categories = v3::Categories::new();
         categories.room_events = Some(criteria);
-        let request = v3::Request::new(categories);
+        let mut request = v3::Request::new(categories);
+        request.next_batch = next_batch;
 
         let response = client.send(request).await.map_err(|e| {
             let sdk_err = matrix_sdk::Error::from(e);
@@ -3039,6 +3059,8 @@ impl MatrixEngine {
             }
         })?;
         let room_results = response.search_categories.room_events;
+
+        let new_next_batch = room_results.next_batch.clone();
 
         let mut results = Vec::with_capacity(room_results.results.len());
         for raw_event in room_results.results.into_iter().filter_map(|r| r.result) {
@@ -3085,7 +3107,7 @@ impl MatrixEngine {
             });
         }
 
-        Ok(results)
+        Ok((results, new_next_batch))
     }
 
     /// Local fallback: paginate the room's full history backwards through the
@@ -3101,7 +3123,7 @@ impl MatrixEngine {
         room_id: &str,
         query: &str,
         max_results: usize,
-    ) -> Result<Vec<MessageSearchResult>> {
+    ) -> Result<(Vec<MessageSearchResult>, bool)> {
         let room_id_parsed = RoomId::parse(room_id)?;
         let room = {
             let inner = self.inner.read().await;
@@ -3126,61 +3148,83 @@ impl MatrixEngine {
         // 2. Query the now-populated local seshat index.
         let mut search_iter = room.search_messages(query.to_owned(), max_results);
         let Some(events) = search_iter.next_events().await? else {
-            return Ok(Vec::new());
+            let mut inner = self.inner.write().await;
+            inner.active_search = Some(ActiveSearch::Local(search_iter));
+            return Ok((Vec::new(), false));
         };
 
-        // 3. Map TimelineEvents → MessageSearchResult.
-        let mut results = Vec::with_capacity(events.len());
-        for event in events {
-            let event_id = match event.event_id() {
-                Some(id) => id,
-                None => continue,
-            };
-            let sender_id = event
-                .sender()
-                .unwrap_or_else(|| matrix_sdk::ruma::user_id!("@unknown:example.com").to_owned());
+        // 3. Map TimelineEvents → MessageSearchResult using functional style.
+        // Bolt Optimization: Functional chain avoids dynamic reallocations by size hint
+        let results = events
+            .into_iter()
+            .filter_map(|e| map_timeline_event(e).transpose())
+            .collect::<Result<Vec<_>>>()?;
 
-            let body = match &event.kind {
-                matrix_sdk::deserialized_responses::TimelineEventKind::Decrypted(decrypted) => {
-                    let ev: matrix_sdk::ruma::events::AnySyncTimelineEvent =
-                        decrypted.event.deserialize()?.into();
-                    message_body_from_sync_event(&ev)
+        let mut inner = self.inner.write().await;
+        inner.active_search = Some(ActiveSearch::Local(search_iter));
+
+        Ok((results, true))
+    }
+
+    pub async fn search_messages_in_room_next_batch(
+        &self,
+        max_results: usize,
+    ) -> Result<(Vec<MessageSearchResult>, bool)> {
+        // Bolt Optimization: Retrieve owned ActiveSearch to avoid holding
+        // the RwLockWriteGuard of inner across await boundaries.
+        let active_search = {
+            let mut inner = self.inner.write().await;
+            inner.active_search.take()
+        };
+
+        let Some(mut search) = active_search else {
+            return Ok((Vec::new(), false));
+        };
+
+        let res = match &mut search {
+            ActiveSearch::Local(search_iter) => {
+                let events_opt: Option<Vec<matrix_sdk::deserialized_responses::TimelineEvent>> =
+                    search_iter.next_events().await?;
+                let has_more = events_opt.as_ref().is_some_and(|evs| !evs.is_empty());
+                let events = events_opt.unwrap_or_default();
+
+                let results = events
+                    .into_iter()
+                    .filter_map(|e| map_timeline_event(e).transpose())
+                    .collect::<Result<Vec<_>>>()?;
+
+                Ok((results, has_more))
+            }
+            ActiveSearch::Server {
+                query,
+                room_id,
+                next_batch,
+            } => {
+                if next_batch.is_none() {
+                    Ok((Vec::new(), false))
+                } else {
+                    match self
+                        .server_search(room_id, query, max_results, next_batch.clone())
+                        .await
+                    {
+                        Ok((results, new_next_batch)) => {
+                            *next_batch = new_next_batch;
+                            let has_more = next_batch.is_some();
+                            Ok((results, has_more))
+                        }
+                        Err(SearchError::Unsupported) => Ok((Vec::new(), false)),
+                        Err(SearchError::Other(e)) => Err(e),
+                    }
                 }
-                matrix_sdk::deserialized_responses::TimelineEventKind::UnableToDecrypt {
-                    event,
-                    ..
-                }
-                | matrix_sdk::deserialized_responses::TimelineEventKind::PlainText {
-                    event, ..
-                } => message_body_from_sync_event(&event.deserialize()?),
-            };
+            }
+        };
 
-            let timestamp = event
-                .timestamp()
-                .map(|ts| {
-                    let ts_millis = u64::from(ts.0);
-                    chrono::DateTime::from_timestamp_millis(ts_millis as i64)
-                        .unwrap_or_default()
-                        .with_timezone(&chrono::Local)
-                        .format("%Y-%m-%d %H:%M:%S")
-                        .to_string()
-                })
-                .unwrap_or_default();
-
-            let plain_text = crate::preview::parse_plain_text(&body);
-            let links = crate::preview::extract_links(&plain_text);
-
-            results.push(MessageSearchResult {
-                event_id,
-                sender_id,
-                body,
-                timestamp,
-                plain_text,
-                links,
-            });
+        {
+            let mut inner = self.inner.write().await;
+            inner.active_search = Some(search);
         }
 
-        Ok(results)
+        res
     }
 
     pub async fn ignored_users(&self) -> Result<Vec<matrix_sdk::ruma::OwnedUserId>> {
@@ -3576,6 +3620,55 @@ fn message_body_from_sync_event(ev: &matrix_sdk::ruma::events::AnySyncTimelineEv
         },
         _ => "Unsupported state event type".to_string(),
     }
+}
+
+fn map_timeline_event(
+    event: matrix_sdk::deserialized_responses::TimelineEvent,
+) -> Result<Option<MessageSearchResult>> {
+    let Some(event_id) = event.event_id() else {
+        return Ok(None);
+    };
+    let sender_id = event
+        .sender()
+        .unwrap_or_else(|| matrix_sdk::ruma::user_id!("@unknown:example.com").to_owned());
+
+    let body = match &event.kind {
+        matrix_sdk::deserialized_responses::TimelineEventKind::Decrypted(decrypted) => {
+            let ev: matrix_sdk::ruma::events::AnySyncTimelineEvent =
+                decrypted.event.deserialize()?.into();
+            message_body_from_sync_event(&ev)
+        }
+        matrix_sdk::deserialized_responses::TimelineEventKind::UnableToDecrypt {
+            event, ..
+        }
+        | matrix_sdk::deserialized_responses::TimelineEventKind::PlainText { event, .. } => {
+            message_body_from_sync_event(&event.deserialize()?)
+        }
+    };
+
+    let timestamp = event
+        .timestamp()
+        .map(|ts| {
+            let ts_millis = u64::from(ts.0);
+            chrono::DateTime::from_timestamp_millis(ts_millis as i64)
+                .unwrap_or_default()
+                .with_timezone(&chrono::Local)
+                .format("%Y-%m-%d %H:%M:%S")
+                .to_string()
+        })
+        .unwrap_or_default();
+
+    let plain_text = crate::preview::parse_plain_text(&body);
+    let links = crate::preview::extract_links(&plain_text);
+
+    Ok(Some(MessageSearchResult {
+        event_id,
+        sender_id,
+        body,
+        timestamp,
+        plain_text,
+        links,
+    }))
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

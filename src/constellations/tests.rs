@@ -52,6 +52,8 @@ fn create_test_app() -> Constellations {
         is_search_active: false,
         public_search_results: Vec::new(),
         is_searching_messages: false,
+        search_has_more: false,
+        is_searching_more_messages: false,
         message_search_results: Vec::new(),
         search_generation: 0,
         is_searching_public: false,
