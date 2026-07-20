@@ -3336,6 +3336,7 @@ impl MatrixEngine {
 pub fn markdown_to_html(markdown: &str) -> String {
     let mut options = pulldown_cmark::Options::empty();
     options.insert(pulldown_cmark::Options::ENABLE_STRIKETHROUGH);
+    options.insert(pulldown_cmark::Options::ENABLE_TASKLISTS);
     let parser = pulldown_cmark::Parser::new_ext(markdown, options);
 
     let mut html_output = String::new();

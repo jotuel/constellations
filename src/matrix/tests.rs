@@ -48,6 +48,15 @@ fn test_markdown_to_html() {
     let plain_text = markdown_to_html("Just plain text");
     assert_eq!(plain_text.trim(), "<p>Just plain text</p>");
 
+    // Tasklists
+    let markdown = "- [ ] Incomplete\n- [x] Complete";
+    let html = markdown_to_html(markdown);
+    assert!(html.contains("<ul>"));
+    assert!(html.contains("<li><input disabled=\"\" type=\"checkbox\"/>\nIncomplete</li>"));
+    assert!(
+        html.contains("<li><input disabled=\"\" type=\"checkbox\" checked=\"\"/>\nComplete</li>")
+    );
+
     // XSS / Raw HTML (pulldown-cmark escapes or passes raw HTML, let's verify what it does)
     let raw_html = markdown_to_html("<script>alert(1)</script>");
     assert!(raw_html.contains("<script>alert(1)</script>"));
