@@ -1572,7 +1572,6 @@ dependencies = [
  "rand 0.10.1",
  "reqwest 0.13.4",
  "rfd 0.17.2",
- "ruma",
  "ruma-events",
  "rust-embed",
  "rustls",
