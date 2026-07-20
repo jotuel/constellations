@@ -498,6 +498,20 @@ fn is_recent_enough_to_notify(now_ms: u128, event_ts_ms: u64) -> bool {
     now_ms.abs_diff(u128::from(event_ts_ms)) <= NOTIFICATION_MAX_AGE_MS
 }
 
+fn sanitize_homeserver_url(homeserver: &str) -> String {
+    if homeserver.starts_with("https://")
+        || (cfg!(debug_assertions)
+            && (homeserver.starts_with("http://localhost")
+                || homeserver.starts_with("http://127.0.0.1")
+                || homeserver.starts_with("http://[::1]")))
+    {
+        homeserver.to_string()
+    } else {
+        let stripped = homeserver.strip_prefix("http://").unwrap_or(homeserver);
+        format!("https://{}", stripped)
+    }
+}
+
 impl MatrixEngine {
     pub async fn new(data_dir: PathBuf) -> Result<Self> {
         let client = Self::setup_client(data_dir.clone(), "https://matrix.org").await?;
@@ -858,16 +872,7 @@ impl MatrixEngine {
     }
 
     pub async fn register(&self, homeserver: &str, username: &str, password: &str) -> Result<()> {
-        let homeserver_url = if homeserver.starts_with("https://")
-            || homeserver.starts_with("http://localhost")
-            || homeserver.starts_with("http://127.0.0.1")
-            || homeserver.starts_with("http://[::1]")
-        {
-            homeserver.to_string()
-        } else {
-            let stripped = homeserver.strip_prefix("http://").unwrap_or(homeserver);
-            format!("https://{}", stripped)
-        };
+        let homeserver_url = sanitize_homeserver_url(homeserver);
 
         let client = {
             let mut inner = self.inner.write().await;
@@ -933,16 +938,7 @@ impl MatrixEngine {
     }
 
     pub async fn login(&self, homeserver: &str, username: &str, password: &str) -> Result<()> {
-        let homeserver_url = if homeserver.starts_with("https://")
-            || homeserver.starts_with("http://localhost")
-            || homeserver.starts_with("http://127.0.0.1")
-            || homeserver.starts_with("http://[::1]")
-        {
-            homeserver.to_string()
-        } else {
-            let stripped = homeserver.strip_prefix("http://").unwrap_or(homeserver);
-            format!("https://{}", stripped)
-        };
+        let homeserver_url = sanitize_homeserver_url(homeserver);
 
         let client = {
             let mut inner = self.inner.write().await;
@@ -2661,16 +2657,7 @@ impl MatrixEngine {
     }
 
     pub async fn login_oidc(&self, homeserver: &str) -> Result<Url> {
-        let homeserver_url = if homeserver.starts_with("https://")
-            || homeserver.starts_with("http://localhost")
-            || homeserver.starts_with("http://127.0.0.1")
-            || homeserver.starts_with("http://[::1]")
-        {
-            homeserver.to_string()
-        } else {
-            let stripped = homeserver.strip_prefix("http://").unwrap_or(homeserver);
-            format!("https://{}", stripped)
-        };
+        let homeserver_url = sanitize_homeserver_url(homeserver);
 
         let client = {
             let mut inner = self.inner.write().await;
@@ -2788,16 +2775,7 @@ impl MatrixEngine {
         &self,
         homeserver: &str,
     ) -> Result<mpsc::UnboundedReceiver<QrLoginProgress>> {
-        let homeserver_url = if homeserver.starts_with("https://")
-            || homeserver.starts_with("http://localhost")
-            || homeserver.starts_with("http://127.0.0.1")
-            || homeserver.starts_with("http://[::1]")
-        {
-            homeserver.to_string()
-        } else {
-            let stripped = homeserver.strip_prefix("http://").unwrap_or(homeserver);
-            format!("https://{}", stripped)
-        };
+        let homeserver_url = sanitize_homeserver_url(homeserver);
 
         let client = {
             let mut inner = self.inner.write().await;
