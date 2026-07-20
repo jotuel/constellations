@@ -983,62 +983,50 @@ impl MatrixEngine {
         Ok(())
     }
 
-    pub async fn restore_session(&self) -> Result<bool> {
-        let secret_data = 'find_secret: {
-            let keyring = match if Self::should_bypass_keyring() {
-                Err(anyhow::anyhow!("Bypassing keyring in test"))
-            } else {
-                Keyring::new().await.map_err(|e| e.into())
-            } {
-                Ok(k) => k,
-                Err(e) => {
-                    tracing::warn!(
-                        "Failed to initialize Keyring for restore: {}. File-based fallback disabled.",
-                        e
-                    );
-                    return Ok(false);
-                }
-            };
 
-            let mut attributes = HashMap::new();
-            attributes.insert("app_id", "fi.joonastuomi.Constellations");
-            attributes.insert("type", "matrix-session");
+    async fn load_session_secret() -> Option<Vec<u8>> {
+        let keyring = match if Self::should_bypass_keyring() {
+            Err(anyhow::anyhow!("Bypassing keyring in test"))
+        } else {
+            Keyring::new().await.map_err(|e| e.into())
+        } {
+            Ok(k) => k,
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to initialize Keyring for restore: {}. File-based fallback disabled.",
+                    e
+                );
+                return None;
+            }
+        };
 
-            match keyring.search_items(&attributes).await {
-                Ok(items) => {
-                    if let Some(item) = items.first()
-                        && let Ok(secret) = item.secret().await
-                    {
-                        break 'find_secret Some(secret.to_vec());
-                    }
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        "Failed to search Keyring items for restore: {}. File-based fallback disabled.",
-                        e
-                    );
+        let mut attributes = HashMap::new();
+        attributes.insert("app_id", "fi.joonastuomi.Constellations");
+        attributes.insert("type", "matrix-session");
+
+        match keyring.search_items(&attributes).await {
+            Ok(items) => {
+                if let Some(item) = items.first()
+                    && let Ok(secret) = item.secret().await
+                {
+                    return Some(secret.to_vec());
                 }
             }
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to search Keyring items for restore: {}. File-based fallback disabled.",
+                    e
+                );
+            }
+        }
 
-            None
-        };
+        None
+    }
 
-        let Some(secret) = secret_data else {
-            return Ok(false);
-        };
-
-        let session_data: SessionData = serde_json::from_slice(&secret)?;
-
-        let data_dir = self.inner.read().await.data_dir.clone();
-        let client = Self::setup_client(data_dir, &session_data.homeserver).await?;
-
+    async fn restore_client_session(client: &Client, session_data: SessionData) -> Result<()> {
         if session_data.is_oidc {
-            // Use the client ID assigned by the homeserver during dynamic
-            // registration, falling back to the legacy static ID for sessions
-            // saved before that was persisted.
             let client_id = session_data
                 .client_id
-                .clone()
                 .unwrap_or_else(|| OIDC_CLIENT_ID.to_string());
             let client_id = matrix_sdk::authentication::oauth::ClientId::new(client_id);
 
@@ -1050,7 +1038,7 @@ impl MatrixEngine {
                         client_id,
                         user: matrix_sdk::authentication::oauth::UserSession {
                             meta: matrix_sdk::SessionMeta {
-                                user_id: UserId::parse(session_data.user_id.clone())?,
+                                user_id: UserId::parse(session_data.user_id)?,
                                 device_id: OwnedDeviceId::from(session_data.device_id),
                             },
                             tokens: SessionTokens {
@@ -1065,7 +1053,7 @@ impl MatrixEngine {
         } else {
             let matrix_session = MatrixSession {
                 meta: matrix_sdk::SessionMeta {
-                    user_id: UserId::parse(session_data.user_id.clone())?,
+                    user_id: UserId::parse(session_data.user_id)?,
                     device_id: OwnedDeviceId::from(session_data.device_id),
                 },
                 tokens: SessionTokens {
@@ -1081,6 +1069,20 @@ impl MatrixEngine {
                 )
                 .await?;
         }
+        Ok(())
+    }
+
+    pub async fn restore_session(&self) -> Result<bool> {
+        let Some(secret) = Self::load_session_secret().await else {
+            return Ok(false);
+        };
+
+        let session_data: SessionData = serde_json::from_slice(&secret)?;
+
+        let data_dir = self.inner.read().await.data_dir.clone();
+        let client = Self::setup_client(data_dir, &session_data.homeserver).await?;
+
+        Self::restore_client_session(&client, session_data).await?;
 
         let sync_service: Arc<SyncService> =
             Arc::new(SyncService::builder(client.clone()).build().await?);
