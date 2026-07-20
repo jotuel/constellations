@@ -1423,101 +1423,116 @@ impl<'chat> Constellations {
         content.push(attachments_view).push(composer_card).into()
     }
 
-    pub fn view_search_results(&self) -> Element<'_, Message> {
+    pub fn view_search_results<'a>(&'a self) -> Element<'a, Message> {
         let mut results_col = Column::new().spacing(15).width(cosmic::iced::Length::Fill);
 
         // Section: Messages in this Room (server-side full-text search).
         // Only shown when a room is selected — without one there is no room to
         // search and `message_search_results` stays empty.
         if self.selected_room.is_some() {
-            results_col =
-                results_col.push(text::title3(crate::fl!("search-messages-in-room")).size(14));
-
-            if self.is_searching_messages {
-                results_col = results_col.push(
-                    container(cosmic::widget::progress_bar::indeterminate_circular().size(24.0))
-                        .width(cosmic::iced::Length::Fill)
-                        .align_x(Alignment::Center)
-                        .padding(20),
-                );
-            } else if !self.message_search_results.is_empty() {
-                let mut message_list = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
-                for result in &self.message_search_results {
-                    let event_id = result.event_id.clone();
-
-                    let mut card_content = Column::new().spacing(5);
-                    card_content = card_content.push(
-                        Row::new()
-                            .spacing(8)
-                            .align_y(Alignment::Center)
-                            .push(
-                                text::body(result.sender_id.as_str())
-                                    .font(cosmic::iced::Font {
-                                        weight: cosmic::iced::font::Weight::Bold,
-                                        ..Default::default()
-                                    })
-                                    .size(13),
-                            )
-                            .push(text::body(result.timestamp.as_str()).size(10)),
-                    );
-                    card_content = card_content
-                        .push(self.view_message_text(&result.plain_text, &result.links));
-
-                    let event_id_for_jump = event_id.clone();
-                    card_content =
-                        card_content.push(
-                            Row::new()
-                                .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
-                                .push(button::text(crate::fl!("jump-to-message")).on_press(
-                                    Message::JumpToMessageOrLoadContext(event_id_for_jump),
-                                )),
-                        );
-
-                    message_list = message_list.push(
-                        container(card_content)
-                            .style(|theme: &cosmic::Theme| {
-                                use cosmic::iced::widget::container::Catalog;
-                                let cosmic = theme.cosmic();
-                                let mut style = theme.style(&cosmic::theme::Container::Card);
-                                style.border.color = cosmic.accent.base.into();
-                                style.border.width = 1.0;
-                                style
-                            })
-                            .padding(10)
-                            .width(cosmic::iced::Length::Fill),
-                    );
-                }
-                results_col = results_col.push(message_list);
-            } else {
-                results_col = results_col.push(
-                    container(
-                        Column::new()
-                            .spacing(10)
-                            .align_x(Alignment::Center)
-                            .push(cosmic::widget::icon::from_name("edit-find-symbolic").size(32))
-                            .push(text::body(crate::fl!("search-no-room-matches")).size(14)),
-                    )
-                    .width(cosmic::iced::Length::Fill)
-                    .align_x(Alignment::Center)
-                    .padding(20),
-                );
-            }
+            results_col = results_col.push(self.view_search_messages_section());
         }
 
         results_col = results_col.push(divider::horizontal::default());
 
         // Section: Public Spaces & Rooms
-        results_col = results_col.push(text::title3(crate::fl!("public-rooms-spaces")).size(14));
+        results_col = results_col.push(self.view_search_public_rooms_section());
+
+        scrollable(results_col)
+            .id(crate::TIMELINE_ID.clone())
+            .height(cosmic::iced::Length::Fill)
+            .into()
+    }
+
+    fn view_search_messages_section<'a>(&'a self) -> Element<'a, Message> {
+        let mut section = Column::new().spacing(15).width(cosmic::iced::Length::Fill);
+        section = section.push(text::title3(crate::fl!("search-messages-in-room")).size(14));
+
+        if self.is_searching_messages {
+            section = section.push(
+                container(cosmic::widget::progress_bar::indeterminate_circular().size(24.0))
+                    .width(cosmic::iced::Length::Fill)
+                    .align_x(Alignment::Center)
+                    .padding(20),
+            );
+        } else if !self.message_search_results.is_empty() {
+            let mut message_list = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
+            for result in &self.message_search_results {
+                let event_id = result.event_id.clone();
+
+                let mut card_content = Column::new().spacing(5);
+                card_content = card_content.push(
+                    Row::new()
+                        .spacing(8)
+                        .align_y(Alignment::Center)
+                        .push(
+                            text::body(result.sender_id.as_str())
+                                .font(cosmic::iced::Font {
+                                    weight: cosmic::iced::font::Weight::Bold,
+                                    ..Default::default()
+                                })
+                                .size(13),
+                        )
+                        .push(text::body(result.timestamp.as_str()).size(10)),
+                );
+                card_content = card_content
+                    .push(self.view_message_text(&result.plain_text, &result.links));
+
+                let event_id_for_jump = event_id.clone();
+                card_content =
+                    card_content.push(
+                        Row::new()
+                            .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
+                            .push(button::text(crate::fl!("jump-to-message")).on_press(
+                                Message::JumpToMessageOrLoadContext(event_id_for_jump),
+                            )),
+                    );
+
+                message_list = message_list.push(
+                    container(card_content)
+                        .style(|theme: &cosmic::Theme| {
+                            use cosmic::iced::widget::container::Catalog;
+                            let cosmic = theme.cosmic();
+                            let mut style = theme.style(&cosmic::theme::Container::Card);
+                            style.border.color = cosmic.accent.base.into();
+                            style.border.width = 1.0;
+                            style
+                        })
+                        .padding(10)
+                        .width(cosmic::iced::Length::Fill),
+                );
+            }
+            section = section.push(message_list);
+        } else {
+            section = section.push(
+                container(
+                    Column::new()
+                        .spacing(10)
+                        .align_x(Alignment::Center)
+                        .push(cosmic::widget::icon::from_name("edit-find-symbolic").size(32))
+                        .push(text::body(crate::fl!("search-no-room-matches")).size(14)),
+                )
+                .width(cosmic::iced::Length::Fill)
+                .align_x(Alignment::Center)
+                .padding(20),
+            );
+        }
+        section.into()
+    }
+
+    fn view_search_public_rooms_section<'a>(&'a self) -> Element<'a, Message> {
+        let mut section = Column::new().spacing(15).width(cosmic::iced::Length::Fill);
+        section = section.push(text::title3(crate::fl!("public-rooms-spaces")).size(14));
 
         if self.is_searching_public {
-            results_col = results_col.push(
+            section = section.push(
                 container(cosmic::widget::progress_bar::indeterminate_circular().size(24.0))
                     .width(cosmic::iced::Length::Fill)
                     .align_x(Alignment::Center)
                     .padding(20),
             );
         } else if self.public_search_results.is_empty() {
-            results_col = results_col.push(
+            section = section.push(
                 container(text::body(crate::fl!("no-public-rooms")).size(14))
                     .width(cosmic::iced::Length::Fill)
                     .align_x(Alignment::Center)
@@ -1609,13 +1624,9 @@ impl<'chat> Constellations {
                         .width(cosmic::iced::Length::Fill),
                 );
             }
-            results_col = results_col.push(public_list);
+            section = section.push(public_list);
         }
-
-        scrollable(results_col)
-            .id(crate::TIMELINE_ID.clone())
-            .height(cosmic::iced::Length::Fill)
-            .into()
+        section.into()
     }
 
     pub fn view_video_room<'a>(
