@@ -125,6 +125,39 @@ fn classify_oidc_start_error(e: OAuthError) -> anyhow::Error {
     }
 }
 
+fn sanitize_homeserver_url(homeserver: &str) -> String {
+    let mut url_str = homeserver.to_string();
+    if !url_str.contains("://") {
+        url_str = format!("https://{}", url_str);
+    }
+
+    if let Ok(url) = Url::parse(&url_str) {
+        if url.scheme() == "http" {
+            if let Some(host) = url.host_str() {
+                if host == "localhost" || host == "127.0.0.1" || host == "[::1]" {
+                    return url_str;
+                }
+            }
+            // If it's http and not localhost, we force https
+            let mut https_url = url.clone();
+            https_url.set_scheme("https").unwrap();
+            let _ = https_url.set_username("");
+            let _ = https_url.set_password(None);
+            url_str = https_url.to_string();
+            // Drop trailing slash if the original didn't have a path
+            if url_str.ends_with('/') && !homeserver.ends_with('/') && url.path() == "/" {
+                url_str.pop();
+            }
+        }
+    } else {
+        // Fallback if parsing fails for some reason
+        let stripped = homeserver.strip_prefix("http://").unwrap_or(homeserver);
+        url_str = format!("https://{}", stripped);
+    }
+
+    url_str
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SyncStatus {
     Disconnected,
@@ -858,16 +891,7 @@ impl MatrixEngine {
     }
 
     pub async fn register(&self, homeserver: &str, username: &str, password: &str) -> Result<()> {
-        let homeserver_url = if homeserver.starts_with("https://")
-            || homeserver.starts_with("http://localhost")
-            || homeserver.starts_with("http://127.0.0.1")
-            || homeserver.starts_with("http://[::1]")
-        {
-            homeserver.to_string()
-        } else {
-            let stripped = homeserver.strip_prefix("http://").unwrap_or(homeserver);
-            format!("https://{}", stripped)
-        };
+        let homeserver_url = sanitize_homeserver_url(homeserver);
 
         let client = {
             let mut inner = self.inner.write().await;
@@ -933,16 +957,7 @@ impl MatrixEngine {
     }
 
     pub async fn login(&self, homeserver: &str, username: &str, password: &str) -> Result<()> {
-        let homeserver_url = if homeserver.starts_with("https://")
-            || homeserver.starts_with("http://localhost")
-            || homeserver.starts_with("http://127.0.0.1")
-            || homeserver.starts_with("http://[::1]")
-        {
-            homeserver.to_string()
-        } else {
-            let stripped = homeserver.strip_prefix("http://").unwrap_or(homeserver);
-            format!("https://{}", stripped)
-        };
+        let homeserver_url = sanitize_homeserver_url(homeserver);
 
         let client = {
             let mut inner = self.inner.write().await;
@@ -2670,16 +2685,7 @@ impl MatrixEngine {
     }
 
     pub async fn login_oidc(&self, homeserver: &str) -> Result<Url> {
-        let homeserver_url = if homeserver.starts_with("https://")
-            || homeserver.starts_with("http://localhost")
-            || homeserver.starts_with("http://127.0.0.1")
-            || homeserver.starts_with("http://[::1]")
-        {
-            homeserver.to_string()
-        } else {
-            let stripped = homeserver.strip_prefix("http://").unwrap_or(homeserver);
-            format!("https://{}", stripped)
-        };
+        let homeserver_url = sanitize_homeserver_url(homeserver);
 
         let client = {
             let mut inner = self.inner.write().await;
@@ -2797,16 +2803,7 @@ impl MatrixEngine {
         &self,
         homeserver: &str,
     ) -> Result<mpsc::UnboundedReceiver<QrLoginProgress>> {
-        let homeserver_url = if homeserver.starts_with("https://")
-            || homeserver.starts_with("http://localhost")
-            || homeserver.starts_with("http://127.0.0.1")
-            || homeserver.starts_with("http://[::1]")
-        {
-            homeserver.to_string()
-        } else {
-            let stripped = homeserver.strip_prefix("http://").unwrap_or(homeserver);
-            format!("https://{}", stripped)
-        };
+        let homeserver_url = sanitize_homeserver_url(homeserver);
 
         let client = {
             let mut inner = self.inner.write().await;
