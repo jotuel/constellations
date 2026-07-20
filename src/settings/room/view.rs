@@ -209,15 +209,28 @@ impl State {
     }
 
     fn view_permissions(&self) -> Element<'_, Message> {
-        use matrix_sdk::ruma::events::room::join_rules::{AllowRule, JoinRule, Restricted};
-
         let mut perm_col = Column::new().spacing(10);
 
-        let is_restricted = matches!(self.join_rule, Some(JoinRule::Restricted(_)));
+        perm_col = perm_col.push(self.view_join_rule());
+        perm_col = perm_col.push(self.view_history_visibility());
 
-        let parsed_restricted_space_id = RoomId::parse(&self.restricted_space_id).ok();
+        if let Some(restricted_view) = self.view_restricted_space() {
+            perm_col = perm_col.push(restricted_view);
+        }
 
-        perm_col = perm_col.push(text::body(crate::fl!("join-rule")).width(180));
+        perm_col = perm_col.push(self.view_power_levels());
+
+        settings::section()
+            .title(crate::fl!("permissions"))
+            .add(settings::item_row(vec![perm_col.into()]))
+            .into()
+    }
+
+    fn view_join_rule(&self) -> Element<'_, Message> {
+        use matrix_sdk::ruma::events::room::join_rules::{AllowRule, JoinRule, Restricted};
+
+        let mut col = Column::new().spacing(10);
+        col = col.push(text::body(crate::fl!("join-rule")).width(180));
         let mut join_rule_row = Row::new().spacing(10).align_y(Alignment::Center);
 
         let selected_rule = match &self.join_rule {
@@ -227,6 +240,8 @@ impl State {
             Some(JoinRule::Restricted(_)) => Some(JoinRuleChoice::Restricted),
             _ => None,
         };
+
+        let parsed_restricted_space_id = RoomId::parse(&self.restricted_space_id).ok();
 
         for choice in [
             JoinRuleChoice::Public,
@@ -262,9 +277,12 @@ impl State {
                 }));
         }
 
-        perm_col = perm_col.push(join_rule_row.wrap());
+        col.push(join_rule_row.wrap()).into()
+    }
 
-        perm_col = perm_col.push(text::body(crate::fl!("history-visibility")).width(180));
+    fn view_history_visibility(&self) -> Element<'_, Message> {
+        let mut col = Column::new().spacing(10);
+        col = col.push(text::body(crate::fl!("history-visibility")).width(180));
         let mut history_visibility_row = Row::new().spacing(10).align_y(Alignment::Center);
 
         let selected_visibility = match &self.history_visibility {
@@ -302,8 +320,17 @@ impl State {
             ));
         }
 
-        perm_col = perm_col.push(history_visibility_row.wrap());
+        col.push(history_visibility_row.wrap()).into()
+    }
+
+    fn view_restricted_space(&self) -> Option<Element<'_, Message>> {
+        use matrix_sdk::ruma::events::room::join_rules::{AllowRule, JoinRule, Restricted};
+
+        let is_restricted = matches!(self.join_rule, Some(JoinRule::Restricted(_)));
+
         if is_restricted || !self.restricted_space_id.is_empty() {
+            let parsed_restricted_space_id = RoomId::parse(&self.restricted_space_id).ok();
+
             let mut restricted_row = Row::new().spacing(10).align_y(Alignment::Center);
             restricted_row = restricted_row.push(text::body(crate::fl!("space-id")).width(100));
             restricted_row = restricted_row.push(
@@ -330,100 +357,80 @@ impl State {
                 }
             }
 
-            perm_col = perm_col.push(restricted_row.wrap());
+            Some(restricted_row.wrap().into())
+        } else {
+            None
         }
+    }
 
-        perm_col = perm_col.push(
-            Row::new()
-                .spacing(10)
-                .align_y(Alignment::Center)
-                .push(text::body(crate::fl!("invite-level")).width(100))
-                .push(
-                    text_input::text_input("50", &self.invite_level_str)
-                        .on_input(Message::InviteLevelChanged),
-                )
-                .wrap(),
-        );
-        perm_col = perm_col.push(
-            Row::new()
-                .spacing(10)
-                .align_y(Alignment::Center)
-                .push(text::body(crate::fl!("kick-level")).width(100))
-                .push(
-                    text_input::text_input("50", &self.kick_level_str)
-                        .on_input(Message::KickLevelChanged),
-                )
-                .wrap(),
-        );
-        perm_col = perm_col.push(
-            Row::new()
-                .spacing(10)
-                .align_y(Alignment::Center)
-                .push(text::body(crate::fl!("ban-level")).width(100))
-                .push(
-                    text_input::text_input("50", &self.ban_level_str)
-                        .on_input(Message::BanLevelChanged),
-                )
-                .wrap(),
-        );
-        perm_col = perm_col.push(
-            Row::new()
-                .spacing(10)
-                .align_y(Alignment::Center)
-                .push(text::body(crate::fl!("redact-level")).width(100))
-                .push(
-                    text_input::text_input("50", &self.redact_level_str)
-                        .on_input(Message::RedactLevelChanged),
-                )
-                .wrap(),
-        );
-        perm_col = perm_col.push(
-            Row::new()
-                .spacing(10)
-                .align_y(Alignment::Center)
-                .push(text::body(crate::fl!("send-messages-level")).width(100))
-                .push(
-                    text_input::text_input("0", &self.events_default_level_str)
-                        .on_input(Message::EventsDefaultLevelChanged),
-                )
-                .wrap(),
-        );
-        perm_col = perm_col.push(
-            Row::new()
-                .spacing(10)
-                .align_y(Alignment::Center)
-                .push(text::body(crate::fl!("change-name-level")).width(100))
-                .push(
-                    text_input::text_input("50", &self.room_name_level_str)
-                        .on_input(Message::RoomNameLevelChanged),
-                )
-                .wrap(),
-        );
-        perm_col = perm_col.push(
-            Row::new()
-                .spacing(10)
-                .align_y(Alignment::Center)
-                .push(text::body(crate::fl!("change-topic-level")).width(100))
-                .push(
-                    text_input::text_input("50", &self.room_topic_level_str)
-                        .on_input(Message::RoomTopicLevelChanged),
-                )
-                .wrap(),
-        );
-        perm_col = perm_col.push(
-            Row::new()
-                .spacing(10)
-                .align_y(Alignment::Center)
-                .push(text::body(crate::fl!("change-avatar-level")).width(100))
-                .push(
-                    text_input::text_input("50", &self.room_avatar_level_str)
-                        .on_input(Message::RoomAvatarLevelChanged),
-                )
-                .wrap(),
-        );
-        settings::section()
-            .title(crate::fl!("permissions"))
-            .add(settings::item_row(vec![perm_col.into()]))
+    fn view_power_levels(&self) -> Element<'_, Message> {
+        let mut col = Column::new().spacing(10);
+
+        col = col.push(self.power_level_row(
+            crate::fl!("invite-level"),
+            &self.invite_level_str,
+            "50",
+            Message::InviteLevelChanged,
+        ));
+        col = col.push(self.power_level_row(
+            crate::fl!("kick-level"),
+            &self.kick_level_str,
+            "50",
+            Message::KickLevelChanged,
+        ));
+        col = col.push(self.power_level_row(
+            crate::fl!("ban-level"),
+            &self.ban_level_str,
+            "50",
+            Message::BanLevelChanged,
+        ));
+        col = col.push(self.power_level_row(
+            crate::fl!("redact-level"),
+            &self.redact_level_str,
+            "50",
+            Message::RedactLevelChanged,
+        ));
+        col = col.push(self.power_level_row(
+            crate::fl!("send-messages-level"),
+            &self.events_default_level_str,
+            "0",
+            Message::EventsDefaultLevelChanged,
+        ));
+        col = col.push(self.power_level_row(
+            crate::fl!("change-name-level"),
+            &self.room_name_level_str,
+            "50",
+            Message::RoomNameLevelChanged,
+        ));
+        col = col.push(self.power_level_row(
+            crate::fl!("change-topic-level"),
+            &self.room_topic_level_str,
+            "50",
+            Message::RoomTopicLevelChanged,
+        ));
+        col = col.push(self.power_level_row(
+            crate::fl!("change-avatar-level"),
+            &self.room_avatar_level_str,
+            "50",
+            Message::RoomAvatarLevelChanged,
+        ));
+
+        col.into()
+    }
+
+    fn power_level_row<'a>(
+        &self,
+        label: String,
+        value: &'a str,
+        default_val: &'a str,
+        on_input: fn(String) -> Message,
+    ) -> Element<'a, Message> {
+        Row::new()
+            .spacing(10)
+            .align_y(Alignment::Center)
+            .push(text::body(label).width(100))
+            .push(text_input::text_input(default_val, value).on_input(on_input))
+            .wrap()
             .into()
     }
 
