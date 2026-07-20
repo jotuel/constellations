@@ -1080,127 +1080,13 @@ impl<'chat> Constellations {
             let fallback = crate::fl!("room-fallback");
             let room_name = self.get_room_name(room_id).unwrap_or(&fallback);
 
-            // ⚡ Bolt Optimization: Avoid parsing UserId per frame
-            let is_in_call = self.user_id.as_ref().is_some_and(|uid| {
-                self.call_participants
-                    .get(room_id)
-                    .is_some_and(|p| p.iter().any(|participant| participant.as_str() == uid))
-            });
-
-            let call_participants = self.call_participants.get(room_id);
-            let participant_count = call_participants.map_or(0, |p| p.len());
-
-            let mut room_header = Row::new()
-                .spacing(10)
-                .align_y(Alignment::Center)
-                .push(view_room_name_menu(room_name));
-
-            if participant_count > 0 {
-                room_header = room_header.push(
-                    container(
-                        Row::new()
-                            .spacing(5)
-                            .align_y(Alignment::Center)
-                            .push(cosmic::widget::icon::from_name("camera-video-symbolic").size(16))
-                            .push(text::body(format!("{participant_count}")).size(12)),
-                    )
-                    .padding([2, 5]),
-                );
-            }
-
-            let call_button: Element<'_, Message> = if is_in_call {
-                tooltip(
-                    button::custom(cosmic::widget::icon::from_name("call-stop"))
-                        .class(cosmic::theme::Button::Destructive)
-                        .on_press(Message::LeaveCall),
-                    text::body(crate::fl!("call-leave")),
-                    Position::Bottom,
-                )
-                .into()
-            } else {
-                button::icon(Named::new("camera-web"))
-                    .on_press(Message::JoinCall)
-                    .tooltip(crate::fl!("call-join"))
-                    .into()
-            };
-
-            room_header = room_header
-                .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
-                .push(call_button)
-                .push({
-                    let count = self.pinned_events.len();
-                    if count > 0 {
-                        let btn_content = Row::new()
-                            .spacing(6)
-                            .align_y(Alignment::Center)
-                            .push(cosmic::widget::icon::from_name("pin-symbolic").size(16))
-                            .push(text::body(count.to_string()).size(12));
-                        Element::from(tooltip(
-                            button::custom(btn_content)
-                                .selected(
-                                    self.current_settings_panel
-                                        == Some(crate::SettingsPanel::Pinned),
-                                )
-                                .on_press(Message::TogglePinnedPanel),
-                            text::body(crate::fl!("pinned-messages")),
-                            Position::Bottom,
-                        ))
-                    } else {
-                        Element::from(
-                            button::icon(Named::new("pin-symbolic"))
-                                .tooltip(crate::fl!("pinned-messages"))
-                                .selected(
-                                    self.current_settings_panel
-                                        == Some(crate::SettingsPanel::Pinned),
-                                )
-                                .on_press(Message::TogglePinnedPanel),
-                        )
-                    }
-                })
-                .push(
-                    button::icon(Named::new("system-users-symbolic"))
-                        .tooltip(crate::fl!("room-members"))
-                        .selected(
-                            self.current_settings_panel == Some(crate::SettingsPanel::Members),
-                        )
-                        .on_press(Message::ToggleMembersPanel),
-                )
-                .push(
-                    button::icon(Named::new("link-symbolic"))
-                        .tooltip(TOOLTIP_COPY_ROOM_LINK.as_str())
-                        .on_press(Message::CopyRoomLink(room_id.clone())),
-                );
-
             if self.active_thread_root.is_some() {
                 content = content.push(self.view_threaded_timeline());
             } else {
-                content = content.push(room_header);
+                content = content.push(self.view_room_header(room_id, room_name));
+
                 if self.inviting_to_room {
-                    let mut invite_input = text_input("@user:example.com", &self.invite_to_room_id)
-                        .on_input(Message::InviteToRoomIdChanged);
-                    let is_empty = self.invite_to_room_id.trim().is_empty();
-                    let mut invite_btn = button::text(crate::fl!("invite"));
-                    if !is_empty {
-                        invite_input = invite_input.on_submit(|_| Message::InviteToRoom);
-                        invite_btn = invite_btn.on_press(Message::InviteToRoom);
-                    }
-                    let invite_btn_widget: Element<'_, Message> = if is_empty {
-                        tooltip(
-                            invite_btn,
-                            text::body(crate::fl!("enter-user-id-to-invite")),
-                            Position::Top,
-                        )
-                        .into()
-                    } else {
-                        invite_btn.into()
-                    };
-                    let invite_ui = Column::new().spacing(5).push(invite_input).push(
-                        Row::new().spacing(5).push(invite_btn_widget).push(
-                            button::text(crate::fl!("cancel"))
-                                .on_press(Message::ToggleInviteToRoom),
-                        ),
-                    );
-                    content = content.push(container(invite_ui).padding(5));
+                    content = content.push(self.view_invite_ui());
                 }
 
                 let selected_room_data = self
@@ -1232,23 +1118,149 @@ impl<'chat> Constellations {
                 content = content.push(chat_area);
             }
         } else {
-            let empty_state = container(
-                Column::new()
-                    .spacing(10)
-                    .align_x(Alignment::Center)
-                    .push(cosmic::widget::icon::from_name("chat-bubble-symbolic").size(64))
-                    .push(text::title1(crate::fl!("no-room-selected")))
-                    .push(text::body(crate::fl!("select-room-to-start"))),
-            )
-            .width(cosmic::iced::Length::Fill)
-            .height(cosmic::iced::Length::Fill)
-            .align_x(Alignment::Center)
-            .align_y(Alignment::Center);
-
-            content = content.push(empty_state);
+            content = content.push(self.view_empty_state());
         }
 
         content.into()
+    }
+
+    fn view_empty_state(&self) -> Element<'_, Message> {
+        container(
+            Column::new()
+                .spacing(10)
+                .align_x(Alignment::Center)
+                .push(cosmic::widget::icon::from_name("chat-bubble-symbolic").size(64))
+                .push(text::title1(crate::fl!("no-room-selected")))
+                .push(text::body(crate::fl!("select-room-to-start"))),
+        )
+        .width(cosmic::iced::Length::Fill)
+        .height(cosmic::iced::Length::Fill)
+        .align_x(Alignment::Center)
+        .align_y(Alignment::Center)
+        .into()
+    }
+
+    fn view_invite_ui(&self) -> Element<'_, Message> {
+        let mut invite_input = text_input("@user:example.com", &self.invite_to_room_id)
+            .on_input(Message::InviteToRoomIdChanged);
+        let is_empty = self.invite_to_room_id.trim().is_empty();
+        let mut invite_btn = button::text(crate::fl!("invite"));
+        if !is_empty {
+            invite_input = invite_input.on_submit(|_| Message::InviteToRoom);
+            invite_btn = invite_btn.on_press(Message::InviteToRoom);
+        }
+        let invite_btn_widget: Element<'_, Message> = if is_empty {
+            tooltip(
+                invite_btn,
+                text::body(crate::fl!("enter-user-id-to-invite")),
+                Position::Top,
+            )
+            .into()
+        } else {
+            invite_btn.into()
+        };
+        let invite_ui = Column::new().spacing(5).push(invite_input).push(
+            Row::new()
+                .spacing(5)
+                .push(invite_btn_widget)
+                .push(button::text(crate::fl!("cancel")).on_press(Message::ToggleInviteToRoom)),
+        );
+        container(invite_ui).padding(5).into()
+    }
+
+    fn view_room_header<'a>(
+        &'a self,
+        room_id: &std::sync::Arc<str>,
+        room_name: &str,
+    ) -> Element<'a, Message> {
+        // ⚡ Bolt Optimization: Avoid parsing UserId per frame
+        let is_in_call = self.user_id.as_ref().is_some_and(|uid| {
+            self.call_participants
+                .get(room_id)
+                .is_some_and(|p| p.iter().any(|participant| participant.as_str() == uid))
+        });
+
+        let call_participants = self.call_participants.get(room_id);
+        let participant_count = call_participants.map_or(0, |p| p.len());
+
+        let mut room_header = Row::new()
+            .spacing(10)
+            .align_y(Alignment::Center)
+            .push(view_room_name_menu(room_name));
+
+        if participant_count > 0 {
+            room_header = room_header.push(
+                container(
+                    Row::new()
+                        .spacing(5)
+                        .align_y(Alignment::Center)
+                        .push(cosmic::widget::icon::from_name("camera-video-symbolic").size(16))
+                        .push(text::body(format!("{participant_count}")).size(12)),
+                )
+                .padding([2, 5]),
+            );
+        }
+
+        let call_button: Element<'_, Message> = if is_in_call {
+            tooltip(
+                button::custom(cosmic::widget::icon::from_name("call-stop"))
+                    .class(cosmic::theme::Button::Destructive)
+                    .on_press(Message::LeaveCall),
+                text::body(crate::fl!("call-leave")),
+                Position::Bottom,
+            )
+            .into()
+        } else {
+            button::icon(Named::new("camera-web"))
+                .on_press(Message::JoinCall)
+                .tooltip(crate::fl!("call-join"))
+                .into()
+        };
+
+        room_header = room_header
+            .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
+            .push(call_button)
+            .push({
+                let count = self.pinned_events.len();
+                if count > 0 {
+                    let btn_content = Row::new()
+                        .spacing(6)
+                        .align_y(Alignment::Center)
+                        .push(cosmic::widget::icon::from_name("pin-symbolic").size(16))
+                        .push(text::body(count.to_string()).size(12));
+                    Element::from(tooltip(
+                        button::custom(btn_content)
+                            .selected(
+                                self.current_settings_panel == Some(crate::SettingsPanel::Pinned),
+                            )
+                            .on_press(Message::TogglePinnedPanel),
+                        text::body(crate::fl!("pinned-messages")),
+                        Position::Bottom,
+                    ))
+                } else {
+                    Element::from(
+                        button::icon(Named::new("pin-symbolic"))
+                            .tooltip(crate::fl!("pinned-messages"))
+                            .selected(
+                                self.current_settings_panel == Some(crate::SettingsPanel::Pinned),
+                            )
+                            .on_press(Message::TogglePinnedPanel),
+                    )
+                }
+            })
+            .push(
+                button::icon(Named::new("system-users-symbolic"))
+                    .tooltip(crate::fl!("room-members"))
+                    .selected(self.current_settings_panel == Some(crate::SettingsPanel::Members))
+                    .on_press(Message::ToggleMembersPanel),
+            )
+            .push(
+                button::icon(Named::new("link-symbolic"))
+                    .tooltip(TOOLTIP_COPY_ROOM_LINK.as_str())
+                    .on_press(Message::CopyRoomLink(room_id.clone())),
+            );
+
+        room_header.into()
     }
 
     pub fn view_composer(&self) -> Element<'_, Message> {
