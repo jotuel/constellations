@@ -1160,15 +1160,19 @@ impl<'chat> Constellations {
             invite_btn.into()
         };
         let invite_ui = Column::new().spacing(5).push(invite_input).push(
-            Row::new().spacing(5).push(invite_btn_widget).push(
-                button::text(crate::fl!("cancel"))
-                    .on_press(Message::ToggleInviteToRoom),
-            ),
+            Row::new()
+                .spacing(5)
+                .push(invite_btn_widget)
+                .push(button::text(crate::fl!("cancel")).on_press(Message::ToggleInviteToRoom)),
         );
         container(invite_ui).padding(5).into()
     }
 
-    fn view_room_header<'a>(&'a self, room_id: &std::sync::Arc<str>, room_name: &str) -> Element<'a, Message> {
+    fn view_room_header<'a>(
+        &'a self,
+        room_id: &std::sync::Arc<str>,
+        room_name: &str,
+    ) -> Element<'a, Message> {
         // ⚡ Bolt Optimization: Avoid parsing UserId per frame
         let is_in_call = self.user_id.as_ref().is_some_and(|uid| {
             self.call_participants
@@ -1227,8 +1231,7 @@ impl<'chat> Constellations {
                     Element::from(tooltip(
                         button::custom(btn_content)
                             .selected(
-                                self.current_settings_panel
-                                    == Some(crate::SettingsPanel::Pinned),
+                                self.current_settings_panel == Some(crate::SettingsPanel::Pinned),
                             )
                             .on_press(Message::TogglePinnedPanel),
                         text::body(crate::fl!("pinned-messages")),
@@ -1239,8 +1242,7 @@ impl<'chat> Constellations {
                         button::icon(Named::new("pin-symbolic"))
                             .tooltip(crate::fl!("pinned-messages"))
                             .selected(
-                                self.current_settings_panel
-                                    == Some(crate::SettingsPanel::Pinned),
+                                self.current_settings_panel == Some(crate::SettingsPanel::Pinned),
                             )
                             .on_press(Message::TogglePinnedPanel),
                     )
@@ -1249,9 +1251,7 @@ impl<'chat> Constellations {
             .push(
                 button::icon(Named::new("system-users-symbolic"))
                     .tooltip(crate::fl!("room-members"))
-                    .selected(
-                        self.current_settings_panel == Some(crate::SettingsPanel::Members),
-                    )
+                    .selected(self.current_settings_panel == Some(crate::SettingsPanel::Members))
                     .on_press(Message::ToggleMembersPanel),
             )
             .push(
