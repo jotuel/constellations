@@ -3058,10 +3058,7 @@ impl MatrixEngine {
         let room_results = response.search_categories.room_events;
 
         let mut results = Vec::with_capacity(room_results.results.len());
-        for result in room_results.results {
-            let Some(raw_event) = result.result else {
-                continue;
-            };
+        for raw_event in room_results.results.into_iter().filter_map(|r| r.result) {
             // The server returns decrypted plain-text events (it has the keys
             // for rooms we're joined to), so a single deserialize suffices.
             let event: matrix_sdk::ruma::events::AnyTimelineEvent = raw_event.deserialize()?;
