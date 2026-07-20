@@ -309,7 +309,9 @@ pub enum Message {
     UnpinMessage(matrix_sdk::ruma::OwnedEventId),
     ToggleSearch,
     SearchQueryChanged(String),
-    PublicSearchResults(Result<Vec<matrix::PublicRoom>, String>),
+    /// Public rooms / spaces directory search results. Carries the generation
+    /// captured at task spawn so stale results can be discarded (debounce).
+    PublicSearchResults(u64, Result<Vec<matrix::PublicRoom>, String>),
     /// Server-side message search results for the in-room search. Carries the
     /// generation captured at task spawn so stale results can be discarded.
     MessageSearchResults(u64, Result<Vec<matrix::MessageSearchResult>, String>),
