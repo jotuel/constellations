@@ -610,10 +610,9 @@ async fn test_paginate_backwards_rls_not_initialized() {
     assert_eq!(err_msg, "RoomListService not initialized");
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn test_paginate_backwards_success() {
+async fn setup_pagination_mock_endpoints(mock_server: &std::sync::Arc<wiremock::MockServer>) {
     use wiremock::{
-        Mock, MockServer, ResponseTemplate,
+        Mock, ResponseTemplate,
         matchers::{method, path_regex},
     };
 
@@ -638,9 +637,6 @@ async fn test_paginate_backwards_success() {
             }
         }
     }
-
-    let mock_server = MockServer::start().await;
-    let mock_server = std::sync::Arc::new(mock_server);
 
     // Mock the sliding sync endpoint to inject a room using custom matchers to prevent infinite loop/livelock
     Mock::given(method("POST"))
@@ -731,6 +727,16 @@ async fn test_paginate_backwards_success() {
         })))
         .mount(mock_server.as_ref())
         .await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_paginate_backwards_success() {
+    use wiremock::MockServer;
+
+    let mock_server = MockServer::start().await;
+    let mock_server = std::sync::Arc::new(mock_server);
+
+    setup_pagination_mock_endpoints(&mock_server).await;
 
     let tmp_dir = tempdir().unwrap();
     let engine = match MatrixEngine::new(tmp_dir.path().to_path_buf()).await {
