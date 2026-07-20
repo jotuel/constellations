@@ -1260,49 +1260,35 @@ impl MatrixEngine {
         }
     }
 
-    pub async fn fetch_room_data(&self, room: &matrix_sdk::Room) -> Result<RoomData> {
-        let id: std::sync::Arc<str> = room.room_id().as_str().into();
-        let name = match room.name() {
-            Some(n) => Some(n.to_string()),
-            None => room.cached_display_name().map(|n| n.to_string()),
-        };
-
-        let unread_count = room.unread_notification_counts().notification_count as u32;
+    #[allow(clippy::collapsible_if)]
+    async fn fetch_avatar_url(room: &matrix_sdk::Room) -> Option<String> {
         let mut avatar_url = room.avatar_url().map(|u| u.to_string());
         if room.joined_members_count() == 2 || room.active_members_count() == 2 {
             let client = room.client();
-            if let Some(my_user_id) = client.user_id()
-                && let Ok(members) = room
+            if let Some(my_user_id) = client.user_id() {
+                if let Ok(members) = room
                     .members_no_sync(matrix_sdk::RoomMemberships::ACTIVE)
                     .await
-            {
-                let other_member = members.iter().find(|m| m.user_id() != my_user_id);
-                if let Some(other_member) = other_member
-                    && let Some(other_avatar) = other_member.avatar_url()
                 {
-                    avatar_url = Some(other_avatar.to_string());
+                    let other_member = members.iter().find(|m| m.user_id() != my_user_id);
+                    if let Some(other_member) = other_member {
+                        if let Some(other_avatar) = other_member.avatar_url() {
+                            avatar_url = Some(other_avatar.to_string());
+                        }
+                    }
                 }
             }
         }
+        avatar_url
+    }
 
-        let last_message = match room.latest_event().await {
+    async fn fetch_last_message(room: &matrix_sdk::Room) -> Option<String> {
+        match room.latest_event().await {
             LatestEventValue::Remote {
                 content: TimelineItemContent::MsgLike(m),
                 ..
-            } => {
-                if let MsgLikeKind::Message(msg_content) = &m.kind {
-                    let cleaned = Self::strip_reply_quote(msg_content.body());
-                    let mut msg = cleaned.to_string();
-                    if msg.len() > 30 {
-                        msg.truncate(26);
-                        msg.push_str("...");
-                    }
-                    Some(msg)
-                } else {
-                    None
-                }
             }
-            LatestEventValue::Local {
+            | LatestEventValue::Local {
                 content: TimelineItemContent::MsgLike(m),
                 ..
             } => {
@@ -1319,37 +1305,115 @@ impl MatrixEngine {
                 }
             }
             _ => None,
-        };
+        }
+    }
 
-        let room_type = room.room_type();
-        let is_space = room_type == Some(RoomType::Space);
-
+    async fn fetch_space_hierarchy_data(
+        &self,
+        room: &matrix_sdk::Room,
+        is_space: bool,
+    ) -> (Option<String>, Option<String>, bool) {
         if is_space {
             let mut inner = self.inner.write().await;
             inner.space_hierarchy.add_space(room.room_id().to_owned());
         }
 
-        let (parent_space_id, order, suggested) = {
-            let inner = self.inner.read().await;
-            let parent_id = inner
-                .space_hierarchy
-                .parents
-                .get(room.room_id())
-                .and_then(|parents| parents.iter().next());
+        let inner = self.inner.read().await;
+        let parent_id = inner
+            .space_hierarchy
+            .parents
+            .get(room.room_id())
+            .and_then(|parents| parents.iter().next());
 
-            let (order, suggested) = parent_id
-                .and_then(|p| {
-                    inner
-                        .space_hierarchy
-                        .children
-                        .get(p)
-                        .and_then(|c| c.get(room.room_id()))
+        let (order, suggested) = parent_id
+            .and_then(|p| {
+                inner
+                    .space_hierarchy
+                    .children
+                    .get(p)
+                    .and_then(|c| c.get(room.room_id()))
+            })
+            .map(|d| (d.order.clone(), d.suggested))
+            .unwrap_or((None, false));
+
+        (parent_id.map(|id| id.to_string()), order, suggested)
+    }
+
+    fn extract_allowed_spaces_from_join_rule(
+        join_rule: &matrix_sdk::ruma::events::room::join_rules::JoinRule,
+    ) -> Vec<matrix_sdk::ruma::OwnedRoomId> {
+        match join_rule {
+            matrix_sdk::ruma::events::room::join_rules::JoinRule::Restricted(r) => r
+                .allow
+                .iter()
+                .filter_map(|a| match a {
+                    matrix_sdk::ruma::events::room::join_rules::AllowRule::RoomMembership(m) => {
+                        Some(m.room_id.clone())
+                    }
+                    _ => None,
                 })
-                .map(|d| (d.order.clone(), d.suggested))
-                .unwrap_or((None, false));
+                .collect(),
+            matrix_sdk::ruma::events::room::join_rules::JoinRule::KnockRestricted(r) => r
+                .allow
+                .iter()
+                .filter_map(|a| match a {
+                    matrix_sdk::ruma::events::room::join_rules::AllowRule::RoomMembership(m) => {
+                        Some(m.room_id.clone())
+                    }
+                    _ => None,
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
 
-            (parent_id.map(|id| id.to_string()), order, suggested)
+    async fn fetch_join_rule_and_allowed_spaces(
+        room: &matrix_sdk::Room,
+    ) -> Result<(
+        Option<matrix_sdk::ruma::events::room::join_rules::JoinRule>,
+        Vec<matrix_sdk::ruma::OwnedRoomId>,
+    )> {
+        if let Ok(Some(event)) = room
+            .get_state_event_static::<matrix_sdk::ruma::events::room::join_rules::RoomJoinRulesEventContent>()
+            .await
+        {
+            let (join_rule, allowed_spaces) = match event.deserialize()? {
+                matrix_sdk_base::deserialized_responses::SyncOrStrippedState::Sync(
+                    matrix_sdk::ruma::events::SyncStateEvent::Original(ev),
+                ) => {
+                    let join_rule = ev.content.join_rule;
+                    let allowed_spaces = Self::extract_allowed_spaces_from_join_rule(&join_rule);
+                    (Some(join_rule), allowed_spaces)
+                }
+                matrix_sdk_base::deserialized_responses::SyncOrStrippedState::Stripped(ev) => {
+                    let join_rule = ev.content.join_rule;
+                    let allowed_spaces = Self::extract_allowed_spaces_from_join_rule(&join_rule);
+                    (Some(join_rule), allowed_spaces)
+                }
+                _ => (None, Vec::new()),
+            };
+            Ok((join_rule, allowed_spaces))
+        } else {
+            Ok((None, Vec::new()))
+        }
+    }
+
+    pub async fn fetch_room_data(&self, room: &matrix_sdk::Room) -> Result<RoomData> {
+        let id: std::sync::Arc<str> = room.room_id().as_str().into();
+        let name = match room.name() {
+            Some(n) => Some(n.to_string()),
+            None => room.cached_display_name().map(|n| n.to_string()),
         };
+
+        let unread_count = room.unread_notification_counts().notification_count as u32;
+        let avatar_url = Self::fetch_avatar_url(room).await;
+        let last_message = Self::fetch_last_message(room).await;
+
+        let room_type = room.room_type();
+        let is_space = room_type == Some(RoomType::Space);
+
+        let (parent_space_id, order, suggested) =
+            self.fetch_space_hierarchy_data(room, is_space).await;
 
         let unread_count_str = if unread_count > 0 {
             Some(format!("({})", unread_count))
@@ -1357,80 +1421,7 @@ impl MatrixEngine {
             None
         };
 
-        let (join_rule, allowed_spaces) = if let Ok(Some(event)) = room
-            .get_state_event_static::<matrix_sdk::ruma::events::room::join_rules::RoomJoinRulesEventContent>()
-            .await
-        {
-            match event.deserialize()? {
-                matrix_sdk_base::deserialized_responses::SyncOrStrippedState::Sync(
-                    matrix_sdk::ruma::events::SyncStateEvent::Original(ev),
-                ) => {
-                    let content = ev.content;
-                    let allowed_spaces = match &content.join_rule {
-                        matrix_sdk::ruma::events::room::join_rules::JoinRule::Restricted(r) => {
-                            r.allow
-                                .iter()
-                                .filter_map(|a| match a {
-                                    matrix_sdk::ruma::events::room::join_rules::AllowRule::RoomMembership(
-                                        m,
-                                    ) => Some(m.room_id.clone()),
-                                    _ => None,
-                                })
-                                .collect()
-                        }
-                        matrix_sdk::ruma::events::room::join_rules::JoinRule::KnockRestricted(
-                            r,
-                        ) => {
-                            r.allow
-                                .iter()
-                                .filter_map(|a| match a {
-                                    matrix_sdk::ruma::events::room::join_rules::AllowRule::RoomMembership(
-                                        m,
-                                    ) => Some(m.room_id.clone()),
-                                    _ => None,
-                                })
-                                .collect()
-                        }
-                        _ => Vec::new(),
-                    };
-                    (Some(content.join_rule), allowed_spaces)
-                }
-                matrix_sdk_base::deserialized_responses::SyncOrStrippedState::Stripped(ev) => {
-                    let content = ev.content;
-                    let allowed_spaces = match &content.join_rule {
-                        matrix_sdk::ruma::events::room::join_rules::JoinRule::Restricted(r) => {
-                            r.allow
-                                .iter()
-                                .filter_map(|a| match a {
-                                    matrix_sdk::ruma::events::room::join_rules::AllowRule::RoomMembership(
-                                        m,
-                                    ) => Some(m.room_id.clone()),
-                                    _ => None,
-                                })
-                                .collect()
-                        }
-                        matrix_sdk::ruma::events::room::join_rules::JoinRule::KnockRestricted(
-                            r,
-                        ) => {
-                            r.allow
-                                .iter()
-                                .filter_map(|a| match a {
-                                    matrix_sdk::ruma::events::room::join_rules::AllowRule::RoomMembership(
-                                        m,
-                                    ) => Some(m.room_id.clone()),
-                                    _ => None,
-                                })
-                                .collect()
-                        }
-                        _ => Vec::new(),
-                    };
-                    (Some(content.join_rule), allowed_spaces)
-                }
-                _ => (None, Vec::new()),
-            }
-        } else {
-            (None, Vec::new())
-        };
+        let (join_rule, allowed_spaces) = Self::fetch_join_rule_and_allowed_spaces(room).await?;
 
         Ok(RoomData {
             id,
