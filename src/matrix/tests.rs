@@ -21,6 +21,76 @@ async fn test_matrix_engine_init() {
 }
 
 #[test]
+fn test_sanitize_homeserver_url() {
+    assert_eq!(sanitize_homeserver_url("matrix.org"), "https://matrix.org");
+    assert_eq!(
+        sanitize_homeserver_url("http://matrix.org"),
+        "https://matrix.org"
+    );
+    assert_eq!(
+        sanitize_homeserver_url("https://matrix.org"),
+        "https://matrix.org"
+    );
+
+    // Localhost variations (should not upgrade)
+    assert_eq!(
+        sanitize_homeserver_url("http://localhost"),
+        "http://localhost"
+    );
+    assert_eq!(
+        sanitize_homeserver_url("http://localhost:8080"),
+        "http://localhost:8080"
+    );
+    assert_eq!(
+        sanitize_homeserver_url("http://localhost/path"),
+        "http://localhost/path"
+    );
+
+    // Malicious localhost variations (should upgrade)
+    assert_eq!(
+        sanitize_homeserver_url("http://localhost.attacker.com"),
+        "https://localhost.attacker.com"
+    );
+    assert_eq!(
+        sanitize_homeserver_url("http://localhost@attacker.com"),
+        "https://attacker.com"
+    );
+    assert_eq!(
+        sanitize_homeserver_url("http://localhost:password@attacker.com"),
+        "https://attacker.com"
+    );
+
+    // IPv4 local (should not upgrade)
+    assert_eq!(
+        sanitize_homeserver_url("http://127.0.0.1"),
+        "http://127.0.0.1"
+    );
+    assert_eq!(
+        sanitize_homeserver_url("http://127.0.0.1:8080"),
+        "http://127.0.0.1:8080"
+    );
+
+    // Malicious IPv4 local (should upgrade)
+    assert_eq!(
+        sanitize_homeserver_url("http://127.0.0.1.attacker.com"),
+        "https://127.0.0.1.attacker.com"
+    );
+
+    // IPv6 local (should not upgrade)
+    assert_eq!(sanitize_homeserver_url("http://[::1]"), "http://[::1]");
+    assert_eq!(
+        sanitize_homeserver_url("http://[::1]:8080"),
+        "http://[::1]:8080"
+    );
+
+    // Malicious IPv6 local (should upgrade)
+    assert_eq!(
+        sanitize_homeserver_url("http://[::1].attacker.com"),
+        "https://[::1].attacker.com"
+    );
+}
+
+#[test]
 fn test_markdown_to_html() {
     // Basic formatting
     let markdown = "# Hello\nThis is **bold** and *italic*.";
