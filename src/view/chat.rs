@@ -1260,59 +1260,52 @@ impl<'chat> Constellations {
 
         if let Some(replying_to) = &self.replying_to {
             let body = replying_to.body_text();
-
-            let mut char_indices = body.char_indices();
-            let snippet = if let Some((idx_97, _)) = char_indices.nth(97) {
-                if char_indices.nth(2).is_some() {
-                    let mut s = String::with_capacity(100);
-                    s.push_str(&body[..idx_97]);
-                    s.push_str("...");
-                    std::borrow::Cow::Owned(s)
-                } else {
-                    std::borrow::Cow::Owned(body)
-                }
-            } else {
-                std::borrow::Cow::Owned(body)
-            };
-
+            let snippet = truncate_snippet(body);
             let reply_bar = view_reply_bar(snippet, replying_to);
             content = content.push(container(reply_bar).padding(10));
         }
 
         if let Some(editing_item) = &self.editing_item {
             let body = editing_item.body_text();
-
-            let mut char_indices = body.char_indices();
-            let snippet = if let Some((idx_97, _)) = char_indices.nth(97) {
-                if char_indices.nth(2).is_some() {
-                    let mut s = String::with_capacity(100);
-                    s.push_str(&body[..idx_97]);
-                    s.push_str("...");
-                    std::borrow::Cow::Owned(s)
-                } else {
-                    std::borrow::Cow::Owned(body)
-                }
-            } else {
-                std::borrow::Cow::Owned(body)
-            };
-
-            let edit_bar = Row::new()
-                .spacing(10)
-                .align_y(Alignment::Center)
-                .push(text::body(crate::fl!("editing")).size(12))
-                .push(text::body(snippet).size(12))
-                .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
-                .push(tooltip(
-                    button::icon(cosmic::widget::icon::from_name("window-close-symbolic"))
-                        .on_press(Message::CancelEdit),
-                    text::body(crate::fl!("cancel")),
-                    Position::Bottom,
-                ));
-
-            content = content.push(container(edit_bar).padding(10));
+            content = content.push(Self::view_editing_bar(body));
         }
 
-        let composer = if self.composer_is_preview {
+        let composer = self.view_composer_editor();
+        let attachments_view = self.view_composer_attachments();
+        let controls = self.view_composer_controls();
+
+        let composer_card = container(Column::new().spacing(5).push(composer).push(controls))
+            .style(|theme: &cosmic::Theme| {
+                use cosmic::iced::widget::container::Catalog;
+                theme.style(&cosmic::theme::Container::Card)
+            })
+            .padding(10);
+
+        content.push(attachments_view).push(composer_card).into()
+    }
+
+
+    fn view_editing_bar(body: String) -> Element<'static, Message> {
+        let snippet = truncate_snippet(body);
+
+        let edit_bar = Row::new()
+            .spacing(10)
+            .align_y(Alignment::Center)
+            .push(text::body(crate::fl!("editing")).size(12))
+            .push(text::body(snippet).size(12))
+            .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
+            .push(tooltip(
+                button::icon(cosmic::widget::icon::from_name("window-close-symbolic"))
+                    .on_press(Message::CancelEdit),
+                text::body(crate::fl!("cancel")),
+                Position::Bottom,
+            ));
+
+        container(edit_bar).padding(10).into()
+    }
+
+    fn view_composer_editor(&self) -> Element<'_, Message> {
+        if self.composer_is_preview {
             self.view_preview()
         } else {
             container(
@@ -1337,8 +1330,10 @@ impl<'chat> Constellations {
             )
             .padding(0)
             .into()
-        };
+        }
+    }
 
+    fn view_composer_attachments(&self) -> Element<'_, Message> {
         let mut attachments_view = Column::new().spacing(5);
         if !self.composer_attachments.is_empty() {
             attachments_view =
@@ -1356,7 +1351,10 @@ impl<'chat> Constellations {
                 attachments_view = attachments_view.push(attachment_row);
             }
         }
+        attachments_view.into()
+    }
 
+    fn view_composer_controls(&self) -> Element<'_, Message> {
         let is_empty =
             self.composer_content.text().trim().is_empty() && self.composer_attachments.is_empty();
 
@@ -1384,7 +1382,7 @@ impl<'chat> Constellations {
             send_btn.into()
         };
 
-        let controls = Row::new()
+        Row::new()
             .spacing(10)
             .push(
                 button::icon(Named::new("mail-attachment-symbolic"))
@@ -1411,16 +1409,8 @@ impl<'chat> Constellations {
                     .tooltip(TOOLTIP_FIND.as_str())
             })
             .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
-            .push(send_btn_widget);
-
-        let composer_card = container(Column::new().spacing(5).push(composer).push(controls))
-            .style(|theme: &cosmic::Theme| {
-                use cosmic::iced::widget::container::Catalog;
-                theme.style(&cosmic::theme::Container::Card)
-            })
-            .padding(10);
-
-        content.push(attachments_view).push(composer_card).into()
+            .push(send_btn_widget)
+            .into()
     }
 
     pub fn view_search_results(&self) -> Element<'_, Message> {
@@ -1914,5 +1904,22 @@ mod tests {
     fn test_view_pinned_panel_renders_without_panicking() {
         let constellations = Constellations::mock();
         let _element = constellations.view_pinned_panel();
+    }
+}
+
+
+fn truncate_snippet(body: String) -> std::borrow::Cow<'static, str> {
+    let mut char_indices = body.char_indices();
+    if let Some((idx_97, _)) = char_indices.nth(97) {
+        if char_indices.nth(2).is_some() {
+            let mut s = String::with_capacity(100);
+            s.push_str(&body[..idx_97]);
+            s.push_str("...");
+            std::borrow::Cow::Owned(s)
+        } else {
+            std::borrow::Cow::Owned(body)
+        }
+    } else {
+        std::borrow::Cow::Owned(body)
     }
 }
