@@ -133,6 +133,7 @@ fn sanitize_homeserver_url(homeserver: &str) -> String {
 
     if let Ok(url) = Url::parse(&url_str) {
         if url.scheme() == "http" {
+            #[allow(clippy::collapsible_if)]
             if let Some(host) = url.host_str() {
                 if host == "localhost" || host == "127.0.0.1" || host == "[::1]" {
                     return url_str;
