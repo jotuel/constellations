@@ -1,3 +1,4 @@
 
 ## Performance Optimization
 * ⚡ **N+1 Async Event Loading**: In `src/constellations/handlers.rs`, fixed an N+1 async I/O anti-pattern when loading pinned event details. A sequential `for` loop `for id in ids { matrix.fetch_pinned_event_details(..).await }` was updated to concurrently fetch using `futures::future::join_all(ids.into_iter().map(..))`. This parallelization significantly reduces the overall I/O waiting time when rendering pinned events for large channels.
+* ⚡ **Pre-allocating Vec Iteration**: In `src/settings/user/update.rs`, optimized looping allocation when pushing devices to a new vector. Modified code to utilize `map(...).collect()` from the `user_devices.devices()` iterator instead of dynamic `push` loop. `.collect()` leverages underlying `size_hint()` enabling pre-allocation, eliminating continuous re-allocation overhead within the iterator pipeline loop over collections.
