@@ -1172,9 +1172,8 @@ impl MatrixEngine {
         session_attributes.insert("type", "matrix-session");
 
         if let Ok(items) = keyring.search_items(&session_attributes).await {
-            for item in items {
-                let _ = item.delete().await;
-            }
+            let futures = items.iter().map(|item| item.delete());
+            let _ = futures::future::join_all(futures).await;
         }
 
         let mut pass_attributes = HashMap::new();
@@ -1182,9 +1181,8 @@ impl MatrixEngine {
         pass_attributes.insert("type", "store-passphrase");
 
         if let Ok(items) = keyring.search_items(&pass_attributes).await {
-            for item in items {
-                let _ = item.delete().await;
-            }
+            let futures = items.iter().map(|item| item.delete());
+            let _ = futures::future::join_all(futures).await;
         }
 
         let mut inner = self.inner.write().await;
