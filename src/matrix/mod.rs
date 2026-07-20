@@ -61,7 +61,6 @@ fn sanitize_homeserver_url(homeserver: &str) -> String {
     }
 }
 
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct LiveKitWellKnown {
     #[serde(rename = "org.matrix.msc4143.rtc_foci")]
