@@ -157,8 +157,11 @@ impl State {
         section.into()
     }
 
-
-    fn view_child<'a>(&'a self, child: &'a crate::matrix::RoomData, name: &'a str) -> Element<'a, Message> {
+    fn view_child<'a>(
+        &'a self,
+        child: &'a crate::matrix::RoomData,
+        name: &'a str,
+    ) -> Element<'a, Message> {
         let current_order = child.order.as_deref().unwrap_or_default();
         let order_to_show = self
             .pending_child_orders
@@ -223,10 +226,11 @@ impl State {
         layout.into()
     }
 
-    fn view_child_join_rules<'a>(&'a self, child: &'a crate::matrix::RoomData) -> Element<'a, Message> {
-        use matrix_sdk::ruma::events::room::join_rules::{
-            AllowRule, JoinRule, Restricted,
-        };
+    fn view_child_join_rules<'a>(
+        &'a self,
+        child: &'a crate::matrix::RoomData,
+    ) -> Element<'a, Message> {
+        use matrix_sdk::ruma::events::room::join_rules::{AllowRule, JoinRule, Restricted};
 
         let is_restricted = if let Some(JoinRule::Restricted(r)) = &child.join_rule {
             r.allow.iter().any(|a| {
@@ -261,12 +265,10 @@ impl State {
 
         if !is_restricted
             && let Some(space_id) = &self.space_id
-            && let Ok(space_id_parsed) =
-                matrix_sdk::ruma::RoomId::parse(space_id.as_ref())
+            && let Ok(space_id_parsed) = matrix_sdk::ruma::RoomId::parse(space_id.as_ref())
         {
-            let mut restricted = Restricted::new(vec![AllowRule::room_membership(
-                space_id_parsed.to_owned(),
-            )]);
+            let mut restricted =
+                Restricted::new(vec![AllowRule::room_membership(space_id_parsed.to_owned())]);
             // Keep other existing allowed spaces if any
             if let Some(JoinRule::Restricted(r)) = &child.join_rule {
                 for allow in &r.allow {
@@ -283,7 +285,11 @@ impl State {
             ));
         }
 
-        Row::new().spacing(5).push(invite_btn).push(restricted_btn).into()
+        Row::new()
+            .spacing(5)
+            .push(invite_btn)
+            .push(restricted_btn)
+            .into()
     }
     fn view_add_child(&self) -> Element<'_, Message> {
         let mut section = settings::section()
