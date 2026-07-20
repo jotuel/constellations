@@ -834,10 +834,7 @@ async fn test_send_message_room_not_found() {
     assert_eq!(result.unwrap_err().to_string(), "Room not found");
 }
 
-#[tokio::test]
-async fn test_send_message_success() {
-    let mock_server = MockServer::start().await;
-
+async fn setup_send_message_mocks(mock_server: &MockServer) {
     // We need to mock the send message endpoint. It matches a regex because of the transaction ID.
     Mock::given(method("PUT"))
         .and(path_regex(
@@ -846,7 +843,7 @@ async fn test_send_message_success() {
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "event_id": "$eventid12345"
         })))
-        .mount(&mock_server)
+        .mount(mock_server)
         .await;
 
     // Also matching v3
@@ -857,7 +854,7 @@ async fn test_send_message_success() {
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "event_id": "$eventid12345"
         })))
-        .mount(&mock_server)
+        .mount(mock_server)
         .await;
 
     // Mock createRoom to register the test room
@@ -866,7 +863,7 @@ async fn test_send_message_success() {
         .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
             "room_id": "!test_room:localhost"
         })))
-        .mount(&mock_server)
+        .mount(mock_server)
         .await;
 
     // Mock room encryption state check
@@ -878,7 +875,7 @@ async fn test_send_message_success() {
             "errcode": "M_NOT_FOUND",
             "error": "State event not found"
         })))
-        .mount(&mock_server)
+        .mount(mock_server)
         .await;
 
     // Mock account data check to return M_NOT_FOUND properly
@@ -890,8 +887,15 @@ async fn test_send_message_success() {
             "errcode": "M_NOT_FOUND",
             "error": "Account data not found"
         })))
-        .mount(&mock_server)
+        .mount(mock_server)
         .await;
+}
+
+#[tokio::test]
+async fn test_send_message_success() {
+    let mock_server = MockServer::start().await;
+
+    setup_send_message_mocks(&mock_server).await;
 
     let tmp_dir = tempdir().unwrap();
     let engine = match MatrixEngine::new(tmp_dir.path().to_path_buf()).await {
