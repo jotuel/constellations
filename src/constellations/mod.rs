@@ -140,6 +140,8 @@ pub struct Constellations {
     pub(crate) message_search_results: Vec<matrix::MessageSearchResult>,
     /// True while a server-side message search is in flight.
     pub(crate) is_searching_messages: bool,
+    pub(crate) search_has_more: bool,
+    pub(crate) is_searching_more_messages: bool,
     /// Monotonic counter used to discard stale in-flight message searches
     /// (debounce). Each `SearchQueryChanged` increments it; the async task
     /// captures the value at spawn time and the result is dropped if it no
@@ -312,7 +314,9 @@ pub enum Message {
     PublicSearchResults(Result<Vec<matrix::PublicRoom>, String>),
     /// Server-side message search results for the in-room search. Carries the
     /// generation captured at task spawn so stale results can be discarded.
-    MessageSearchResults(u64, Result<Vec<matrix::MessageSearchResult>, String>),
+    MessageSearchResults(u64, Result<(Vec<matrix::MessageSearchResult>, bool), String>),
+    LoadMoreMessageSearch,
+    MessageSearchMoreResults(Result<(Vec<matrix::MessageSearchResult>, bool), String>),
     NewRoomIsVideoChanged(bool),
     JumpToMessage(matrix_sdk::ruma::OwnedEventId),
     /// Jump to a message from a search hit, choosing the right path depending
@@ -443,6 +447,8 @@ impl Constellations {
             is_searching_public: false,
             message_search_results: Vec::new(),
             is_searching_messages: false,
+            search_has_more: false,
+            is_searching_more_messages: false,
             search_generation: 0,
             new_room_is_video: false,
             active_reaction_picker: None,
