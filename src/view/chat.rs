@@ -1475,18 +1475,18 @@ impl<'chat> Constellations {
                         )
                         .push(text::body(result.timestamp.as_str()).size(10)),
                 );
-                card_content = card_content
-                    .push(self.view_message_text(&result.plain_text, &result.links));
+                card_content =
+                    card_content.push(self.view_message_text(&result.plain_text, &result.links));
 
                 let event_id_for_jump = event_id.clone();
-                card_content =
-                    card_content.push(
-                        Row::new()
-                            .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
-                            .push(button::text(crate::fl!("jump-to-message")).on_press(
-                                Message::JumpToMessageOrLoadContext(event_id_for_jump),
-                            )),
-                    );
+                card_content = card_content.push(
+                    Row::new()
+                        .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
+                        .push(
+                            button::text(crate::fl!("jump-to-message"))
+                                .on_press(Message::JumpToMessageOrLoadContext(event_id_for_jump)),
+                        ),
+                );
 
                 message_list = message_list.push(
                     container(card_content)
