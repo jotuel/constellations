@@ -332,8 +332,8 @@ error-no-sliding-sync = Your homeserver does not support Sliding Sync (MSC4186),
 # Chat fallbacks
 qr-login-error = An error occurred.
 replying = Replying...
-image-message = 📷 Image: { $body }
-file-message = 📁 File: { $body }
+image-message = 📷 Image: { $name }
+file-message = 📁 File: { $name }
 room-fallback = Room
 unknown-sender = Unknown
 unknown-time = Unknown time
