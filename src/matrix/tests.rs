@@ -1763,3 +1763,42 @@ async fn test_search_messages_in_room_not_found() {
         .await;
     assert!(result.is_err());
 }
+
+/// `search_messages_global` runs against the local seshat index across all
+/// joined rooms. Without an authenticated session there are no joined rooms,
+/// so the iterator is empty — it must return `Ok([])` (not panic or hang) for
+/// every scope. The DM/group narrowing iterates an empty room set and so is
+/// also a no-op.
+#[tokio::test]
+async fn test_search_messages_global_no_session() {
+    let tmp_dir = tempdir().unwrap();
+    let engine = match MatrixEngine::new(tmp_dir.path().to_path_buf()).await {
+        Ok(e) => e,
+        Err(e) => {
+            info!(
+                "Skipping test due to engine initialization failure (likely dbus/keyring): {}",
+                e
+            );
+            return;
+        }
+    };
+
+    for scope in [
+        super::GlobalSearchScope::All,
+        super::GlobalSearchScope::DmsOnly,
+        super::GlobalSearchScope::GroupsOnly,
+    ] {
+        let result = engine.search_messages_global("test", 20, scope).await;
+        // No joined rooms → empty index → Ok([]). The point is it must not
+        // panic or hang; an Err here would also be acceptable but is not
+        // expected given the SDK returns Ok(None) on an empty working set.
+        assert!(
+            result.is_ok(),
+            "scope {scope:?} must not error on empty room set"
+        );
+        assert!(
+            result.unwrap().is_empty(),
+            "scope {scope:?} must yield no hits"
+        );
+    }
+}

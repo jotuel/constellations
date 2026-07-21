@@ -1409,6 +1409,13 @@ impl<'chat> Constellations {
     pub fn view_search_results<'a>(&'a self) -> Element<'a, Message> {
         let mut results_col = Column::new().spacing(15).width(cosmic::iced::Length::Fill);
 
+        // Section: Messages across all joined rooms (global / cross-room search
+        // against the local seshat index). Only shown when NO room is selected;
+        // once a room is open, the per-room section below takes over.
+        if self.selected_room.is_none() {
+            results_col = results_col.push(self.view_search_global_section());
+        }
+
         // Section: Messages in this Room (server-side full-text search).
         // Only shown when a room is selected — without one there is no room to
         // search and `message_search_results` stays empty.
@@ -1425,6 +1432,132 @@ impl<'chat> Constellations {
             .id(crate::TIMELINE_ID.clone())
             .height(cosmic::iced::Length::Fill)
             .into()
+    }
+
+    fn view_search_global_section<'a>(&'a self) -> Element<'a, Message> {
+        use crate::matrix::GlobalSearchScope;
+
+        let mut section = Column::new().spacing(15).width(cosmic::iced::Length::Fill);
+        section = section.push(text::title3(crate::fl!("search-messages-global")).size(14));
+
+        // 3-way scope toggle: All / DMs / Groups. The active option uses
+        // `suggested` (the codebase's existing toggle idiom — see the join-rule
+        // control in space settings); inactive ones switch the scope (which
+        // re-fires the query).
+        let make_scope_btn = |label: String, this_scope: GlobalSearchScope| {
+            if self.global_search_scope == this_scope {
+                button::suggested(label)
+            } else {
+                button::text(label).on_press(Message::SetGlobalSearchScope(this_scope))
+            }
+        };
+        section = section.push(
+            Row::new()
+                .spacing(6)
+                .push(make_scope_btn(
+                    crate::fl!("search-scope-all"),
+                    GlobalSearchScope::All,
+                ))
+                .push(make_scope_btn(
+                    crate::fl!("search-scope-dms"),
+                    GlobalSearchScope::DmsOnly,
+                ))
+                .push(make_scope_btn(
+                    crate::fl!("search-scope-groups"),
+                    GlobalSearchScope::GroupsOnly,
+                )),
+        );
+
+        if self.is_searching_global_messages {
+            section = section.push(
+                container(cosmic::widget::progress_bar::indeterminate_circular().size(24.0))
+                    .width(cosmic::iced::Length::Fill)
+                    .align_x(Alignment::Center)
+                    .padding(20),
+            );
+        } else if !self.global_message_search_results.is_empty() {
+            let mut message_list = Column::new().spacing(10).width(cosmic::iced::Length::Fill);
+            for result in &self.global_message_search_results {
+                let room_id_arc: std::sync::Arc<str> =
+                    std::sync::Arc::from(result.room_id.as_str());
+                let event_id = result.event_id.clone();
+
+                let mut card_content = Column::new().spacing(5);
+                // Room of origin — the headline difference from the in-room
+                // card. Fall back to the raw room id if no display name.
+                card_content = card_content.push(
+                    text::body(
+                        result
+                            .room_name
+                            .as_deref()
+                            .unwrap_or(result.room_id.as_str()),
+                    )
+                    .font(cosmic::iced::Font {
+                        weight: cosmic::iced::font::Weight::Bold,
+                        ..Default::default()
+                    })
+                    .size(11),
+                );
+                card_content = card_content.push(
+                    Row::new()
+                        .spacing(8)
+                        .align_y(Alignment::Center)
+                        .push(
+                            text::body(result.sender_id.as_str())
+                                .font(cosmic::iced::Font {
+                                    weight: cosmic::iced::font::Weight::Bold,
+                                    ..Default::default()
+                                })
+                                .size(13),
+                        )
+                        .push(text::body(result.timestamp.as_str()).size(10)),
+                );
+                card_content =
+                    card_content.push(self.view_message_text(&result.plain_text, &result.links));
+
+                let event_id_for_jump = event_id.clone();
+                let room_id_for_jump = room_id_arc.clone();
+                card_content = card_content.push(
+                    Row::new()
+                        .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
+                        .push(button::text(crate::fl!("jump-to-message")).on_press(
+                            Message::OpenRoomEvent {
+                                room_id: room_id_for_jump,
+                                event_id: event_id_for_jump,
+                            },
+                        )),
+                );
+
+                message_list = message_list.push(
+                    container(card_content)
+                        .style(|theme: &cosmic::Theme| {
+                            use cosmic::iced::widget::container::Catalog;
+                            let cosmic = theme.cosmic();
+                            let mut style = theme.style(&cosmic::theme::Container::Card);
+                            style.border.color = cosmic.accent.base.into();
+                            style.border.width = 1.0;
+                            style
+                        })
+                        .padding(10)
+                        .width(cosmic::iced::Length::Fill),
+                );
+            }
+            section = section.push(message_list);
+        } else {
+            section = section.push(
+                container(
+                    Column::new()
+                        .spacing(10)
+                        .align_x(Alignment::Center)
+                        .push(cosmic::widget::icon::from_name("edit-find-symbolic").size(32))
+                        .push(text::body(crate::fl!("search-no-global-matches")).size(14)),
+                )
+                .width(cosmic::iced::Length::Fill)
+                .align_x(Alignment::Center)
+                .padding(20),
+            );
+        }
+        section.into()
     }
 
     fn view_search_messages_section<'a>(&'a self) -> Element<'a, Message> {
