@@ -387,3 +387,19 @@ fn test_search_query_changed_debounce() {
     assert!(!app.is_searching_public);
     assert!(!app.is_searching_messages);
 }
+
+#[test]
+fn test_dnd_data_received_uri_list() {
+    let mut app = create_test_app();
+    let temp_dir = tempfile::tempdir().unwrap();
+    let temp_file_path = temp_dir.path().join("dropped_file.txt");
+    std::fs::write(&temp_file_path, "test").unwrap();
+
+    let uri = format!("file://{}\r\n", temp_file_path.to_str().unwrap());
+    let data = uri.into_bytes();
+
+    let _ = app.update(Message::DndDataReceived("text/uri-list".to_string(), data));
+
+    assert_eq!(app.composer_attachments.len(), 1);
+    assert_eq!(app.composer_attachments[0], temp_file_path);
+}

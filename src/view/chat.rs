@@ -1268,12 +1268,17 @@ impl<'chat> Constellations {
         let attachments_view = self.view_composer_attachments();
         let controls = self.view_composer_controls();
 
-        let composer_card = container(Column::new().spacing(5).push(composer).push(controls))
-            .style(|theme: &cosmic::Theme| {
-                use cosmic::iced::widget::container::Catalog;
-                theme.style(&cosmic::theme::Container::Card)
-            })
-            .padding(10);
+        let composer_card = cosmic::widget::dnd_destination(
+            container(Column::new().spacing(5).push(composer).push(controls))
+                .style(|theme: &cosmic::Theme| {
+                    use cosmic::iced::widget::container::Catalog;
+                    theme.style(&cosmic::theme::Container::Card)
+                })
+                .padding(10),
+            vec![std::borrow::Cow::Borrowed("text/uri-list")],
+        )
+        .on_file_transfer(Message::DndFileTransfer)
+        .on_data_received(Message::DndDataReceived);
 
         content.push(attachments_view).push(composer_card).into()
     }

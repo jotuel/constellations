@@ -379,6 +379,7 @@ error-failed-qr-login = QR login failed: { $error }
 error-failed-load-more = Failed to load more messages: { $error }
 error-failed-send-message = Failed to send message: { $error }
 error-failed-send-attachment = Failed to send attachment { $path }: { $error }
+error-failed-retrieve-dragged-files = Failed to retrieve dragged files: { $error }
 error-failed-edit-message = Failed to edit message: { $error }
 error-failed-redact-message = Failed to redact message: { $error }
 error-failed-toggle-reaction = Failed to toggle reaction: { $error }
