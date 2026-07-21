@@ -1,9 +1,10 @@
 use cosmic::Element;
 use cosmic::iced::Alignment;
-use cosmic::widget::{Column, Row, button, settings, text, text_input, tooltip, tooltip::Position};
+use cosmic::widget::{Column, Row, button, settings, text, text_input};
 
 use super::message::Message;
 use super::state::State;
+use crate::utils::widget::{disabled_or_tooltip, tooltip_button};
 
 impl State {
     pub fn view(&self) -> Element<'_, Message> {
@@ -296,21 +297,13 @@ impl State {
             .title(crate::fl!("add-child"))
             .header(text::body(crate::fl!("add-child-by-id")).size(12));
 
-        let mut add_btn = button::text(crate::fl!("add-child"));
         let is_empty = self.new_child_id.trim().is_empty();
-        if !is_empty {
-            add_btn = add_btn.on_press(Message::AddChild);
-        }
-        let btn_widget: Element<'_, Message> = if is_empty {
-            tooltip(
-                add_btn,
-                text::body(crate::fl!("enter-id-to-add")),
-                Position::Top,
-            )
-            .into()
-        } else {
-            add_btn.into()
-        };
+        let btn_widget: Element<'_, Message> = disabled_or_tooltip(
+            button::text(crate::fl!("add-child")),
+            !is_empty,
+            Message::AddChild,
+            crate::fl!("enter-id-to-add"),
+        );
 
         let add_child_col = Column::new()
             .spacing(10)
@@ -352,14 +345,7 @@ impl State {
         }
 
         if !self.is_saving && !has_changes {
-            Some(
-                tooltip(
-                    save_btn,
-                    text::body(crate::fl!("make-changes-to-save")),
-                    Position::Top,
-                )
-                .into(),
-            )
+            Some(tooltip_button(save_btn, crate::fl!("make-changes-to-save")))
         } else {
             Some(save_btn.into())
         }

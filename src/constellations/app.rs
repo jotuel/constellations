@@ -1,12 +1,12 @@
 use super::{AuthFlow, Constellations, MenuAct, Message, SettingsPanel};
 use crate::matrix;
 use crate::settings;
+use crate::utils::widget::tooltip_button_at;
 
-use cosmic::iced::widget::tooltip;
 use cosmic::iced::{Alignment, Subscription};
 use cosmic::widget::icon::Named;
 use cosmic::widget::tooltip::Position;
-use cosmic::widget::{RcElementWrapper, Row, button, menu, text, text_input};
+use cosmic::widget::{RcElementWrapper, Row, button, menu, text_input};
 use cosmic::{Action, Application, Core, Element, Task};
 use eyeball_im::Vector;
 use std::collections::HashMap;
@@ -42,15 +42,12 @@ impl Application for Constellations {
 
         if self.user_id.is_some() {
             let user_btn = button::icon(Named::new("user-available-symbolic"));
-            let user_tooltip = tooltip(
-                user_btn,
-                text::body(crate::fl!("user-menu")),
-                Position::Bottom,
-            );
+            let user_tooltip =
+                tooltip_button_at(user_btn, crate::fl!("user-menu"), Position::Bottom);
             let key_binds = std::collections::HashMap::new();
 
             let menu_tree = menu::Tree::with_children(
-                RcElementWrapper::new(Element::from(user_tooltip)),
+                RcElementWrapper::new(user_tooltip),
                 menu::items(
                     &key_binds,
                     vec![
@@ -230,11 +227,8 @@ impl Constellations {
         if self.is_search_active {
             let search_btn =
                 button::icon(Named::new("edit-find-symbolic")).on_press(Message::ToggleSearch);
-            let search_tooltip = tooltip(
-                search_btn,
-                text::body(crate::fl!("close-search")),
-                Position::Bottom,
-            );
+            let search_tooltip =
+                tooltip_button_at(search_btn, crate::fl!("close-search"), Position::Bottom);
             let row = Row::new()
                 .align_y(Alignment::Center)
                 .push(search_tooltip)
@@ -247,12 +241,9 @@ impl Constellations {
         } else {
             let search_btn =
                 button::icon(Named::new("edit-find-symbolic")).on_press(Message::ToggleSearch);
-            let search_tooltip = tooltip(
-                search_btn,
-                text::body(crate::fl!("search")),
-                Position::Bottom,
-            );
-            start.push(search_tooltip.into());
+            let search_tooltip =
+                tooltip_button_at(search_btn, crate::fl!("search"), Position::Bottom);
+            start.push(search_tooltip);
         }
     }
 }

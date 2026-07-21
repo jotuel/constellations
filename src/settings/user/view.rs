@@ -1,12 +1,11 @@
 use cosmic::Element;
 use cosmic::iced::Alignment;
-use cosmic::widget::{
-    Column, Row, button, icon::Named, settings, text, text_input, tooltip, tooltip::Position,
-};
+use cosmic::widget::{Column, Row, button, icon::Named, settings, text, text_input};
 use std::sync::Arc;
 
 use super::message::Message;
 use super::state::{State, VerificationUIState};
+use crate::utils::widget::{disabled_or_tooltip, tooltip_button};
 
 impl State {
     fn view_privacy<'a>(&'a self) -> Element<'a, Message> {
@@ -85,31 +84,22 @@ impl State {
             for keyword in &self.keywords {
                 section = section.add(settings::item(
                     keyword.as_str(),
-                    tooltip(
+                    tooltip_button(
                         button::custom(cosmic::widget::icon::from_name("user-trash-symbolic"))
                             .class(cosmic::theme::Button::Destructive)
                             .on_press(Message::RemoveKeyword(keyword.clone())),
-                        text::body(crate::fl!("remove-keyword")),
-                        Position::Top,
+                        crate::fl!("remove-keyword"),
                     ),
                 ));
             }
 
-            let mut add_btn = button::text(crate::fl!("add"));
             let is_empty = self.new_keyword.trim().is_empty();
-            if !is_empty {
-                add_btn = add_btn.on_press(Message::AddKeyword);
-            }
-            let btn_widget: Element<'_, Message> = if is_empty {
-                tooltip(
-                    add_btn,
-                    text::body(crate::fl!("enter-keyword-to-add")),
-                    Position::Top,
-                )
-                .into()
-            } else {
-                add_btn.into()
-            };
+            let btn_widget: Element<'_, Message> = disabled_or_tooltip(
+                button::text(crate::fl!("add")),
+                !is_empty,
+                Message::AddKeyword,
+                crate::fl!("enter-keyword-to-add"),
+            );
 
             let add_keyword_layout = Column::new()
                 .spacing(5)
@@ -176,12 +166,7 @@ impl State {
         }
 
         let save_widget: Element<'_, Message> = if !has_changes && !self.is_saving {
-            tooltip(
-                save_btn,
-                text::body(crate::fl!("make-changes-to-save")),
-                Position::Top,
-            )
-            .into()
+            tooltip_button(save_btn, crate::fl!("make-changes-to-save"))
         } else {
             save_btn.into()
         };
@@ -239,19 +224,9 @@ impl State {
 
         let pw_btn_widget: Element<'_, Message> = if !self.is_changing_password {
             if is_empty {
-                tooltip(
-                    pw_btn,
-                    text::body(crate::fl!("fill-all-fields-to-change-password")),
-                    Position::Top,
-                )
-                .into()
+                tooltip_button(pw_btn, crate::fl!("fill-all-fields-to-change-password"))
             } else if !passwords_match {
-                tooltip(
-                    pw_btn,
-                    text::body(crate::fl!("new-passwords-do-not-match")),
-                    Position::Top,
-                )
-                .into()
+                tooltip_button(pw_btn, crate::fl!("new-passwords-do-not-match"))
             } else {
                 pw_btn.into()
             }
@@ -320,11 +295,7 @@ impl State {
                 if !device.is_deleting {
                     del_btn = del_btn.on_press(Message::DeleteDevice(device.device_id.clone()));
                 }
-                action_row = action_row.push(tooltip(
-                    del_btn,
-                    text::body(crate::fl!("delete-device")),
-                    Position::Top,
-                ));
+                action_row = action_row.push(tooltip_button(del_btn, crate::fl!("delete-device")));
 
                 let mut title_row = Row::new().spacing(10).align_y(Alignment::Center);
                 if device.is_renaming {
@@ -349,11 +320,10 @@ impl State {
                     title_row = title_row
                         .push(text::body(name).size(14))
                         .push(text::body(format!("({})", device.device_id.as_ref())).size(12))
-                        .push(tooltip(
+                        .push(tooltip_button(
                             button::icon(Named::new("document-edit-symbolic"))
                                 .on_press(Message::StartRenameDevice(device.device_id.clone())),
-                            text::body(crate::fl!("rename-device")),
-                            Position::Top,
+                            crate::fl!("rename-device"),
                         ));
                 }
 
@@ -383,27 +353,20 @@ impl State {
     }
 
     fn view_deactivate_account<'a>(&'a self) -> Element<'a, Message> {
-        let mut deactivate_btn = button::destructive(if self.is_deactivating {
+        let deactivate_btn = button::destructive(if self.is_deactivating {
             crate::fl!("deactivating")
         } else {
             crate::fl!("deactivate-account")
         });
 
         let is_pass_empty = self.deactivate_password.is_empty();
-        if !is_pass_empty {
-            deactivate_btn = deactivate_btn.on_press(Message::DeactivateAccount);
-        }
 
-        let deactivate_widget: Element<'_, Message> = if is_pass_empty {
-            tooltip(
-                deactivate_btn,
-                text::body(crate::fl!("enter-password-to-deactivate")),
-                Position::Top,
-            )
-            .into()
-        } else {
-            deactivate_btn.into()
-        };
+        let deactivate_widget: Element<'_, Message> = disabled_or_tooltip(
+            deactivate_btn,
+            !is_pass_empty,
+            Message::DeactivateAccount,
+            crate::fl!("enter-password-to-deactivate"),
+        );
 
         settings::section()
             .title(crate::fl!("deactivate-account"))
@@ -498,21 +461,13 @@ impl State {
                 ));
             }
 
-            let mut email_btn = button::text(crate::fl!("send-verification"));
             let is_email_empty = self.new_3pid_email.trim().is_empty();
-            if !is_email_empty {
-                email_btn = email_btn.on_press(Message::Request3PIDEmailToken);
-            }
-            let email_widget: Element<'_, Message> = if is_email_empty {
-                tooltip(
-                    email_btn,
-                    text::body(crate::fl!("enter-email-to-link")),
-                    Position::Top,
-                )
-                .into()
-            } else {
-                email_btn.into()
-            };
+            let email_widget: Element<'_, Message> = disabled_or_tooltip(
+                button::text(crate::fl!("send-verification")),
+                !is_email_empty,
+                Message::Request3PIDEmailToken,
+                crate::fl!("enter-email-to-link"),
+            );
 
             let link_email_layout = Column::new()
                 .spacing(5)
@@ -543,40 +498,24 @@ impl State {
                         .on_input(Message::Add3PIDPasswordChanged),
                 ));
 
-                let mut complete_btn = button::suggested(crate::fl!("add-account"));
                 let is_pass_empty = self.add_3pid_password.is_empty();
-                if !is_pass_empty {
-                    complete_btn = complete_btn.on_press(Message::Add3PID);
-                }
-                let complete_widget: Element<'_, Message> = if is_pass_empty {
-                    tooltip(
-                        complete_btn,
-                        text::body(crate::fl!("enter-password-to-confirm")),
-                        Position::Top,
-                    )
-                    .into()
-                } else {
-                    complete_btn.into()
-                };
+                let complete_widget: Element<'_, Message> = disabled_or_tooltip(
+                    button::suggested(crate::fl!("add-account")),
+                    !is_pass_empty,
+                    Message::Add3PID,
+                    crate::fl!("enter-password-to-confirm"),
+                );
 
                 section = section.add(settings::item(crate::fl!("complete"), complete_widget));
             }
 
-            let mut phone_btn = button::text(crate::fl!("send-sms"));
             let is_phone_empty = self.new_3pid_msisdn.trim().is_empty();
-            if !is_phone_empty {
-                phone_btn = phone_btn.on_press(Message::Request3PIDMsisdnToken);
-            }
-            let phone_widget: Element<'_, Message> = if is_phone_empty {
-                tooltip(
-                    phone_btn,
-                    text::body(crate::fl!("enter-phone-to-link")),
-                    Position::Top,
-                )
-                .into()
-            } else {
-                phone_btn.into()
-            };
+            let phone_widget: Element<'_, Message> = disabled_or_tooltip(
+                button::text(crate::fl!("send-sms")),
+                !is_phone_empty,
+                Message::Request3PIDMsisdnToken,
+                crate::fl!("enter-phone-to-link"),
+            );
 
             let link_phone_layout = Column::new()
                 .spacing(5)
@@ -621,22 +560,13 @@ impl State {
                 }
             }
 
-            let mut ignore_btn = button::destructive(crate::fl!("ignore"));
             let is_user_empty = self.new_ignore_user_id.trim().is_empty();
-            if !is_user_empty {
-                ignore_btn = ignore_btn.on_press(Message::IgnoreUser);
-            }
-
-            let ignore_widget: Element<'_, Message> = if is_user_empty {
-                tooltip(
-                    ignore_btn,
-                    text::body(crate::fl!("enter-user-id-to-ignore")),
-                    Position::Top,
-                )
-                .into()
-            } else {
-                ignore_btn.into()
-            };
+            let ignore_widget: Element<'_, Message> = disabled_or_tooltip(
+                button::destructive(crate::fl!("ignore")),
+                !is_user_empty,
+                Message::IgnoreUser,
+                crate::fl!("enter-user-id-to-ignore"),
+            );
 
             let ignore_layout = Column::new()
                 .spacing(5)
