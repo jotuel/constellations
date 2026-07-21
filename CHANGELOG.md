@@ -9,9 +9,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### New Features
 
+#### Search
+
+- **In-room message search** — Replaced the client-side fuzzy filter (which only searched the currently loaded timeline window) with a full-text search of the entire room history. Results include sender, timestamp, and body, with the surrounding context jumpable directly from a hit.
+- **Server-side search with local fallback** — Search now prefers the homeserver's `/search` endpoint and falls back to the local seshat index when the server doesn't support it, so search works regardless of homeserver capability.
+- **Cross-room (global) search** — When the search bar is active with no room selected, queries run across all joined rooms via the local seshat index. Each hit shows its room of origin, and a scope toggle (All / Direct Messages / Groups) narrows the working set. Clicking a result opens the originating room and jumps to the message.
+- **Search pagination** — Message search results load in batches with a "Load more" control to page through additional hits.
+- **Debounced public-rooms directory search** — Typing in the public rooms/spaces directory now debounces before querying, so fast typing no longer hammers the homeserver.
+
+#### Chat & Composer
+
+- **Composer drag-and-drop** — Files can now be dragged onto the message composer to attach them, in addition to the existing file-picker button.
+- **Inline markdown links** — Markdown hyperlinks (`[text](url)`) are rendered as clickable Link widgets inside message bubbles in all rendering modes, rather than only as plain text.
+- **Tasklists in markdown** — GitHub-flavored task lists (`- [ ]` / `- [x]`) now render as interactive checkboxes in markdown messages.
+- **Copy permalink buttons** — Added copy-permalink buttons for individual messages and for rooms.
+
+#### Matrix Integration
+
+- **Start DM from user permalink** — Opening a `matrix:` user permalink now starts a direct message with that user instead of erroring.
+- **`matrix:` URI scheme handler** — Registered the `matrix:` URI scheme at the OS level (`.desktop` + metainfo), so `matrix.to` and matrix permalinks open Constellations directly.
 - **Real QR code login (MSC4108)** — Replaced the non-functional QR login stub (which generated an invalid `matrix.to` URL no scanner could read) with the real MSC4108 sign-in flow from matrix-rust-sdk. The QR now encodes a valid binary `QrCodeData` payload that an existing Matrix device (e.g. Element Mobile) can scan to grant login, with full secure-channel establishment, check-code confirmation, OAuth device-authorization, and end-to-end encryption secret transfer.
 
-## [0.1.0] - 2025-07-09
+#### Settings
+
+- **COSMIC Config persistence** — User settings are now stored via the COSMIC Config system instead of a custom JSON file, integrating with `cosmic-settings` and following the COSMIC desktop convention. (Note: existing `config.json` files from earlier alphas are not migrated — settings reset to defaults on first launch after upgrade.)
+
+### Bug Fixes
+
+- **OIDC login actually completes** — OIDC/OAuth login (and QR login, which depends on it) previously hung on "Waiting for browser": the client was never registered with the homeserver's MAS, and the redirect URI was rejected for a non-lowercase scheme and double-slash form. Both are fixed — login now performs dynamic client registration and uses the MAS-compliant `fi.joonastuomi.constellations:/callback` redirect URI. A dedicated error is surfaced when the homeserver doesn't support OAuth.
+- **Closed a homeserver URL spoofing vulnerability** — Homeserver input was matched with a loose `starts_with("http://127.0.0.1")` check, allowing look-alike hosts like `127.0.0.1.attacker.com` or `localhost@attacker.com` to bypass the localhost allowance. URLs are now parsed and validated by exact host (and userinfo is stripped), closing the spoofing vector across password, OIDC, and QR login.
+- **Markdown links parsed in plain-text mode** — Fixed markdown links not being extracted when a message rendered in plain-text mode.
+
+### Security
+
+- **Removed insecure secret-storage fallback** — Matrix credentials (session tokens, store passphrase) no longer fall back to being written as plaintext files when Keyring is unavailable; the failure now bubbles up as an error instead of silently leaking secrets to disk.
+
+## [0.1.0] - 2026-07-09
 
 First alpha release. Usable, but expect bugs, missing features, and breaking changes before the eventual 1.0.
 
