@@ -1659,6 +1659,29 @@ impl Constellations {
         )
     }
 
+    /// Open a (possibly different) room and jump to one of its events, e.g.
+    /// from a cross-room message search result.
+    ///
+    /// If the hit's room is already open, jump to the event directly. Otherwise
+    /// select the room and queue a follow-up `SetPendingEventFocus` **after**
+    /// `RoomSelected`. The ordering is load-bearing: `RoomSelected` clears
+    /// `pending_event_focus` (see `test_room_selected_clears_event_focus`), so
+    /// the focus must be re-asserted afterwards; `TimelineInitFinished` then
+    /// consumes it via `check_pending_event_focus` (scroll / load-context).
+    fn handle_open_room_event(
+        &mut self,
+        room_id: std::sync::Arc<str>,
+        event_id: matrix_sdk::ruma::OwnedEventId,
+    ) -> Task<Action<<Constellations as Application>::Message>> {
+        if self.selected_room.as_deref() == Some(room_id.as_ref()) {
+            return Task::done(Action::from(Message::JumpToMessageOrLoadContext(event_id)));
+        }
+        Task::batch(vec![
+            Task::done(Action::from(Message::RoomSelected(room_id))),
+            Task::done(Action::from(Message::SetPendingEventFocus(event_id))),
+        ])
+    }
+
     /// Handle the result of building an event-focused timeline. On success,
     /// schedule a jump to the centred event; on failure, surface a toast and
     /// return to live.
@@ -2725,6 +2748,34 @@ impl Constellations {
                 }
                 Task::none()
             }
+            Message::GlobalMessageSearchResults(generation, res) => {
+                // Same stale-discard guard as the in-room search; both share
+                // `search_generation`.
+                if generation != self.search_generation {
+                    return Task::none();
+                }
+                self.is_searching_global_messages = false;
+                match res {
+                    Ok(results) => {
+                        self.global_message_search_results = results;
+                    }
+                    Err(e) => {
+                        self.global_message_search_results.clear();
+                        self.error =
+                            Some(crate::fl!("search-server-failed", error = e).to_string());
+                    }
+                }
+                Task::none()
+            }
+            Message::SetGlobalSearchScope(scope) => {
+                self.global_search_scope = scope;
+                // Clear stale hits immediately; the re-fired query repopulates.
+                self.global_message_search_results.clear();
+                // Re-run the current query under the new scope by re-entering
+                // the search dispatch. This reuses the debounce so toggling
+                // the filter isn't an instant DoS.
+                self.handle_update(Message::SearchQueryChanged(self.search_query.clone()))
+            }
             Message::NewRoomIsVideoChanged(is_video) => {
                 self.new_room_is_video = is_video;
                 Task::none()
@@ -2780,6 +2831,20 @@ impl Constellations {
                 } else {
                     Task::done(Action::from(Message::LoadEventContext(event_id)))
                 }
+            }
+            Message::SetPendingEventFocus(event_id) => {
+                // Set the event focus so the next `TimelineInitFinished`
+                // scrolls to it (or builds an event-focused timeline). Fired by
+                // `OpenRoomEvent` as a follow-up to `RoomSelected`: the
+                // `RoomSelected` handler clears `pending_event_focus`, so the
+                // focus must be set *after* the room switch in the same batch
+                // (see `Message::OpenRoomEvent` and
+                // `test_room_selected_clears_event_focus`).
+                self.pending_event_focus = Some(event_id);
+                Task::none()
+            }
+            Message::OpenRoomEvent { room_id, event_id } => {
+                self.handle_open_room_event(room_id, event_id)
             }
             Message::LoadEventContext(event_id) => self.handle_load_event_context(event_id),
             Message::EventContextLoaded(event_id, res) => {
@@ -3221,11 +3286,15 @@ impl Constellations {
         self.pinned_events.clear();
         self.pinned_events_details.clear();
         // Message search results are scoped to the previous room;
-        // clear them so stale hits don't bleed into the new room.
+        // clear them so stale hits don't bleed into the new room. Global
+        // search results are also room-context-sensitive (they only run when
+        // no room is selected), so clear them too.
         self.message_search_results.clear();
         self.is_searching_messages = false;
         self.search_has_more = false;
         self.is_searching_more_messages = false;
+        self.global_message_search_results.clear();
+        self.is_searching_global_messages = false;
         self.inviting_to_room = false;
         self.invite_to_room_id.clear();
         // A room switch always leaves the event-focused (permalink
@@ -3375,6 +3444,8 @@ impl Constellations {
             self.is_searching_messages = false;
             self.search_has_more = false;
             self.is_searching_more_messages = false;
+            self.global_message_search_results.clear();
+            self.is_searching_global_messages = false;
         } else if let Some(panel) = &self.current_settings_panel {
             match panel {
                 SettingsPanel::Room => {
@@ -3434,30 +3505,51 @@ impl Constellations {
                 ));
             }
 
-            // Server-side message search (new). Only runs when a room is
-            // selected; debounced so a fast-typed query doesn't hammer
-            // the search index. The generation lets the result handler
-            // discard results from a now-stale query.
-            if let Some(matrix) = &self.matrix
-                && let Some(room_id) = &self.selected_room
-            {
-                self.is_searching_messages = true;
+            // Message search. Exactly one of two branches fires per keystroke:
+            // the in-room search when a room is selected, or the global
+            // (cross-room) search when none is. Both are debounced and share
+            // `search_generation` so a stale result from either is discarded.
+            if let Some(matrix) = &self.matrix {
                 let query_str = self.search_query.trim().to_string();
-                let room_id = room_id.clone();
-                let matrix = matrix.clone();
 
-                tasks.push(Task::perform(
-                    async move {
-                        // Debounce: wait for typing to settle before
-                        // querying the homeserver search index.
-                        tokio::time::sleep(std::time::Duration::from_millis(350)).await;
-                        matrix
-                            .search_messages_in_room(&room_id, &query_str, 20)
-                            .await
-                            .map_err(|e| e.to_string())
-                    },
-                    move |res| Action::from(Message::MessageSearchResults(generation, res)),
-                ));
+                if let Some(room_id) = &self.selected_room {
+                    // In-room search.
+                    self.is_searching_messages = true;
+                    let room_id = room_id.clone();
+                    let matrix = matrix.clone();
+
+                    tasks.push(Task::perform(
+                        async move {
+                            // Debounce: wait for typing to settle before
+                            // querying the homeserver search index.
+                            tokio::time::sleep(std::time::Duration::from_millis(350)).await;
+                            matrix
+                                .search_messages_in_room(&room_id, &query_str, 20)
+                                .await
+                                .map_err(|e| e.to_string())
+                        },
+                        move |res| Action::from(Message::MessageSearchResults(generation, res)),
+                    ));
+                } else {
+                    // Global search across all joined rooms (local seshat
+                    // index). The scope (All/DMs/Groups) is captured by copy;
+                    // changing it re-fires the query via `SetGlobalSearchScope`.
+                    self.is_searching_global_messages = true;
+                    let scope = self.global_search_scope;
+                    let matrix = matrix.clone();
+                    tasks.push(Task::perform(
+                        async move {
+                            tokio::time::sleep(std::time::Duration::from_millis(350)).await;
+                            matrix
+                                .search_messages_global(&query_str, 20, scope)
+                                .await
+                                .map_err(|e| e.to_string())
+                        },
+                        move |res| {
+                            Action::from(Message::GlobalMessageSearchResults(generation, res))
+                        },
+                    ));
+                }
             }
 
             if tasks.is_empty() {
@@ -3472,6 +3564,8 @@ impl Constellations {
             self.is_searching_messages = false;
             self.search_has_more = false;
             self.is_searching_more_messages = false;
+            self.global_message_search_results.clear();
+            self.is_searching_global_messages = false;
             // Invalidate any in-flight message search so a late result
             // doesn't repopulate stale hits for the cleared query.
             self.search_generation = self.search_generation.wrapping_add(1);
@@ -3581,6 +3675,9 @@ mod tests {
             search_has_more: false,
             is_searching_more_messages: false,
             search_generation: 0,
+            global_message_search_results: Vec::new(),
+            is_searching_global_messages: false,
+            global_search_scope: matrix::GlobalSearchScope::All,
             new_room_is_video: false,
             joined_room_ids: HashSet::new(),
             visited_room_ids: HashSet::new(),
@@ -4598,6 +4695,8 @@ mod tests {
 
         // Simulate incoming search results with has_more = true
         let mock_result = matrix::MessageSearchResult {
+            room_id: matrix_sdk::ruma::room_id!("!room:example.com").to_owned(),
+            room_name: None,
             event_id: matrix_sdk::ruma::event_id!("$1:example.com").to_owned(),
             sender_id: matrix_sdk::ruma::user_id!("@alice:example.com").to_owned(),
             body: "hello world".to_string(),
@@ -4622,6 +4721,8 @@ mod tests {
         app.is_searching_more_messages = true;
 
         let mock_result_2 = matrix::MessageSearchResult {
+            room_id: matrix_sdk::ruma::room_id!("!room:example.com").to_owned(),
+            room_name: None,
             event_id: matrix_sdk::ruma::event_id!("$2:example.com").to_owned(),
             sender_id: matrix_sdk::ruma::user_id!("@bob:example.com").to_owned(),
             body: "hello back".to_string(),
@@ -4645,5 +4746,135 @@ mod tests {
         let _ = app.update(Message::SearchQueryChanged("new query".to_string()));
         assert!(!app.search_has_more);
         assert!(!app.is_searching_more_messages);
+    }
+
+    // --- Global (cross-room) message search ---
+
+    /// `OpenRoomEvent` for a different room selects the room and then re-
+    /// asserts the pending event focus *after* `RoomSelected` clears it. The
+    /// test simulates the runtime performing the batched `Task::done` messages
+    /// in order: RoomSelected runs first (clearing focus), then
+    /// SetPendingEventFocus runs (re-asserting it). The end state must have the
+    /// new room selected AND the focus pending for TimelineInitFinished.
+    #[test]
+    fn test_open_room_event_sets_pending_focus_after_select() {
+        use std::sync::Arc;
+        let mut app = create_dummy_constellations();
+        let event_id: OwnedEventId = matrix_sdk::ruma::EventId::parse("$hit:example.com").unwrap();
+        let room_id: Arc<str> = Arc::from("!new:example.com");
+        app.selected_room = Some(Arc::from("!old:example.com"));
+
+        // The handler returns a batch of [RoomSelected, SetPendingEventFocus];
+        // simulate the runtime performing them in order.
+        let _task = app.handle_update(Message::OpenRoomEvent {
+            room_id: room_id.clone(),
+            event_id: event_id.clone(),
+        });
+        // Runtime performs RoomSelected (clears focus) then SetPendingEventFocus
+        // (re-asserts it) — same order as the batch.
+        let _t1 = app.handle_update(Message::RoomSelected(room_id.clone()));
+        let _t2 = app.handle_update(Message::SetPendingEventFocus(event_id.clone()));
+
+        assert_eq!(app.selected_room.as_deref(), Some("!new:example.com"));
+        assert_eq!(
+            app.pending_event_focus,
+            Some(event_id),
+            "focus must be set after RoomSelected clears it"
+        );
+    }
+
+    /// `OpenRoomEvent` for the currently-selected room must NOT switch rooms:
+    /// it jumps directly via `JumpToMessageOrLoadContext`. `pending_event_focus`
+    /// is left untouched (the jump path doesn't use it).
+    #[test]
+    fn test_open_room_event_same_room_does_not_switch() {
+        use std::sync::Arc;
+        let mut app = create_dummy_constellations();
+        let event_id: OwnedEventId = matrix_sdk::ruma::EventId::parse("$hit:example.com").unwrap();
+        let room_id: Arc<str> = Arc::from("!here:example.com");
+        app.selected_room = Some(room_id.clone());
+
+        // Same room: handler short-circuits to JumpToMessageOrLoadContext.
+        // Don't perform any deferred message — the contract is no room switch.
+        let _task = app.handle_update(Message::OpenRoomEvent {
+            room_id: room_id.clone(),
+            event_id,
+        });
+
+        assert_eq!(app.selected_room.as_deref(), Some("!here:example.com"));
+        assert!(
+            app.pending_event_focus.is_none(),
+            "same-room jump must not touch pending_event_focus"
+        );
+    }
+
+    /// `GlobalMessageSearchResults` honours the generation guard: a result
+    /// carrying a stale generation is discarded; the current generation lands.
+    #[test]
+    fn test_global_message_search_results_generation_guard() {
+        let mut app = create_dummy_constellations();
+        app.search_generation = 5;
+
+        let make_hit = || matrix::MessageSearchResult {
+            room_id: matrix_sdk::ruma::room_id!("!room:example.com").to_owned(),
+            room_name: Some("Room".to_string()),
+            event_id: matrix_sdk::ruma::EventId::parse("$e:example.com").unwrap(),
+            sender_id: matrix_sdk::ruma::user_id!("@a:b.c").to_owned(),
+            body: "hi".to_string(),
+            timestamp: "2026-01-01 00:00:00".to_string(),
+            plain_text: Vec::new(),
+            links: Vec::new(),
+        };
+
+        // Stale generation (4 < 5) — discarded.
+        let _t = app.handle_update(Message::GlobalMessageSearchResults(4, Ok(vec![make_hit()])));
+        assert!(
+            app.global_message_search_results.is_empty(),
+            "stale-generation result must be discarded"
+        );
+        assert!(
+            !app.is_searching_global_messages,
+            "discarded result must not flip the loading flag either"
+        );
+
+        // Current generation (5) — lands.
+        let _t = app.handle_update(Message::GlobalMessageSearchResults(5, Ok(vec![make_hit()])));
+        assert_eq!(
+            app.global_message_search_results.len(),
+            1,
+            "current-generation result must land"
+        );
+        assert!(!app.is_searching_global_messages);
+    }
+
+    /// `SetGlobalSearchScope` updates the scope and clears stale global hits so
+    /// a toggle doesn't briefly show the old scope's results.
+    #[test]
+    fn test_set_global_search_scope_updates_and_clears() {
+        use crate::matrix::GlobalSearchScope;
+        let mut app = create_dummy_constellations();
+        app.global_search_scope = GlobalSearchScope::All;
+        // Pretend we already have some All-scope hits on screen.
+        app.global_message_search_results
+            .push(matrix::MessageSearchResult {
+                room_id: matrix_sdk::ruma::room_id!("!r:example.com").to_owned(),
+                room_name: None,
+                event_id: matrix_sdk::ruma::EventId::parse("$e:example.com").unwrap(),
+                sender_id: matrix_sdk::ruma::user_id!("@a:b.c").to_owned(),
+                body: "hi".to_string(),
+                timestamp: "2026-01-01 00:00:00".to_string(),
+                plain_text: Vec::new(),
+                links: Vec::new(),
+            });
+
+        // Empty query: SetGlobalSearchScope re-enters SearchQueryChanged, which
+        // hits the clear branch (no search fired) — so results are cleared.
+        let _t = app.handle_update(Message::SetGlobalSearchScope(GlobalSearchScope::DmsOnly));
+
+        assert_eq!(app.global_search_scope, GlobalSearchScope::DmsOnly);
+        assert!(
+            app.global_message_search_results.is_empty(),
+            "stale hits must clear on scope change"
+        );
     }
 }

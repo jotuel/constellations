@@ -450,7 +450,10 @@ pub struct MatrixEngine {
 
 #[derive(Debug)]
 pub enum ActiveSearch {
-    Local(matrix_sdk::message_search::RoomSearchIterator),
+    Local {
+        room_id: matrix_sdk::ruma::OwnedRoomId,
+        search_iter: matrix_sdk::message_search::RoomSearchIterator,
+    },
     Server {
         query: String,
         room_id: String,
@@ -3098,6 +3101,8 @@ impl MatrixEngine {
             let links = crate::preview::extract_links(&plain_text);
 
             results.push(MessageSearchResult {
+                room_id: room_id_parsed.clone(),
+                room_name: None,
                 event_id,
                 sender_id,
                 body,
@@ -3149,7 +3154,10 @@ impl MatrixEngine {
         let mut search_iter = room.search_messages(query.to_owned(), max_results);
         let Some(events) = search_iter.next_events().await? else {
             let mut inner = self.inner.write().await;
-            inner.active_search = Some(ActiveSearch::Local(search_iter));
+            inner.active_search = Some(ActiveSearch::Local {
+                room_id: room_id_parsed.clone(),
+                search_iter,
+            });
             return Ok((Vec::new(), false));
         };
 
@@ -3157,11 +3165,14 @@ impl MatrixEngine {
         // Bolt Optimization: Functional chain avoids dynamic reallocations by size hint
         let results = events
             .into_iter()
-            .filter_map(|e| map_timeline_event(e).transpose())
+            .filter_map(|e| map_timeline_event(room_id_parsed.clone(), None, e).transpose())
             .collect::<Result<Vec<_>>>()?;
 
         let mut inner = self.inner.write().await;
-        inner.active_search = Some(ActiveSearch::Local(search_iter));
+        inner.active_search = Some(ActiveSearch::Local {
+            room_id: room_id_parsed.clone(),
+            search_iter,
+        });
 
         Ok((results, true))
     }
@@ -3182,7 +3193,10 @@ impl MatrixEngine {
         };
 
         let res = match &mut search {
-            ActiveSearch::Local(search_iter) => {
+            ActiveSearch::Local {
+                room_id,
+                search_iter,
+            } => {
                 let events_opt: Option<Vec<matrix_sdk::deserialized_responses::TimelineEvent>> =
                     search_iter.next_events().await?;
                 let has_more = events_opt.as_ref().is_some_and(|evs| !evs.is_empty());
@@ -3190,7 +3204,7 @@ impl MatrixEngine {
 
                 let results = events
                     .into_iter()
-                    .filter_map(|e| map_timeline_event(e).transpose())
+                    .filter_map(|e| map_timeline_event(room_id.clone(), None, e).transpose())
                     .collect::<Result<Vec<_>>>()?;
 
                 Ok((results, has_more))
@@ -3225,6 +3239,52 @@ impl MatrixEngine {
         }
 
         res
+    }
+
+    /// Search across all joined rooms via the local seshat index. Uses
+    /// `matrix_sdk::Client::search_messages` (`GlobalSearchIterator`), which
+    /// queries each room's local index (the same one the in-room local fallback
+    /// populates). Does not hit the server `/search` endpoint.
+    ///
+    /// `scope` narrows the working set to DM / group rooms before searching.
+    /// Unlike [`search_messages_in_room`], there is no server probe and no
+    /// backfill step here — the global iterator only sees events already in
+    /// the client's index (per-room backfill happens when each room is opened
+    /// or in-room-searched). Pagination / "load more" is a separate concern
+    /// (issue #303); this fetches a single batch.
+    pub async fn search_messages_global(
+        &self,
+        query: &str,
+        max_results: usize,
+        scope: GlobalSearchScope,
+    ) -> Result<Vec<MessageSearchResult>> {
+        let client = self.client().await;
+
+        let builder = client.search_messages(query.to_owned(), max_results);
+        let builder = match scope {
+            GlobalSearchScope::All => builder,
+            GlobalSearchScope::DmsOnly => builder.only_dm_rooms().await?,
+            GlobalSearchScope::GroupsOnly => builder.no_dms().await?,
+        };
+        let mut search_iter = builder.build();
+
+        let Some(events) = search_iter.next_events().await? else {
+            return Ok(Vec::new());
+        };
+
+        let mut results = Vec::with_capacity(events.len());
+        for (room_id, event) in events {
+            // Resolve a display name for the originating room (best-effort).
+            let room_name = client.get_room(&room_id).and_then(|room| {
+                room.name()
+                    .or_else(|| room.cached_display_name().map(|n| n.to_string()))
+            });
+            if let Some(hit) = map_timeline_event(room_id, room_name, event)? {
+                results.push(hit);
+            }
+        }
+
+        Ok(results)
     }
 
     pub async fn ignored_users(&self) -> Result<Vec<matrix_sdk::ruma::OwnedUserId>> {
@@ -3567,6 +3627,13 @@ pub fn markdown_to_html(markdown: &str) -> String {
 
 #[derive(Clone, Debug)]
 pub struct MessageSearchResult {
+    /// Room the hit originated in. For the in-room search this is the searched
+    /// room; for the global search it is each hit's room of origin.
+    pub room_id: matrix_sdk::ruma::OwnedRoomId,
+    /// Best-effort display name of the originating room. `None` for the in-room
+    /// search (the UI already has the room context); populated by global search
+    /// so each hit can show its room.
+    pub room_name: Option<String>,
     pub event_id: matrix_sdk::ruma::OwnedEventId,
     pub sender_id: matrix_sdk::ruma::OwnedUserId,
     pub body: String,
@@ -3575,6 +3642,19 @@ pub struct MessageSearchResult {
     // Mirrors the pre-compute optimization in `ConstellationsItem::new`.
     pub plain_text: Vec<crate::PreviewEvent>,
     pub links: Vec<(String, String)>,
+}
+
+/// Scope for global (cross-room) message search. Mirrors the narrowing options
+/// on `matrix_sdk::message_search::GlobalSearchBuilder`.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum GlobalSearchScope {
+    /// Search all joined rooms (the default).
+    #[default]
+    All,
+    /// Restrict to direct-message rooms (`only_dm_rooms`).
+    DmsOnly,
+    /// Restrict to non-DM / group rooms (`no_dms`).
+    GroupsOnly,
 }
 
 /// Error from the server-side search probe, distinguishing "endpoint not
@@ -3623,6 +3703,8 @@ fn message_body_from_sync_event(ev: &matrix_sdk::ruma::events::AnySyncTimelineEv
 }
 
 fn map_timeline_event(
+    room_id: matrix_sdk::ruma::OwnedRoomId,
+    room_name: Option<String>,
     event: matrix_sdk::deserialized_responses::TimelineEvent,
 ) -> Result<Option<MessageSearchResult>> {
     let Some(event_id) = event.event_id() else {
@@ -3662,6 +3744,8 @@ fn map_timeline_event(
     let links = crate::preview::extract_links(&plain_text);
 
     Ok(Some(MessageSearchResult {
+        room_id,
+        room_name,
         event_id,
         sender_id,
         body,

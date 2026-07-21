@@ -341,6 +341,11 @@ unknown-time = Unknown time
 # Search Results
 search-messages-in-room = Messages in this Room
 search-no-room-matches = No matching messages in this room
+search-messages-global = Messages in All Rooms
+search-no-global-matches = No matching messages across your rooms
+search-scope-all = All
+search-scope-dms = Direct Messages
+search-scope-groups = Groups
 public-rooms-spaces = Public Rooms & Spaces
 no-public-rooms = No public rooms or spaces found
 unnamed-room = Unnamed Room

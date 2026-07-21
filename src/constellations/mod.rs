@@ -145,8 +145,16 @@ pub struct Constellations {
     /// Monotonic counter used to discard stale in-flight message searches
     /// (debounce). Each `SearchQueryChanged` increments it; the async task
     /// captures the value at spawn time and the result is dropped if it no
-    /// longer matches.
+    /// longer matches. Shared by the in-room and global message searches.
     pub(crate) search_generation: u64,
+    /// Cross-room message search results. Populated by
+    /// `GlobalMessageSearchResults` when no room is selected and a query is
+    /// entered. Each hit carries its originating `room_id`/`room_name`.
+    pub(crate) global_message_search_results: Vec<matrix::MessageSearchResult>,
+    /// True while a cross-room message search is in flight.
+    pub(crate) is_searching_global_messages: bool,
+    /// Scope (All / DMs / Groups) for the cross-room message search.
+    pub(crate) global_search_scope: matrix::GlobalSearchScope,
     pub(crate) new_room_is_video: bool,
     pub(crate) active_reaction_picker: Option<matrix::TimelineEventItemId>,
     pub(crate) active_thread_root: Option<matrix_sdk::ruma::OwnedEventId>,
@@ -322,12 +330,29 @@ pub enum Message {
     ),
     LoadMoreMessageSearch,
     MessageSearchMoreResults(Result<(Vec<matrix::MessageSearchResult>, bool), String>),
+    /// Cross-room (global) message search results. Same generation guard as
+    /// `MessageSearchResults` (both share `search_generation`).
+    GlobalMessageSearchResults(u64, Result<Vec<matrix::MessageSearchResult>, String>),
+    /// Change the scope (All / DMs / Groups) of the cross-room message search.
+    /// Re-fires the current query under the new scope.
+    SetGlobalSearchScope(matrix::GlobalSearchScope),
     NewRoomIsVideoChanged(bool),
     JumpToMessage(matrix_sdk::ruma::OwnedEventId),
     /// Jump to a message from a search hit, choosing the right path depending
     /// on whether it is already in the live timeline window: scroll if loaded,
     /// otherwise build an event-focused timeline via `LoadEventContext`.
     JumpToMessageOrLoadContext(matrix_sdk::ruma::OwnedEventId),
+    /// Open a (possibly different) room and jump to one of its events, e.g.
+    /// from a cross-room message search hit. Dispatched by `OpenRoomEvent` as
+    /// a follow-up to `RoomSelected` so the focus lands *after* `RoomSelected`
+    /// clears it (see `Message::OpenRoomEvent`).
+    SetPendingEventFocus(matrix_sdk::ruma::OwnedEventId),
+    /// Open a room and jump to one of its events. Used by cross-room message
+    /// search result cards.
+    OpenRoomEvent {
+        room_id: std::sync::Arc<str>,
+        event_id: matrix_sdk::ruma::OwnedEventId,
+    },
     /// Build an event-focused (permalink context) timeline around an event not
     /// present in the live window, then scroll to it.
     LoadEventContext(matrix_sdk::ruma::OwnedEventId),
