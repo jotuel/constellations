@@ -1,6 +1,8 @@
+![App icon](../res/const.svg)
 # Constellations
 
 Matrix client built with [libcosmic](https://github.com/pop-os/libcosmic) and [matrix-rust-sdk](https://github.com/matrix-org/matrix-rust-sdk).
+
 
 ## Project Status
 
