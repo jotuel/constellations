@@ -9,6 +9,7 @@ pub mod chat;
 pub mod error;
 pub mod login;
 pub mod switcher;
+mod tests;
 
 const SPACE_AVATAR_WIDTH: i32 = 32;
 const SPACE_AVATAR_HEIGHT: i32 = 32;
