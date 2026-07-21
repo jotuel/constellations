@@ -20,6 +20,7 @@ libcosmic = { git = "https://github.com/pop-os/libcosmic", features = [
     "desktop-systemd-scope",
     "xdg-portal",
 ] }
+cosmic-config = { git = "https://github.com/pop-os/libcosmic" }
 matrix-sdk = { version = "0.18.0", features = ["sqlite", "e2e-encryption", "sso-login", "testing", "experimental-search", "experimental-widgets", "uniffi", "automatic-room-key-forwarding", "qrcode"] }
 matrix-sdk-ui = "0.18.0"
 matrix-sdk-sqlite = "0.18.0"
