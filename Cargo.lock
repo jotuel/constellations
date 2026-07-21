@@ -1545,6 +1545,7 @@ dependencies = [
  "anyhow",
  "ashpd 0.13.12",
  "chrono",
+ "cosmic-config",
  "cosmic-text",
  "dirs",
  "emojis 0.9.0",

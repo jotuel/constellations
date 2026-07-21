@@ -1,7 +1,8 @@
+use cosmic_config::{CosmicConfigEntry, cosmic_config_derive::CosmicConfigEntry};
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, CosmicConfigEntry)]
+#[version = 1]
 pub struct Config {
     pub show_sync_indicator: bool,
     pub send_typing_notifications: bool,
@@ -27,45 +28,29 @@ impl Default for Config {
 }
 
 impl Config {
-    fn config_path() -> Option<PathBuf> {
-        dirs::config_dir().map(|d| d.join("fi.joonastuomi.Constellations").join("config.json"))
-    }
-
     pub fn load() -> Self {
-        Self::load_from(Self::config_path())
-    }
-
-    pub fn load_from(path: Option<PathBuf>) -> Self {
-        if let Some(path) = path
-            && path.exists()
-        {
-            if let Ok(file) = std::fs::File::open(path) {
-                if let Ok(config) = serde_json::from_reader(file) {
-                    return config;
-                } else {
-                    tracing::warn!("Failed to deserialize config, using defaults");
+        if let Ok(config_handler) = cosmic_config::Config::new("fi.joonastuomi.Constellations", 1) {
+            match Self::get_entry(&config_handler) {
+                Ok(config) => config,
+                Err((errors, fallback)) => {
+                    for err in errors {
+                        tracing::warn!("Failed to load config from COSMIC Config: {:?}", err);
+                    }
+                    fallback
                 }
-            } else {
-                tracing::warn!("Failed to open config file, using defaults");
             }
+        } else {
+            tracing::warn!("Failed to create COSMIC Config handler, using default config");
+            Self::default()
         }
-        Self::default()
     }
 
     pub fn save(&self) -> Result<(), String> {
-        self.save_to(Self::config_path())
-    }
-
-    pub fn save_to(&self, path: Option<PathBuf>) -> Result<(), String> {
-        if let Some(path) = path {
-            if let Some(parent) = path.parent() {
-                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-            }
-            let file = std::fs::File::create(path).map_err(|e| e.to_string())?;
-            serde_json::to_writer_pretty(file, self).map_err(|e| e.to_string())?;
-            Ok(())
+        if let Ok(config_handler) = cosmic_config::Config::new("fi.joonastuomi.Constellations", 1) {
+            self.write_entry(&config_handler)
+                .map_err(|e| format!("Failed to save config to COSMIC Config: {:?}", e))
         } else {
-            Err("Failed to get config directory".to_string())
+            Err("Failed to create COSMIC Config handler".to_string())
         }
     }
 }
@@ -94,53 +79,37 @@ mod tests {
     }
 
     #[test]
-    fn test_config_save_load() {
-        let tmp_dir = tempdir().unwrap();
-        let config_path = tmp_dir.path().join("config.json");
-
-        let config = Config {
-            show_sync_indicator: true,
-            ..Default::default()
-        };
-
-        config
-            .save_to(Some(config_path.clone()))
-            .expect("Failed to save config");
-
-        let loaded = Config::load_from(Some(config_path));
-        assert_eq!(config, loaded);
-    }
-
-    #[test]
     #[serial_test::serial]
-    fn test_config_save_default() {
+    fn test_config_save_load() {
         let tmp_dir = tempdir().unwrap();
         unsafe {
             std::env::set_var("HOME", tmp_dir.path());
             std::env::set_var("XDG_CONFIG_HOME", tmp_dir.path());
             std::env::set_var("APPDATA", tmp_dir.path());
         }
-        let config = Config::default();
-        assert!(config.save().is_ok());
+
+        let config = Config {
+            show_sync_indicator: true,
+            ..Default::default()
+        };
+
+        config.save().expect("Failed to save config");
+
+        let loaded = Config::load();
+        assert_eq!(config, loaded);
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_config_load_nonexistent() {
         let tmp_dir = tempdir().unwrap();
-        let config_path = tmp_dir.path().join("nonexistent.json");
+        unsafe {
+            std::env::set_var("HOME", tmp_dir.path());
+            std::env::set_var("XDG_CONFIG_HOME", tmp_dir.path());
+            std::env::set_var("APPDATA", tmp_dir.path());
+        }
 
-        let loaded = Config::load_from(Some(config_path));
-        assert_eq!(loaded, Config::default());
-    }
-
-    #[test]
-    fn test_config_load_invalid_json() {
-        let tmp_dir = tempdir().unwrap();
-        let config_path = tmp_dir.path().join("invalid.json");
-
-        std::fs::write(&config_path, "{ invalid json }").unwrap();
-
-        let loaded = Config::load_from(Some(config_path));
+        let loaded = Config::load();
         assert_eq!(loaded, Config::default());
     }
 }
