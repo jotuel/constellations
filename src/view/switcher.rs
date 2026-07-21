@@ -1,5 +1,6 @@
 use crate::{
     Constellations, MenuAct, Message,
+    utils::widget::{disabled_or_tooltip, tooltip_button, tooltip_button_at},
     view::{
         ALL_ROOMS, AVATAR_RADIUS, CANCEL, CREATE, CREATE_ROOM, CREATE_SPACE, ENTER_ROOM_NAME,
         ENTER_SPACE_NAME, JOIN, JOINED_ROOMS, OTHER_ROOMS, ROOM_AVATAR_HEIGHT, ROOM_AVATAR_WIDTH,
@@ -12,7 +13,7 @@ use cosmic::{
     iced::Alignment,
     widget::{
         Column, RcElementWrapper, Row, button, container, divider, icon::Named, menu, scrollable,
-        text, text_input, tooltip, tooltip::Position,
+        text, text_input, tooltip::Position,
     },
 };
 
@@ -51,7 +52,7 @@ impl<'switcher> Constellations {
             global_btn = global_btn.on_press(Message::SelectSpace(None));
         }
 
-        let global_tooltip = tooltip(global_btn, text::body(ALL_ROOMS.as_str()), Position::Right);
+        let global_tooltip = tooltip_button_at(global_btn, ALL_ROOMS.as_str(), Position::Right);
 
         content = content.push(global_tooltip);
 
@@ -91,7 +92,7 @@ impl<'switcher> Constellations {
                 .as_deref()
                 .map(str::to_string)
                 .unwrap_or_else(|| crate::fl!("unknown-space"));
-            let space_tooltip = tooltip(btn, text::body(space_name), Position::Right);
+            let space_tooltip = tooltip_button_at(btn, space_name, Position::Right);
 
             content = content.push(space_tooltip);
         }
@@ -286,22 +287,17 @@ impl<'switcher> Constellations {
 
             let is_empty = self.invite_to_space_id.trim().is_empty();
 
-            let mut invite_btn = button::text(crate::fl!("invite"));
+            let invite_btn = button::text(crate::fl!("invite"));
             if !is_empty {
                 invite_input = invite_input.on_submit(|_| Message::InviteToSpace);
-                invite_btn = invite_btn.on_press(Message::InviteToSpace);
             }
 
-            let invite_btn_widget: Element<'_, Message> = if is_empty {
-                tooltip(
-                    invite_btn,
-                    text::body(crate::fl!("enter-user-id-to-invite")),
-                    Position::Top,
-                )
-                .into()
-            } else {
-                invite_btn.into()
-            };
+            let invite_btn_widget: Element<'_, Message> = disabled_or_tooltip(
+                invite_btn,
+                !is_empty,
+                Message::InviteToSpace,
+                crate::fl!("enter-user-id-to-invite"),
+            );
 
             let invite_ui = Column::new().spacing(5).push(invite_input).push(
                 Row::new()
@@ -435,7 +431,7 @@ impl<'switcher> Constellations {
         }
 
         let create_btn_widget: Element<'_, Message> = if is_empty {
-            tooltip(create_btn, text::body(empty_hint), Position::Top).into()
+            tooltip_button(create_btn, empty_hint)
         } else {
             create_btn.into()
         };
@@ -480,12 +476,7 @@ impl<'switcher> Constellations {
         }
 
         let open_btn_widget: Element<'_, Message> = if is_empty {
-            tooltip(
-                open_btn,
-                text::body(crate::fl!("open-link-placeholder")),
-                Position::Top,
-            )
-            .into()
+            tooltip_button(open_btn, crate::fl!("open-link-placeholder"))
         } else {
             open_btn.into()
         };
@@ -546,11 +537,11 @@ impl<'switcher> Constellations {
 
 fn view_menu_create() -> menu::MenuBar<Message> {
     let plus_btn = button::icon(Named::new("list-add-symbolic"));
-    let plus_tooltip = tooltip(plus_btn, text::body(CREATE.as_str()), Position::Right);
+    let plus_tooltip = tooltip_button_at(plus_btn, CREATE.as_str(), Position::Right);
     let key_binds = std::collections::HashMap::new();
 
     let menu_tree = menu::Tree::with_children(
-        RcElementWrapper::new(Element::from(plus_tooltip)),
+        RcElementWrapper::new(plus_tooltip),
         menu::items(
             &key_binds,
             vec![

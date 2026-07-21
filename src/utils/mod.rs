@@ -234,6 +234,7 @@ pub mod permalink;
 pub mod preview;
 pub mod rich_text;
 pub mod unified_push;
+pub mod widget;
 
 #[cfg(test)]
 mod tests {

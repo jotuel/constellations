@@ -1,4 +1,5 @@
 use crate::Message;
+use crate::utils::widget::tooltip_button;
 use cosmic::Element;
 use cosmic::iced::Alignment;
 use cosmic::widget::{Row, button, container, icon, text};
@@ -14,11 +15,11 @@ pub fn view_error(error: impl Into<String>) -> Element<'static, Message> {
                     .size(20),
             )
             .push(text::body(error.into()))
-            .push(
+            .push(tooltip_button(
                 button::icon(icon::from_name("window-close-symbolic").symbolic(true))
-                    .tooltip(crate::fl!("dismiss"))
                     .on_press(Message::DismissError),
-            ),
+                crate::fl!("dismiss"),
+            )),
     )
     .style(|theme: &cosmic::Theme| {
         use cosmic::iced::widget::container::Catalog;

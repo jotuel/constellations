@@ -1,13 +1,12 @@
 use cosmic::Element;
 use cosmic::iced::Alignment;
-use cosmic::widget::{
-    Column, Row, button, radio, settings, slider, text, text_input, tooltip, tooltip::Position,
-};
+use cosmic::widget::{Column, Row, button, radio, settings, slider, text, text_input};
 use matrix_sdk::ruma::RoomId;
 use matrix_sdk::ruma::events::room::history_visibility::HistoryVisibility;
 
 use super::message::Message;
 use super::state::State;
+use crate::utils::widget::{disabled_or_tooltip, tooltip_button};
 
 /// Lightweight `Copy` choice used as the radio value for join rule selection.
 ///
@@ -172,21 +171,12 @@ impl State {
 
         // Add Alternative Alias
         let is_empty = self.new_alt_alias_input.trim().is_empty();
-        let mut add_btn = button::text(crate::fl!("add"));
-        if !is_empty {
-            add_btn = add_btn.on_press(Message::AltAliasAdded);
-        }
-
-        let add_widget: Element<'_, Message> = if is_empty {
-            tooltip(
-                add_btn,
-                text::body(crate::fl!("enter-alias-to-add")),
-                Position::Top,
-            )
-            .into()
-        } else {
-            add_btn.into()
-        };
+        let add_widget: Element<'_, Message> = disabled_or_tooltip(
+            button::text(crate::fl!("add")),
+            !is_empty,
+            Message::AltAliasAdded,
+            crate::fl!("enter-alias-to-add"),
+        );
 
         let add_alias_layout = Column::new()
             .spacing(5)
@@ -459,12 +449,7 @@ impl State {
         }
 
         let widget: Element<'_, Message> = if !has_changes {
-            tooltip(
-                save_btn,
-                text::body(crate::fl!("make-changes-to-save")),
-                Position::Top,
-            )
-            .into()
+            tooltip_button(save_btn, crate::fl!("make-changes-to-save"))
         } else {
             save_btn.into()
         };
@@ -595,21 +580,12 @@ impl State {
         let mut invite_row = Row::new().spacing(10);
 
         if self.my_power_level >= self.invite_level {
-            let mut invite_btn = button::text(crate::fl!("invite"));
-            if !is_empty {
-                invite_btn = invite_btn.on_press(Message::InviteUser);
-            }
-
-            let invite_widget: Element<'_, Message> = if is_empty {
-                tooltip(
-                    invite_btn,
-                    text::body(crate::fl!("enter-user-id-to-invite")),
-                    Position::Top,
-                )
-                .into()
-            } else {
-                invite_btn.into()
-            };
+            let invite_widget: Element<'_, Message> = disabled_or_tooltip(
+                button::text(crate::fl!("invite")),
+                !is_empty,
+                Message::InviteUser,
+                crate::fl!("enter-user-id-to-invite"),
+            );
             invite_row = invite_row.push(invite_widget);
         }
 

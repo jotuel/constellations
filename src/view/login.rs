@@ -1,8 +1,9 @@
+use crate::utils::widget::{disabled_or_tooltip, tooltip_button};
 use crate::{AuthFlow, Constellations, Message, QrLoginStep};
 use cosmic::{
     Element,
     iced::Alignment,
-    widget::{Column, button, container, text, text_input, tooltip, tooltip::Position},
+    widget::{Column, button, container, text, text_input},
 };
 
 impl Constellations {
@@ -95,35 +96,23 @@ impl Constellations {
             if self.is_registering {
                 button::text(crate::fl!("creating-account")).into()
             } else {
-                let mut btn = button::text(crate::fl!("create-account-button"));
-                if !is_missing_fields {
-                    btn = btn.on_press(Message::SubmitRegister);
-                }
-                if is_missing_fields {
-                    tooltip(
-                        btn,
-                        text::body(crate::fl!("fill-all-fields-register")),
-                        Position::Top,
-                    )
-                    .into()
-                } else {
-                    btn.into()
-                }
+                disabled_or_tooltip(
+                    button::text(crate::fl!("create-account-button")),
+                    !is_missing_fields,
+                    Message::SubmitRegister,
+                    crate::fl!("fill-all-fields-register"),
+                )
             }
         } else if self.auth_flow == AuthFlow::Password {
             button::text(crate::fl!("logging-in")).into()
         } else {
-            let mut btn = button::text(crate::fl!("login-button"));
-            if !is_missing_fields && self.auth_flow != AuthFlow::Oidc {
-                btn = btn.on_press(Message::SubmitLogin);
-            }
+            // Oidc flow suppresses on_press while still allowing submission, so
+            // the disabled-button helper doesn't fit here.
+            let btn = button::text(crate::fl!("login-button"));
             if is_missing_fields {
-                tooltip(
-                    btn,
-                    text::body(crate::fl!("fill-all-fields-login")),
-                    Position::Top,
-                )
-                .into()
+                tooltip_button(btn, crate::fl!("fill-all-fields-login"))
+            } else if self.auth_flow != AuthFlow::Oidc {
+                btn.on_press(Message::SubmitLogin).into()
             } else {
                 btn.into()
             }

@@ -1,10 +1,7 @@
 use chrono::{DateTime, DurationRound, TimeDelta};
 use cosmic::{
     Element, Theme,
-    iced::{
-        Alignment,
-        widget::{scrollable, tooltip},
-    },
+    iced::{Alignment, widget::scrollable},
     widget::{
         Column, Row, button, container, divider, icon::Named, text, text_editor, text_input,
         tooltip::Position,
@@ -15,6 +12,7 @@ use matrix_sdk_ui::timeline::{TimelineDetails, TimelineEventItemId};
 
 use crate::{
     Constellations, Message, PreviewEvent, matrix,
+    utils::widget::{disabled_or_tooltip, tooltip_button, tooltip_button_at},
     view::{
         ADD_REACTION, CLOSE_THREAD, DOWNLOAD_FILE, DOWNLOAD_IMAGE, DOWNLOADED, IGNORE, OPEN_THREAD,
         REPLIES, REPLY, TOOLTIP_ATTACH, TOOLTIP_COPY_LINK, TOOLTIP_COPY_ROOM_LINK, TOOLTIP_DELETE,
@@ -177,11 +175,8 @@ impl<'chat> Constellations {
                 Message::ToggleComposerEmojiPicker
             });
 
-        let close_btn_tooltip = tooltip(
-            close_btn,
-            text::body(crate::fl!("close-picker")),
-            Position::Bottom,
-        );
+        let close_btn_tooltip =
+            tooltip_button_at(close_btn, crate::fl!("close-picker"), Position::Bottom);
 
         let top_row = Row::new()
             .spacing(5)
@@ -469,10 +464,10 @@ impl<'chat> Constellations {
                 room_name
             )))
             .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
-            .push(tooltip(
+            .push(tooltip_button_at(
                 button::icon(cosmic::widget::icon::from_name("window-close-symbolic"))
                     .on_press(Message::CloseThread),
-                text::body(CLOSE_THREAD.as_str()),
+                CLOSE_THREAD.as_str(),
                 Position::Bottom,
             ));
 
@@ -675,17 +670,13 @@ impl<'chat> Constellations {
                 Message::OpenReactionPicker(Some(item_id.clone()))
             },
         );
-        let btn_tooltip = tooltip(btn, text::body(ADD_REACTION.as_str()), Position::Bottom);
+        let btn_tooltip = tooltip_button_at(btn, ADD_REACTION.as_str(), Position::Bottom);
         action_row = action_row.push(btn_tooltip);
 
         // Reply button
         let reply_btn = button::icon(cosmic::widget::icon::from_name("mail-replied-symbolic"))
             .on_press(Message::StartReply(item_id.clone()));
-        let reply_tooltip = tooltip(
-            reply_btn,
-            text::body(TOOLTIP_REPLY.as_str()),
-            Position::Bottom,
-        );
+        let reply_tooltip = tooltip_button_at(reply_btn, TOOLTIP_REPLY.as_str(), Position::Bottom);
         action_row = action_row.push(reply_tooltip);
 
         // Thread button (either summary or start thread button)
@@ -717,58 +708,51 @@ impl<'chat> Constellations {
                 TimelineEventItemId::EventId(id) => Message::OpenThread(id.to_owned()),
                 _ => Message::NoOp,
             });
-            let action_tooltip = tooltip(
-                start_thread_btn,
-                text::body(TOOLTIP_THREAD.as_str()),
-                Position::Bottom,
-            );
+            let action_tooltip =
+                tooltip_button_at(start_thread_btn, TOOLTIP_THREAD.as_str(), Position::Bottom);
             action_row = action_row.push(action_tooltip);
         }
 
         if matches!(item_id, TimelineEventItemId::EventId(_)) {
             let copy_btn = button::icon(cosmic::widget::icon::from_name("edit-copy-symbolic"))
                 .on_press(Message::CopyMessageLink(item_id.clone()));
-            let copy_tooltip = tooltip(
-                copy_btn,
-                text::body(TOOLTIP_COPY_LINK.as_str()),
-                Position::Bottom,
-            );
+            let copy_tooltip =
+                tooltip_button_at(copy_btn, TOOLTIP_COPY_LINK.as_str(), Position::Bottom);
             action_row = action_row.push(copy_tooltip);
         }
 
         if is_me {
             let edit_btn = button::icon(cosmic::widget::icon::from_name("edit-symbolic"))
                 .on_press(Message::StartEdit(item_id.clone()));
-            let edit_tooltip = tooltip(
-                edit_btn,
-                text::body(TOOLTIP_EDIT.as_str()),
-                Position::Bottom,
-            );
+            let edit_tooltip = tooltip_button_at(edit_btn, TOOLTIP_EDIT.as_str(), Position::Bottom);
             action_row = action_row.push(edit_tooltip);
 
             let delete_btn = button::custom(cosmic::widget::icon::from_name("user-trash-symbolic"))
                 .class(cosmic::theme::Button::Destructive)
                 .on_press(Message::RedactMessage(item_id.clone()));
-            let delete_tooltip = tooltip(
-                delete_btn,
-                text::body(TOOLTIP_DELETE.as_str()),
-                Position::Bottom,
-            );
+            let delete_tooltip =
+                tooltip_button_at(delete_btn, TOOLTIP_DELETE.as_str(), Position::Bottom);
             action_row = action_row.push(delete_tooltip);
         } else {
             if is_ignored {
-                let ignore_btn = button::icon(Named::new("dialog-error-symbolic"))
-                    .on_press(Message::UserSettings(
-                        crate::settings::user::Message::UnignoreUserById(item.sender_id.to_owned()),
-                    ))
-                    .tooltip(UNIGNORE_USER.as_str());
+                let ignore_btn = tooltip_button(
+                    button::icon(Named::new("dialog-error-symbolic")).on_press(
+                        Message::UserSettings(crate::settings::user::Message::UnignoreUserById(
+                            item.sender_id.to_owned(),
+                        )),
+                    ),
+                    UNIGNORE_USER.as_str(),
+                );
                 action_row = action_row.push(ignore_btn);
             } else {
-                let ignore_btn = button::icon(Named::new("dialog-error-symbolic"))
-                    .on_press(Message::UserSettings(
-                        crate::settings::user::Message::IgnoreUserById(item.sender_id.to_owned()),
-                    ))
-                    .tooltip(IGNORE.as_str());
+                let ignore_btn = tooltip_button(
+                    button::icon(Named::new("dialog-error-symbolic")).on_press(
+                        Message::UserSettings(crate::settings::user::Message::IgnoreUserById(
+                            item.sender_id.to_owned(),
+                        )),
+                    ),
+                    IGNORE.as_str(),
+                );
                 action_row = action_row.push(ignore_btn);
             }
         }
@@ -1126,21 +1110,15 @@ impl<'chat> Constellations {
         let mut invite_input = text_input("@user:example.com", &self.invite_to_room_id)
             .on_input(Message::InviteToRoomIdChanged);
         let is_empty = self.invite_to_room_id.trim().is_empty();
-        let mut invite_btn = button::text(crate::fl!("invite"));
         if !is_empty {
             invite_input = invite_input.on_submit(|_| Message::InviteToRoom);
-            invite_btn = invite_btn.on_press(Message::InviteToRoom);
         }
-        let invite_btn_widget: Element<'_, Message> = if is_empty {
-            tooltip(
-                invite_btn,
-                text::body(crate::fl!("enter-user-id-to-invite")),
-                Position::Top,
-            )
-            .into()
-        } else {
-            invite_btn.into()
-        };
+        let invite_btn_widget: Element<'_, Message> = disabled_or_tooltip(
+            button::text(crate::fl!("invite")),
+            !is_empty,
+            Message::InviteToRoom,
+            crate::fl!("enter-user-id-to-invite"),
+        );
         let invite_ui = Column::new().spacing(5).push(invite_input).push(
             Row::new()
                 .spacing(5)
@@ -1184,19 +1162,18 @@ impl<'chat> Constellations {
         }
 
         let call_button: Element<'_, Message> = if is_in_call {
-            tooltip(
+            tooltip_button_at(
                 button::custom(cosmic::widget::icon::from_name("call-stop"))
                     .class(cosmic::theme::Button::Destructive)
                     .on_press(Message::LeaveCall),
-                text::body(crate::fl!("call-leave")),
+                crate::fl!("call-leave"),
                 Position::Bottom,
             )
-            .into()
         } else {
-            button::icon(Named::new("camera-web"))
-                .on_press(Message::JoinCall)
-                .tooltip(crate::fl!("call-join"))
-                .into()
+            tooltip_button(
+                button::icon(Named::new("camera-web")).on_press(Message::JoinCall),
+                crate::fl!("call-join"),
+            )
         };
 
         room_header = room_header
@@ -1210,37 +1187,37 @@ impl<'chat> Constellations {
                         .align_y(Alignment::Center)
                         .push(cosmic::widget::icon::from_name("pin-symbolic").size(16))
                         .push(text::body(count.to_string()).size(12));
-                    Element::from(tooltip(
+                    tooltip_button_at(
                         button::custom(btn_content)
                             .selected(
                                 self.current_settings_panel == Some(crate::SettingsPanel::Pinned),
                             )
                             .on_press(Message::TogglePinnedPanel),
-                        text::body(crate::fl!("pinned-messages")),
+                        crate::fl!("pinned-messages"),
                         Position::Bottom,
-                    ))
+                    )
                 } else {
-                    Element::from(
+                    tooltip_button(
                         button::icon(Named::new("pin-symbolic"))
-                            .tooltip(crate::fl!("pinned-messages"))
                             .selected(
                                 self.current_settings_panel == Some(crate::SettingsPanel::Pinned),
                             )
                             .on_press(Message::TogglePinnedPanel),
+                        crate::fl!("pinned-messages"),
                     )
                 }
             })
-            .push(
+            .push(tooltip_button(
                 button::icon(Named::new("system-users-symbolic"))
-                    .tooltip(crate::fl!("room-members"))
                     .selected(self.current_settings_panel == Some(crate::SettingsPanel::Members))
                     .on_press(Message::ToggleMembersPanel),
-            )
-            .push(
+                crate::fl!("room-members"),
+            ))
+            .push(tooltip_button(
                 button::icon(Named::new("link-symbolic"))
-                    .tooltip(TOOLTIP_COPY_ROOM_LINK.as_str())
                     .on_press(Message::CopyRoomLink(room_id.clone())),
-            );
+                TOOLTIP_COPY_ROOM_LINK.as_str(),
+            ));
 
         room_header.into()
     }
@@ -1292,10 +1269,10 @@ impl<'chat> Constellations {
             .push(text::body(crate::fl!("editing")).size(12))
             .push(text::body(snippet).size(12))
             .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
-            .push(tooltip(
+            .push(tooltip_button_at(
                 button::icon(cosmic::widget::icon::from_name("window-close-symbolic"))
                     .on_press(Message::CancelEdit),
-                text::body(crate::fl!("cancel")),
+                crate::fl!("cancel"),
                 Position::Bottom,
             ));
 
@@ -1356,55 +1333,50 @@ impl<'chat> Constellations {
         let is_empty =
             self.composer_content.text().trim().is_empty() && self.composer_attachments.is_empty();
 
-        let mut send_btn = button::icon(if self.editing_item.is_some() {
+        let send_btn = button::icon(if self.editing_item.is_some() {
             Named::new("mail-send-symbolic")
         } else if self.active_thread_root.is_some() {
             Named::new("mail-reply-all-symbolic")
         } else {
             Named::new("mail-send-symbolic")
         });
-        if !is_empty {
-            send_btn = send_btn
-                .on_press(Message::SendMessage)
-                .tooltip(crate::fl!("tooltip-send"))
-        }
 
         let send_btn_widget: Element<'_, Message> = if is_empty {
-            tooltip(
-                send_btn,
-                text::body(crate::fl!("type-message-or-attach")),
+            tooltip_button(send_btn, crate::fl!("type-message-or-attach"))
+        } else {
+            tooltip_button_at(
+                send_btn.on_press(Message::SendMessage),
+                crate::fl!("tooltip-send"),
                 Position::Top,
             )
-            .into()
-        } else {
-            send_btn.into()
         };
 
         Row::new()
             .spacing(10)
-            .push(
+            .push(tooltip_button(
                 button::icon(Named::new("mail-attachment-symbolic"))
-                    .on_press(Message::AddAttachment)
-                    .tooltip(TOOLTIP_ATTACH.as_str()),
-            )
-            .push(
+                    .on_press(Message::AddAttachment),
+                TOOLTIP_ATTACH.as_str(),
+            ))
+            .push(tooltip_button(
                 button::icon(Named::new("face-smile-symbolic"))
-                    .on_press(Message::ToggleComposerEmojiPicker)
-                    .tooltip(TOOLTIP_EMOJIS.as_str()),
-            )
-            .push(
-                button::icon(Named::new("mark-location-symbolic"))
-                    .on_press(Message::ShareLocation)
-                    .tooltip(TOOLTIP_LOCATION.as_str()),
-            )
+                    .on_press(Message::ToggleComposerEmojiPicker),
+                TOOLTIP_EMOJIS.as_str(),
+            ))
+            .push(tooltip_button(
+                button::icon(Named::new("mark-location-symbolic")).on_press(Message::ShareLocation),
+                TOOLTIP_LOCATION.as_str(),
+            ))
             .push(if self.composer_is_preview {
-                button::icon(Named::new("edit-symbolic"))
-                    .on_press(Message::TogglePreview)
-                    .tooltip(TOOLTIP_EDIT.as_str())
+                tooltip_button(
+                    button::icon(Named::new("edit-symbolic")).on_press(Message::TogglePreview),
+                    TOOLTIP_EDIT.as_str(),
+                )
             } else {
-                button::icon(Named::new("edit-find-symbolic"))
-                    .on_press(Message::TogglePreview)
-                    .tooltip(TOOLTIP_FIND.as_str())
+                tooltip_button(
+                    button::icon(Named::new("edit-find-symbolic")).on_press(Message::TogglePreview),
+                    TOOLTIP_FIND.as_str(),
+                )
             })
             .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
             .push(send_btn_widget)
@@ -1970,10 +1942,10 @@ impl<'chat> Constellations {
                 ))
                 .on_press(Message::JumpToMessage(event_id.clone()));
 
-                let unpin_btn = tooltip(
+                let unpin_btn = tooltip_button_at(
                     button::icon(cosmic::widget::icon::from_name("pin-symbolic"))
                         .on_press(Message::UnpinMessage(event_id)),
-                    text::body(crate::fl!("unpin-message")),
+                    crate::fl!("unpin-message"),
                     Position::Bottom,
                 );
 
@@ -2013,11 +1985,10 @@ fn view_reply_bar<'a>(
         )
         .push(text::body(snippet).size(12))
         .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
-        .push(tooltip(
+        .push(tooltip_button(
             button::icon(cosmic::widget::icon::from_name("window-close-symbolic"))
                 .on_press(Message::CancelReply),
-            text::body(crate::fl!("cancel")),
-            Position::Top,
+            crate::fl!("cancel"),
         ))
 }
 

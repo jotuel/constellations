@@ -1,7 +1,10 @@
 use cosmic::Element;
 use cosmic::iced::Alignment;
 use cosmic::iced::widget::image;
-use cosmic::widget::{Column, Row, Widget, button, container, divider, text};
+use cosmic::widget::{Column, Row, Widget, button, container, divider};
+
+use crate::utils::widget::tooltip_button_at;
+use cosmic::widget::tooltip::Position;
 
 use crate::{CONSTELLATIONS_ICON, Constellations, Message, matrix};
 
@@ -86,11 +89,11 @@ impl Constellations {
                 .align_x(Alignment::Center)
                 .align_y(Alignment::Center);
 
-            let close_button = container(cosmic::widget::tooltip(
+            let close_button = container(tooltip_button_at(
                 button::icon(cosmic::widget::icon::from_name("window-close-symbolic"))
                     .on_press(Message::CloseImage),
-                text::body(crate::fl!("close-image")),
-                cosmic::widget::tooltip::Position::Bottom,
+                crate::fl!("close-image"),
+                Position::Bottom,
             ))
             .width(cosmic::iced::Length::Fill)
             .height(cosmic::iced::Length::Fill)
