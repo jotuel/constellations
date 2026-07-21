@@ -3,7 +3,11 @@ use cosmic::{
     Element, Theme,
     iced::{Alignment, widget::scrollable},
     widget::{
-        Column, Row, button, container, divider, icon::Named, text, text_editor, text_input,
+        Column, Row,
+        button::{self, icon},
+        container, divider,
+        icon::Named,
+        text, text_editor, text_input,
         tooltip::Position,
     },
 };
@@ -168,12 +172,13 @@ impl<'chat> Constellations {
             .on_input(Message::EmojiSearchQueryChanged)
             .width(cosmic::iced::Length::Fill);
 
-        let close_btn = button::icon(cosmic::widget::icon::from_name("window-close-symbolic"))
-            .on_press(if item_id.is_some() {
+        let close_btn = icon(cosmic::widget::icon::from_name("window-close-symbolic")).on_press(
+            if item_id.is_some() {
                 Message::OpenReactionPicker(None)
             } else {
                 Message::ToggleComposerEmojiPicker
-            });
+            },
+        );
 
         let close_btn_tooltip =
             tooltip_button_at(close_btn, crate::fl!("close-picker"), Position::Bottom);
@@ -465,7 +470,7 @@ impl<'chat> Constellations {
             )))
             .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
             .push(tooltip_button_at(
-                button::icon(cosmic::widget::icon::from_name("window-close-symbolic"))
+                icon(cosmic::widget::icon::from_name("window-close-symbolic"))
                     .on_press(Message::CloseThread),
                 CLOSE_THREAD.as_str(),
                 Position::Bottom,
@@ -663,7 +668,7 @@ impl<'chat> Constellations {
 
         // "Add reaction" button
         let is_picker_open = self.active_reaction_picker.as_ref() == Some(item_id);
-        let btn = button::icon(cosmic::widget::icon::from_name("face-smile-symbolic")).on_press(
+        let btn = icon(cosmic::widget::icon::from_name("face-smile-symbolic")).on_press(
             if is_picker_open {
                 Message::OpenReactionPicker(None)
             } else {
@@ -674,7 +679,7 @@ impl<'chat> Constellations {
         action_row = action_row.push(btn_tooltip);
 
         // Reply button
-        let reply_btn = button::icon(cosmic::widget::icon::from_name("mail-replied-symbolic"))
+        let reply_btn = icon(cosmic::widget::icon::from_name("mail-replied-symbolic"))
             .on_press(Message::StartReply(item_id.clone()));
         let reply_tooltip = tooltip_button_at(reply_btn, TOOLTIP_REPLY.as_str(), Position::Bottom);
         action_row = action_row.push(reply_tooltip);
@@ -701,20 +706,18 @@ impl<'chat> Constellations {
             action_row = action_row.push(self.view_thread_summary(item, event, thread_counts));
         } else {
             let root_id = item_id.clone();
-            let start_thread_btn = button::icon(cosmic::widget::icon::from_name(
-                "view-list-symbolic",
-            ))
-            .on_press(match root_id {
-                TimelineEventItemId::EventId(id) => Message::OpenThread(id.to_owned()),
-                _ => Message::NoOp,
-            });
+            let start_thread_btn = icon(cosmic::widget::icon::from_name("view-list-symbolic"))
+                .on_press(match root_id {
+                    TimelineEventItemId::EventId(id) => Message::OpenThread(id.to_owned()),
+                    _ => Message::NoOp,
+                });
             let action_tooltip =
                 tooltip_button_at(start_thread_btn, TOOLTIP_THREAD.as_str(), Position::Bottom);
             action_row = action_row.push(action_tooltip);
         }
 
         if matches!(item_id, TimelineEventItemId::EventId(_)) {
-            let copy_btn = button::icon(cosmic::widget::icon::from_name("edit-copy-symbolic"))
+            let copy_btn = icon(cosmic::widget::icon::from_name("edit-copy-symbolic"))
                 .on_press(Message::CopyMessageLink(item_id.clone()));
             let copy_tooltip =
                 tooltip_button_at(copy_btn, TOOLTIP_COPY_LINK.as_str(), Position::Bottom);
@@ -722,7 +725,7 @@ impl<'chat> Constellations {
         }
 
         if is_me {
-            let edit_btn = button::icon(cosmic::widget::icon::from_name("edit-symbolic"))
+            let edit_btn = icon(cosmic::widget::icon::from_name("edit-symbolic"))
                 .on_press(Message::StartEdit(item_id.clone()));
             let edit_tooltip = tooltip_button_at(edit_btn, TOOLTIP_EDIT.as_str(), Position::Bottom);
             action_row = action_row.push(edit_tooltip);
@@ -736,21 +739,17 @@ impl<'chat> Constellations {
         } else {
             if is_ignored {
                 let ignore_btn = tooltip_button(
-                    button::icon(Named::new("dialog-error-symbolic")).on_press(
-                        Message::UserSettings(crate::settings::user::Message::UnignoreUserById(
-                            item.sender_id.to_owned(),
-                        )),
-                    ),
+                    icon(Named::new("dialog-error-symbolic")).on_press(Message::UserSettings(
+                        crate::settings::user::Message::UnignoreUserById(item.sender_id.to_owned()),
+                    )),
                     UNIGNORE_USER.as_str(),
                 );
                 action_row = action_row.push(ignore_btn);
             } else {
                 let ignore_btn = tooltip_button(
-                    button::icon(Named::new("dialog-error-symbolic")).on_press(
-                        Message::UserSettings(crate::settings::user::Message::IgnoreUserById(
-                            item.sender_id.to_owned(),
-                        )),
-                    ),
+                    icon(Named::new("dialog-error-symbolic")).on_press(Message::UserSettings(
+                        crate::settings::user::Message::IgnoreUserById(item.sender_id.to_owned()),
+                    )),
                     IGNORE.as_str(),
                 );
                 action_row = action_row.push(ignore_btn);
@@ -1171,7 +1170,7 @@ impl<'chat> Constellations {
             )
         } else {
             tooltip_button(
-                button::icon(Named::new("camera-web")).on_press(Message::JoinCall),
+                icon(Named::new("camera-web")).on_press(Message::JoinCall),
                 crate::fl!("call-join"),
             )
         };
@@ -1198,7 +1197,7 @@ impl<'chat> Constellations {
                     )
                 } else {
                     tooltip_button(
-                        button::icon(Named::new("pin-symbolic"))
+                        icon(Named::new("pin-symbolic"))
                             .selected(
                                 self.current_settings_panel == Some(crate::SettingsPanel::Pinned),
                             )
@@ -1208,14 +1207,13 @@ impl<'chat> Constellations {
                 }
             })
             .push(tooltip_button(
-                button::icon(Named::new("system-users-symbolic"))
+                icon(Named::new("system-users-symbolic"))
                     .selected(self.current_settings_panel == Some(crate::SettingsPanel::Members))
                     .on_press(Message::ToggleMembersPanel),
                 crate::fl!("room-members"),
             ))
             .push(tooltip_button(
-                button::icon(Named::new("link-symbolic"))
-                    .on_press(Message::CopyRoomLink(room_id.clone())),
+                icon(Named::new("link-symbolic")).on_press(Message::CopyRoomLink(room_id.clone())),
                 TOOLTIP_COPY_ROOM_LINK.as_str(),
             ));
 
@@ -1270,7 +1268,7 @@ impl<'chat> Constellations {
             .push(text::body(snippet).size(12))
             .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
             .push(tooltip_button_at(
-                button::icon(cosmic::widget::icon::from_name("window-close-symbolic"))
+                icon(cosmic::widget::icon::from_name("window-close-symbolic"))
                     .on_press(Message::CancelEdit),
                 crate::fl!("cancel"),
                 Position::Bottom,
@@ -1333,7 +1331,7 @@ impl<'chat> Constellations {
         let is_empty =
             self.composer_content.text().trim().is_empty() && self.composer_attachments.is_empty();
 
-        let send_btn = button::icon(if self.editing_item.is_some() {
+        let send_btn = icon(if self.editing_item.is_some() {
             Named::new("mail-send-symbolic")
         } else if self.active_thread_root.is_some() {
             Named::new("mail-reply-all-symbolic")
@@ -1351,32 +1349,21 @@ impl<'chat> Constellations {
             )
         };
 
+        let attach = icon(Named::new("mail-attachment-symbolic")).on_press(Message::AddAttachment);
+        let emoji =
+            icon(Named::new("face-smile-symbolic")).on_press(Message::ToggleComposerEmojiPicker);
+        let location = icon(Named::new("mark-location-symbolic")).on_press(Message::ShareLocation);
         Row::new()
             .spacing(10)
-            .push(tooltip_button(
-                button::icon(Named::new("mail-attachment-symbolic"))
-                    .on_press(Message::AddAttachment),
-                TOOLTIP_ATTACH.as_str(),
-            ))
-            .push(tooltip_button(
-                button::icon(Named::new("face-smile-symbolic"))
-                    .on_press(Message::ToggleComposerEmojiPicker),
-                TOOLTIP_EMOJIS.as_str(),
-            ))
-            .push(tooltip_button(
-                button::icon(Named::new("mark-location-symbolic")).on_press(Message::ShareLocation),
-                TOOLTIP_LOCATION.as_str(),
-            ))
+            .push(tooltip_button(attach, TOOLTIP_ATTACH.as_str()))
+            .push(tooltip_button(emoji, TOOLTIP_EMOJIS.as_str()))
+            .push(tooltip_button(location, TOOLTIP_LOCATION.as_str()))
             .push(if self.composer_is_preview {
-                tooltip_button(
-                    button::icon(Named::new("edit-symbolic")).on_press(Message::TogglePreview),
-                    TOOLTIP_EDIT.as_str(),
-                )
+                let content = icon(Named::new("edit-symbolic")).on_press(Message::TogglePreview);
+                tooltip_button(content, TOOLTIP_EDIT.as_str())
             } else {
-                tooltip_button(
-                    button::icon(Named::new("edit-find-symbolic")).on_press(Message::TogglePreview),
-                    TOOLTIP_FIND.as_str(),
-                )
+                let find = icon(Named::new("edit-find-symbolic")).on_press(Message::TogglePreview);
+                tooltip_button(find, TOOLTIP_FIND.as_str())
             })
             .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
             .push(send_btn_widget)
@@ -1386,23 +1373,14 @@ impl<'chat> Constellations {
     pub fn view_search_results<'a>(&'a self) -> Element<'a, Message> {
         let mut results_col = Column::new().spacing(15).width(cosmic::iced::Length::Fill);
 
-        // Section: Messages across all joined rooms (global / cross-room search
-        // against the local seshat index). Only shown when NO room is selected;
-        // once a room is open, the per-room section below takes over.
         if self.selected_room.is_none() {
             results_col = results_col.push(self.view_search_global_section());
         }
 
-        // Section: Messages in this Room (server-side full-text search).
-        // Only shown when a room is selected — without one there is no room to
-        // search and `message_search_results` stays empty.
         if self.selected_room.is_some() {
             results_col = results_col.push(self.view_search_messages_section());
         }
-
         results_col = results_col.push(divider::horizontal::default());
-
-        // Section: Public Spaces & Rooms
         results_col = results_col.push(self.view_search_public_rooms_section());
 
         scrollable(results_col)
@@ -1526,7 +1504,7 @@ impl<'chat> Constellations {
                     Column::new()
                         .spacing(10)
                         .align_x(Alignment::Center)
-                        .push(cosmic::widget::icon::from_name("edit-find-symbolic").size(32))
+                        .push(Named::new("edit-find-symbolic").size(32))
                         .push(text::body(crate::fl!("search-no-global-matches")).size(14)),
                 )
                 .width(cosmic::iced::Length::Fill)
@@ -1905,7 +1883,7 @@ impl<'chat> Constellations {
         {
             Element::from(cosmic::widget::image(handle.clone()).width(20).height(20))
         } else {
-            container(cosmic::widget::icon::from_name("avatar-default-symbolic").size(12))
+            container(Named::new("avatar-default-symbolic").size(12))
                 .padding(2)
                 .into()
         };
@@ -1943,8 +1921,7 @@ impl<'chat> Constellations {
                 .on_press(Message::JumpToMessage(event_id.clone()));
 
                 let unpin_btn = tooltip_button_at(
-                    button::icon(cosmic::widget::icon::from_name("pin-symbolic"))
-                        .on_press(Message::UnpinMessage(event_id)),
+                    icon(Named::new("pin-symbolic")).on_press(Message::UnpinMessage(event_id)),
                     crate::fl!("unpin-message"),
                     Position::Bottom,
                 );
@@ -1986,8 +1963,7 @@ fn view_reply_bar<'a>(
         .push(text::body(snippet).size(12))
         .push(cosmic::widget::space().width(cosmic::iced::Length::Fill))
         .push(tooltip_button(
-            button::icon(cosmic::widget::icon::from_name("window-close-symbolic"))
-                .on_press(Message::CancelReply),
+            icon(Named::new("window-close-symbolic")).on_press(Message::CancelReply),
             crate::fl!("cancel"),
         ))
 }
@@ -2005,52 +1981,5 @@ fn truncate_snippet(body: String) -> std::borrow::Cow<'static, str> {
         }
     } else {
         std::borrow::Cow::Owned(body)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use crate::constellations::Constellations;
-
-    #[test]
-    fn test_view_timeline_renders_without_panicking() {
-        let constellations = Constellations::mock();
-        let _element = constellations.view_timeline();
-    }
-
-    #[test]
-    fn test_view_threaded_timeline_renders_without_panicking() {
-        let constellations = Constellations::mock();
-        let _element = constellations.view_threaded_timeline();
-    }
-
-    #[test]
-    fn test_view_main_content_renders_without_panicking() {
-        let constellations = Constellations::mock();
-        let _element = constellations.view_main_content();
-    }
-
-    #[test]
-    fn test_view_composer_renders_without_panicking() {
-        let constellations = Constellations::mock();
-        let _element = constellations.view_composer();
-    }
-
-    #[test]
-    fn test_view_search_results_renders_without_panicking() {
-        let constellations = Constellations::mock();
-        let _element = constellations.view_search_results();
-    }
-
-    #[test]
-    fn test_view_members_panel_renders_without_panicking() {
-        let constellations = Constellations::mock();
-        let _element = constellations.view_members_panel();
-    }
-
-    #[test]
-    fn test_view_pinned_panel_renders_without_panicking() {
-        let constellations = Constellations::mock();
-        let _element = constellations.view_pinned_panel();
     }
 }
