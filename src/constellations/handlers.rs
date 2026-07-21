@@ -2248,6 +2248,58 @@ impl Constellations {
                 }
                 Task::none()
             }
+            Message::DndFileTransfer(key) => {
+                cosmic::command::file_transfer_receive(key).map(|res| {
+                    Action::from(Message::DndFileTransferFinished(
+                        res.map_err(|e| e.to_string()),
+                    ))
+                })
+            }
+            Message::DndFileTransferFinished(res) => match res {
+                Ok(paths) => {
+                    let path_bufs: Vec<std::path::PathBuf> = paths
+                        .into_iter()
+                        .map(std::path::PathBuf::from)
+                        .filter(|p| p.exists())
+                        .collect();
+                    if !path_bufs.is_empty() {
+                        self.handle_update(Message::AttachmentsSelected(path_bufs))
+                    } else {
+                        Task::none()
+                    }
+                }
+                Err(e) => {
+                    self.set_error(crate::fl!("error-failed-retrieve-dragged-files", error = e));
+                    Task::none()
+                }
+            },
+            Message::DndDataReceived(mime, data) => {
+                if mime == "text/uri-list"
+                    && let Ok(text) = String::from_utf8(data)
+                {
+                    let mut paths = Vec::new();
+                    for line in text.lines() {
+                        let line = line.trim();
+                        if line.is_empty() {
+                            continue;
+                        }
+                        if let Ok(url) = url::Url::parse(line) {
+                            if let Ok(path) = url.to_file_path() {
+                                paths.push(path);
+                            }
+                        } else {
+                            let path = std::path::PathBuf::from(line);
+                            if path.exists() {
+                                paths.push(path);
+                            }
+                        }
+                    }
+                    if !paths.is_empty() {
+                        return self.handle_update(Message::AttachmentsSelected(paths));
+                    }
+                }
+                Task::none()
+            }
             Message::RemoveAttachment(index) => {
                 if index < self.composer_attachments.len() {
                     self.composer_attachments.remove(index);
